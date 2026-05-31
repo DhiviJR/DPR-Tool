@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h1 class="dpr-page-title mb-1">Supplier PO Product Details</h1>
+        <p class="dpr-page-subtitle mb-0">Monitor supplier orders, receipts, and validity</p>
+    </div>
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+</div>
+
+<div class="dpr-card dpr-table-card">
+    <div class="dpr-table-toolbar">
+        <div class="row g-2 align-items-center">
+            <div class="col-lg-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="search" id="supplierPoSearch" class="form-control"
+                           placeholder="Search DPR, product, supplier, dates, quantities…" autocomplete="off">
+                </div>
+            </div>
+            <div class="col-lg-3">
+                <select id="supplierPoCaseFilter" class="form-select">
+                    <option value="">All Cases</option>
+                    <option value="closed">Closed</option>
+                    <option value="partially_closed">Partially Closed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="due_soon">Due Soon</option>
+                    <option value="expired">Expired</option>
+                    <option value="pending">Pending</option>
+                </select>
+            </div>
+            <div class="col-lg-4 text-lg-end">
+                <span id="supplierPoRowCount" class="text-muted small"></span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="supplierPoTable" class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-col="0" data-sort-type="number">S.No <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="1" data-sort-type="text">DPR Serial No <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="2" data-sort-type="text">Supplier Name <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="3" data-sort-type="text">PO Number <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="4" data-sort-type="text">Product Name <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="5" data-sort-type="date">PO Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="6" data-sort-type="number">Qty Ordered <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="7" data-sort-type="number">Quantity Received <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="8" data-sort-type="date">PO Validity <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="10" data-sort-type="date">Expected Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="11" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in supplier_products %}
+                    <tr data-supplier-product-id="{{ row.id }}" data-validity-state="{{ row.validity_state }}" data-filter-state="{{ row.filter_state }}" class="{{ row.row_class }}">
+                        <td data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
+                        <td data-sort-value="{{ row.customer_product.dpr.serial_number|default:''|lower }}">{{ row.customer_product.dpr.serial_number }}</td>
+                        <td data-sort-value="{{ row.supplier.supplier_name|default:''|lower }}">{{ row.supplier.supplier_name }}</td>
+                        <td data-sort-value="{{ row.po_number|default:''|lower }}">{{ row.po_number|default:'-' }}</td>
+                        <td data-sort-value="{{ row.customer_product.product_name|default:''|lower }}">{{ row.customer_product.product_name }}</td>
+                        <td data-sort-value="{{ row.po_date|date:'Y-m-d'|default:'' }}">{{ row.po_date|date:'Y-m-d'|default:'-' }}</td>
+                        <td data-sort-value="{{ row.quantity }}">{{ row.quantity }}</td>
+                        <td class="quantity-received-cell" data-sort-value="{{ row.quantity_received }}">{{ row.quantity_received }}</td>
+                        <td data-sort-value="{{ row.po_validity|date:'Y-m-d'|default:'' }}">{{ row.po_validity|date:'Y-m-d'|default:'-' }}</td>
+                        <td data-sort-value="{{ row.po_value|default:0 }}">{{ row.po_value }}</td>
+                        <td data-sort-value="{{ row.expected_date|date:'Y-m-d'|default:'' }}">
+                            <input type="date" class="form-control form-control-sm expected-date-input" value="{{ row.expected_date|date:'Y-m-d' }}">
+                        </td>
+                        <td data-sort-value="{% if row.status == 'delivered' %}closed{% elif row.status == 'partially_delivered' %}partially closed{% elif row.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
+                            <select class="form-select form-select-sm supplier-product-status" style="width: 170px;" data-prev-status="{{ row.status|default:'' }}">
+                                <option value="" {% if not row.status %}selected{% endif %}>Select</option>
+                                <option value="delivered" {% if row.status == 'delivered' %}selected{% endif %}>Closed</option>
+                                <option value="partially_delivered" {% if row.status == 'partially_delivered' %}selected{% endif %}>Partially Closed</option>
+                                <option value="cancelled" {% if row.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                            </select>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="12" class="text-center">No supplier product records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="dpr-table-legend">
+        <span class="legend-item"><span class="legend-swatch table-success"></span>Closed</span>
+        <span class="legend-item"><span class="legend-swatch table-secondary"></span>Cancelled</span>
+        <span class="legend-item"><span class="legend-swatch table-warning"></span>Due Soon</span>
+        <span class="legend-item"><span class="legend-swatch table-danger"></span>Expired</span>
+    </div>
+</div>
+
+<div class="modal fade" id="partialSupplierModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Partially Received Quantity</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label for="partialSupplierQty" class="form-label">Enter quantity received</label>
+                <input type="number" min="1" id="partialSupplierQty" class="form-control">
+                <div class="form-text" id="partialSupplierHint"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="savePartialSupplierBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/po-table-tools.js' %}?v=2"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    initPoTableTools({
+        tableId: '#supplierPoTable',
+        searchInputId: '#supplierPoSearch',
+        rowCountId: '#supplierPoRowCount',
+        filterSelectId: '#supplierPoCaseFilter',
+        filterAttribute: 'filterState',
+        rowSelector: 'tr[data-supplier-product-id]'
+    });
+});
+
+let pendingSupplierUpdate = null;
+
+function applySupplierRowColor(row, status) {
+    row.classList.remove('table-success', 'table-danger', 'table-warning', 'table-secondary');
+    if (status === 'delivered') row.classList.add('table-success');
+    else if (status === 'cancelled') row.classList.add('table-secondary');
+    else if (row.dataset.validityState === 'expired') row.classList.add('table-danger');
+    else if (row.dataset.validityState === 'due_soon') row.classList.add('table-warning');
+}
+
+function updateSupplierRowFilterState(row, status) {
+    if (status === 'delivered') row.dataset.filterState = 'closed';
+    else if (status === 'cancelled') row.dataset.filterState = 'cancelled';
+    else if (row.dataset.validityState === 'expired') row.dataset.filterState = 'expired';
+    else if (row.dataset.validityState === 'due_soon') row.dataset.filterState = 'due_soon';
+    else if (status === 'partially_delivered') row.dataset.filterState = 'partially_closed';
+    else row.dataset.filterState = 'pending';
+}
+
+function postSupplierStatusUpdate(row, selectElement, status, quantityReceived = '') {
+    const supplierProductId = row.getAttribute('data-supplier-product-id');
+    const qtyOrdered = parseInt(row.children[6].textContent || '0', 10);
+    const qtyReceivedCell = row.querySelector('.quantity-received-cell');
+
+    fetch(`/supplier-product/${supplierProductId}/status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+            status: status,
+            quantity_received: quantityReceived
+        })
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'ok') {
+            alert(data.message || 'Unable to update status');
+            selectElement.value = selectElement.dataset.prevStatus || '';
+            return;
+        }
+        selectElement.dataset.prevStatus = status;
+        updateSupplierRowFilterState(row, status);
+        applySupplierRowColor(row, status);
+        document.getElementById('supplierPoCaseFilter').dispatchEvent(new Event('change'));
+        if (status === 'delivered') {
+            qtyReceivedCell.textContent = qtyOrdered;
+            qtyReceivedCell.setAttribute('data-sort-value', qtyOrdered);
+        } else if (status === 'partially_delivered') {
+            qtyReceivedCell.textContent = quantityReceived;
+            qtyReceivedCell.setAttribute('data-sort-value', quantityReceived);
+        } else if (status === 'cancelled' || status === '') {
+            qtyReceivedCell.textContent = '0';
+            qtyReceivedCell.setAttribute('data-sort-value', '0');
+        }
+        const actionCell = row.cells[11];
+        if (actionCell) {
+            const statusLabels = {
+                delivered: 'closed',
+                partially_delivered: 'partially closed',
+                cancelled: 'cancelled',
+                '': 'pending'
+            };
+            actionCell.setAttribute('data-sort-value', statusLabels[status] || 'pending');
+        }
+    });
+}
+
+document.addEventListener('change', function (e) {
+    if (!e.target.classList.contains('supplier-product-status')) return;
+    const row = e.target.closest('tr[data-supplier-product-id]');
+    const status = e.target.value;
+    const qtyOrdered = parseInt(row.children[6].textContent || '0', 10);
+
+    if (status === 'partially_delivered') {
+        pendingSupplierUpdate = {
+            row: row,
+            selectElement: e.target,
+            qtyOrdered: qtyOrdered
+        };
+        document.getElementById('partialSupplierQty').value = '';
+        document.getElementById('partialSupplierHint').textContent =
+            `Quantity must be greater than 0 and less than ${qtyOrdered}.`;
+        new bootstrap.Modal(document.getElementById('partialSupplierModal')).show();
+        return;
+    }
+
+    postSupplierStatusUpdate(row, e.target, status);
+});
+
+document.addEventListener('change', function (e) {
+    if (!e.target.classList.contains('expected-date-input')) return;
+    const row = e.target.closest('tr[data-supplier-product-id]');
+    const supplierProductId = row.getAttribute('data-supplier-product-id');
+    const expectedDate = e.target.value;
+
+    fetch(`/supplier-product/${supplierProductId}/expected-date/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({expected_date: expectedDate})
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'ok') {
+            alert(data.message || 'Unable to save expected date');
+        } else {
+            const dateCell = e.target.closest('td');
+            if (dateCell) dateCell.setAttribute('data-sort-value', expectedDate);
+        }
+    });
+});
+
+document.getElementById('savePartialSupplierBtn').addEventListener('click', function () {
+    if (!pendingSupplierUpdate) return;
+    const value = document.getElementById('partialSupplierQty').value.trim();
+    const parsed = parseInt(value || '0', 10);
+
+    if (!value || Number.isNaN(parsed) || parsed <= 0 || parsed >= pendingSupplierUpdate.qtyOrdered) {
+        alert(`Quantity received must be greater than 0 and less than ${pendingSupplierUpdate.qtyOrdered}.`);
+        return;
+    }
+
+    postSupplierStatusUpdate(
+        pendingSupplierUpdate.row,
+        pendingSupplierUpdate.selectElement,
+        'partially_delivered',
+        value
+    );
+
+    const modalEl = document.getElementById('partialSupplierModal');
+    bootstrap.Modal.getInstance(modalEl).hide();
+    pendingSupplierUpdate = null;
+});
+
+document.getElementById('partialSupplierModal').addEventListener('hidden.bs.modal', function () {
+    if (!pendingSupplierUpdate) return;
+    pendingSupplierUpdate.selectElement.value =
+        pendingSupplierUpdate.selectElement.dataset.prevStatus || '';
+    pendingSupplierUpdate = null;
+});
+</script>
+{% endblock %}

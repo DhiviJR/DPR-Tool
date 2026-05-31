@@ -1,0 +1,1032 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="card shadow">
+
+    <div class="card-header bg-primary text-white">
+
+        <h4>Customer Order Details</h4>
+
+    </div>
+
+    <div class="card-body">
+
+        {% if messages %}
+
+            {% for message in messages %}
+
+            <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}">
+
+                {{ message }}
+
+            </div>
+
+            {% endfor %}
+
+        {% endif %}
+
+        <form method="POST"
+              id="customerOrderForm"
+              enctype="multipart/form-data">
+
+            {% csrf_token %}
+
+            <div class="row">
+
+                <!-- Region -->
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        S.No
+                    </label>
+
+                    <input type="text"
+                        class="form-control"
+                        value="{% if dpr %}{{ dpr.serial_number }}{% else %}Auto Generated{% endif %}"
+                        readonly>
+
+                </div>
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        Region *
+                    </label>
+
+                    <select class="form-control"
+                            name="region"
+                            id="regionDropdown"
+                            required>
+
+                        <option value="">
+                            Select Region
+                        </option>
+
+                        <option value="Chennai" {% if dpr and dpr.customer.region == 'Chennai' %}selected{% endif %}>
+                            Chennai
+                        </option>
+
+                        <option value="Hosur" {% if dpr and dpr.customer.region == 'Hosur' %}selected{% endif %}>
+                            Hosur
+                        </option>
+
+                    </select>
+
+                </div>
+
+                <!-- Customer -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        Customer *
+                    </label>
+
+                    <div class="d-flex">
+
+                        <select class="form-control"
+                                name="customer"
+                                id="customerDropdown"
+                                required>
+
+                            <option value="">
+                                Select Customer
+                            </option>
+
+                            {% for customer in customers %}
+
+                            <option value="{{ customer.id }}"
+                                    data-region="{{ customer.region|default:'' }}"
+                                    {% if dpr and dpr.customer.id == customer.id %}selected{% endif %}>
+
+                                {{ customer.customer_name }}
+
+                            </option>
+
+                            {% endfor %}
+
+                        </select>
+
+                        <button type="button"
+                                class="btn btn-success ms-2"
+                                data-bs-toggle="modal"
+                                data-bs-target="#customerModal">
+
+                            +
+
+                        </button>
+
+                </div>
+
+</div>
+
+                <!-- Quotation Number -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        Quotation Number *
+                    </label>
+
+                    <input type="text"
+                           class="form-control"
+                           name="quotation_number"
+                           value="{% if dpr %}{{ dpr.quotation_number|default:'' }}{% endif %}"
+                           required>
+
+                </div>
+
+                <!-- Quotation Value -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        Quotation Value *
+                    </label>
+
+                    <input type="number"
+                           step="0.01"
+                           class="form-control"
+                           name="quotation_value"
+                           value="{% if dpr and dpr.quotation_value %}{{ dpr.quotation_value }}{% endif %}"
+                           required>
+
+                </div>
+
+                <!-- Quotation Attachment -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        Quotation Attachment *
+                    </label>
+
+                    <input type="file"
+                           multiple
+                           class="form-control"
+                           name="quotation_attachment"
+                           required>
+
+                </div>
+
+                <!-- Order Confirmation -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        Order Confirmation *
+                    </label>
+
+                    <select class="form-control"
+                            name="confirmation_type"
+                            id="confirmationType"
+                            required>
+
+                        <option value="">
+                            Select
+                        </option>
+
+                        <option value="Customer PO" {% if dpr and dpr.confirmation_type == 'Customer PO' %}selected{% endif %}>
+                            Customer PO
+                        </option>
+
+                        <option value="Mail Confirmation" {% if dpr and dpr.confirmation_type == 'Mail Confirmation' %}selected{% endif %}>
+                            Mail Confirmation
+                        </option>
+
+                    </select>
+
+                </div>
+
+                <!-- PO Number -->
+
+                <div class="col-md-4 mb-3" id="poNumberField" style="display: none;">
+
+                    <label class="form-label" id="poNumberLabel">
+                        PO Number *
+                    </label>
+
+                    <input type="text"
+                           class="form-control"
+                           name="po_number"
+                           id="poNumberInput"
+                           value="{% if dpr %}{{ dpr.po_number|default:'' }}{% endif %}">
+
+                </div>
+
+                <!-- PO Value -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        PO Value *
+                    </label>
+
+                    <input type="number"
+                           step="0.01"
+                           class="form-control"
+                           name="po_value"
+                           id="poValueInput"
+                           value="{% if dpr and dpr.po_value %}{{ dpr.po_value }}{% endif %}"
+                           required>
+
+                    <div id="poValueError"
+                         class="text-danger mt-1"
+                         style="display:none;">
+                        PO Value must equal Total Value.
+                    </div>
+
+                </div>
+
+                <!-- PO Date -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        PO Date
+                    </label>
+
+                    <input type="date"
+                           class="form-control"
+                           name="po_date"
+                           value="{% if dpr and dpr.po_date %}{{ dpr.po_date|date:'Y-m-d' }}{% endif %}">
+
+                </div>
+
+                <!-- PO Validity -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        PO Validity *
+                    </label>
+
+                    <input type="date"
+                           class="form-control"
+                           name="po_validity"
+                           value="{% if dpr and dpr.po_validity %}{{ dpr.po_validity|date:'Y-m-d' }}{% endif %}"
+                           required>
+
+                </div>
+
+                <!-- PO Attachment -->
+
+                <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        PO Attachment
+                    </label>
+
+                    <input type="file"
+                           multiple
+                           class="form-control"
+                           name="po_attachment">
+
+                </div>
+
+            </div>
+
+            <hr>
+
+            <h5 class="mb-3">
+                Product Description
+            </h5>
+
+            <table class="table table-bordered"
+                   id="productTable">
+
+                <thead class="table-light">
+
+                    <tr>
+
+                        <th>S.No</th>
+                        <th>Product</th>
+                        <th>Product Type</th>
+                        <th>Quantity Ordered</th>
+                        <th>Value</th>
+                        <th>Remarks</th>
+                        <th>Attachment</th>
+                        <th>Action</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+                    {% if products %}
+                        {% for p in products %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>
+                                <input type="text"
+                                       class="form-control"
+                                       name="product_name[]"
+                                       value="{{ p.product_name }}">
+                            </td>
+                            <td>
+                                <select class="form-control" name="product_type[]">
+                                    <option value="">Select Type</option>
+                                    <option value="APG steel" {% if p.product_type == 'APG steel' %}selected{% endif %}>APG steel</option>
+                                    <option value="ARG steel" {% if p.product_type == 'ARG steel' %}selected{% endif %}>ARG steel</option>
+                                    <option value="APG carbide" {% if p.product_type == 'APG carbide' %}selected{% endif %}>APG carbide</option>
+                                    <option value="ARG carbide" {% if p.product_type == 'ARG carbide' %}selected{% endif %}>ARG carbide</option>
+                                    <option value="SAPG" {% if p.product_type == 'SAPG' %}selected{% endif %}>SAPG</option>
+                                    <option value="SARG" {% if p.product_type == 'SARG' %}selected{% endif %}>SARG</option>
+                                    <option value="Multi-Gauge" {% if p.product_type == 'Multi-Gauge' %}selected{% endif %}>Multi-Gauge</option>
+                                    <option value="unit Std Air" {% if p.product_type == 'unit Std Air' %}selected{% endif %}>unit Std Air</option>
+                                    <option value="unit SPC Air" {% if p.product_type == 'unit SPC Air' %}selected{% endif %}>unit SPC Air</option>
+                                    <option value="unit Std lvdt" {% if p.product_type == 'unit Std lvdt' %}selected{% endif %}>unit Std lvdt</option>
+                                    <option value="unit SPC lvdt" {% if p.product_type == 'unit SPC lvdt' %}selected{% endif %}>unit SPC lvdt</option>
+                                    <option value="AMC" {% if p.product_type == 'AMC' %}selected{% endif %}>AMC</option>
+                                    <option value="Service" {% if p.product_type == 'Service' %}selected{% endif %}>Service</option>
+                                    <option value="Spares" {% if p.product_type == 'Spares' %}selected{% endif %}>Spares</option>
+                                    <option value="TPG" {% if p.product_type == 'TPG' %}selected{% endif %}>TPG</option>
+                                    <option value="TRG" {% if p.product_type == 'TRG' %}selected{% endif %}>TRG</option>
+                                    <option value="STPG" {% if p.product_type == 'STPG' %}selected{% endif %}>STPG</option>
+                                    <option value="STRG" {% if p.product_type == 'STRG' %}selected{% endif %}>STRG</option>
+                                    <option value="PPG" {% if p.product_type == 'PPG' %}selected{% endif %}>PPG</option>
+                                    <option value="PRG" {% if p.product_type == 'PRG' %}selected{% endif %}>PRG</option>
+                                    <option value="SPPG" {% if p.product_type == 'SPPG' %}selected{% endif %}>SPPG</option>
+                                    <option value="SPRG" {% if p.product_type == 'SPRG' %}selected{% endif %}>SPRG</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="number"
+                                       class="form-control qty"
+                                       name="quantity[]"
+                                       value="{{ p.quantity_ordered }}">
+                            </td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
+                                       class="form-control value"
+                                       name="value[]"
+                                       value="{{ p.value }}">
+                            </td>
+                            <td>
+                                <input type="text"
+                                       class="form-control"
+                                       name="remarks[]"
+                                       value="{{ p.remarks|default:'' }}">
+                            </td>
+                            <td>
+                                <input type="file"
+                                       class="form-control"
+                                       name="product_attachment[]">
+                            </td>
+                            <td>
+                                <button type="button"
+                                        class="btn btn-danger btn-sm removeRow">
+                                    X
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td>1</td>
+                            <td>
+                                <input type="text"
+                                       class="form-control"
+                                       name="product_name[]">
+                            </td>
+                            <td>
+                                <select class="form-control" name="product_type[]">
+                                    <option value="">Select Type</option>
+                                    <option value="APG steel">APG steel</option>
+                                    <option value="ARG steel">ARG steel</option>
+                                    <option value="APG carbide">APG carbide</option>
+                                    <option value="ARG carbide">ARG carbide</option>
+                                    <option value="SAPG">SAPG</option>
+                                    <option value="SARG">SARG</option>
+                                    <option value="Multi-Gauge">Multi-Gauge</option>
+                                    <option value="unit Std Air">unit Std Air</option>
+                                    <option value="unit SPC Air">unit SPC Air</option>
+                                    <option value="unit Std lvdt">unit Std lvdt</option>
+                                    <option value="unit SPC lvdt">unit SPC lvdt</option>
+                                    <option value="AMC">AMC</option>
+                                    <option value="Service">Service</option>
+                                    <option value="Spares">Spares</option>
+                                    <option value="TPG">TPG</option>
+                                    <option value="TRG">TRG</option>
+                                    <option value="STPG">STPG</option>
+                                    <option value="STRG">STRG</option>
+                                    <option value="PPG">PPG</option>
+                                    <option value="PRG">PRG</option>
+                                    <option value="SPPG">SPPG</option>
+                                    <option value="SPRG">SPRG</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="number"
+                                       class="form-control qty"
+                                       name="quantity[]">
+                            </td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
+                                       class="form-control value"
+                                       name="value[]">
+                            </td>
+                            <td>
+                                <input type="text"
+                                       class="form-control"
+                                       name="remarks[]">
+                            </td>
+                            <td>
+                                <input type="file"
+                                       class="form-control"
+                                       name="product_attachment[]">
+                            </td>
+                            <td>
+                                <button type="button"
+                                        class="btn btn-danger btn-sm removeRow">
+                                    X
+                                </button>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+
+            </table>
+
+            <button type="button"
+                    class="btn btn-secondary mb-3"
+                    id="addRow">
+
+                Add Product
+
+            </button>
+
+            <div class="row">
+
+                <div class="col-md-3">
+
+                    <label>Total Qty</label>
+
+                    <input type="text"
+                           id="totalQty"
+                           class="form-control"
+                           readonly>
+
+                </div>
+
+                <div class="col-md-3">
+
+                    <label>Total Value</label>
+
+                    <input type="text"
+                           id="totalValue"
+                           class="form-control"
+                           readonly>
+
+                </div>
+
+            </div>
+
+            <hr>
+
+            <div class="d-flex flex-wrap gap-2">
+                <button type="submit"
+                        class="btn btn-success">
+                    {% if is_edit %}Update{% else %}Submit{% endif %}
+                </button>
+
+                <button type="submit"
+                        name="save_action"
+                        value="supplier_order"
+                        class="btn btn-primary">
+                    {% if is_edit %}Update & Add Supplier Order{% else %}Save & Add Supplier Order{% endif %}
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+<script>
+
+function updatePoNumberVisibility() {
+    const confirmation = document.getElementById('confirmationType').value;
+    const poField = document.getElementById('poNumberField');
+    const poInput = document.getElementById('poNumberInput');
+
+    if (confirmation === 'Customer PO') {
+        poField.style.display = '';
+        poInput.required = true;
+    } else {
+        poField.style.display = 'none';
+        poInput.required = false;
+        if (confirmation === 'Mail Confirmation') {
+            poInput.value = '';
+        }
+    }
+}
+
+document.getElementById('confirmationType').addEventListener('change', updatePoNumberVisibility);
+updatePoNumberVisibility();
+
+function filterCustomersByRegion() {
+    const region = document.getElementById('regionDropdown').value;
+    const dropdown = document.getElementById('customerDropdown');
+    const selectedOption = dropdown.options[dropdown.selectedIndex];
+
+    Array.from(dropdown.options).forEach(option => {
+        if (!option.value) return;
+        option.hidden = !region || option.dataset.region !== region;
+    });
+
+    if (
+        selectedOption
+        && selectedOption.value
+        && selectedOption.dataset.region !== region
+    ) {
+        dropdown.value = '';
+    }
+}
+
+document.getElementById('regionDropdown').addEventListener('change', filterCustomersByRegion);
+filterCustomersByRegion();
+
+document.addEventListener('input', function (e) {
+    if (e.target.id !== 'customerPhone') {
+        return;
+    }
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+});
+
+document.getElementById('addRow').addEventListener(
+    'click',
+    function () {
+
+        let table =
+            document.querySelector('#productTable tbody');
+
+        let rowCount = table.rows.length + 1;
+
+        let row = `
+            <tr>
+
+                <td>${rowCount}</td>
+
+                <td>
+                    <input type="text"
+                           class="form-control"
+                           name="product_name[]">
+                </td>
+
+                <td>
+                    <select class="form-control" name="product_type[]">
+                        <option value="">Select Type</option>
+                        <option value="APG steel">APG steel</option>
+                        <option value="ARG steel">ARG steel</option>
+                        <option value="APG carbide">APG carbide</option>
+                        <option value="ARG carbide">ARG carbide</option>
+                        <option value="SAPG">SAPG</option>
+                        <option value="SARG">SARG</option>
+                        <option value="Multi-Gauge">Multi-Gauge</option>
+                        <option value="unit Std Air">unit Std Air</option>
+                        <option value="unit SPC Air">unit SPC Air</option>
+                        <option value="unit Std lvdt">unit Std lvdt</option>
+                        <option value="unit SPC lvdt">unit SPC lvdt</option>
+                        <option value="AMC">AMC</option>
+                        <option value="Service">Service</option>
+                        <option value="Spares">Spares</option>
+                        <option value="TPG">TPG</option>
+                        <option value="TRG">TRG</option>
+                        <option value="STPG">STPG</option>
+                        <option value="STRG">STRG</option>
+                        <option value="PPG">PPG</option>
+                        <option value="PRG">PRG</option>
+                        <option value="SPPG">SPPG</option>
+                        <option value="SPRG">SPRG</option>
+                    </select>
+                </td>
+
+                <td>
+                    <input type="number"
+                           class="form-control qty"
+                           name="quantity[]">
+                </td>
+
+                <td>
+                    <input type="number"
+                           step="0.01"
+                           class="form-control value"
+                           name="value[]">
+                </td>
+
+                <td>
+                    <input type="text"
+                           class="form-control"
+                           name="remarks[]">
+                </td>
+
+                <td>
+                    <input type="file"
+                           class="form-control"
+                           name="product_attachment[]">
+                </td>
+
+                <td>
+                    <button type="button"
+                            class="btn btn-danger btn-sm removeRow">
+
+                        X
+
+                    </button>
+                </td>
+
+            </tr>
+        `;
+
+        table.insertAdjacentHTML('beforeend', row);
+
+    }
+);
+
+document.addEventListener(
+    'click',
+    function (e) {
+
+        if (e.target.classList.contains('removeRow')) {
+
+            e.target.closest('tr').remove();
+
+            calculateTotals();
+        }
+    }
+);
+
+document.addEventListener(
+    'input',
+    function () {
+
+        calculateTotals();
+    }
+);
+
+function parseAmount(value) {
+    const amount = parseFloat(value);
+    return Number.isFinite(amount) ? amount : 0;
+}
+
+function roundAmount(value) {
+    return Math.round(parseAmount(value) * 100) / 100;
+}
+
+function validatePoValueMatch(options = {}) {
+    const showError = options.showError === true;
+    const poInput = document.getElementById('poValueInput');
+    const totalValue = document.getElementById('totalValue').value;
+    const errorEl = document.getElementById('poValueError');
+    const match = roundAmount(poInput.value) === roundAmount(totalValue);
+
+    if (!match) {
+        if (showError || poInput.value.trim() !== '') {
+            errorEl.textContent = `PO Value must equal Total Value (${totalValue || '0.00'}).`;
+            errorEl.style.display = 'block';
+            poInput.classList.add('is-invalid');
+        }
+        return false;
+    }
+
+    errorEl.style.display = 'none';
+    poInput.classList.remove('is-invalid');
+    return true;
+}
+
+document.getElementById('customerOrderForm').addEventListener('submit', function (e) {
+    calculateTotals();
+    if (!validatePoValueMatch({ showError: true })) {
+        e.preventDefault();
+        document.getElementById('poValueInput').focus();
+        document.getElementById('poValueInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+});
+
+document.getElementById('poValueInput').addEventListener('input', function () {
+    validatePoValueMatch({ showError: true });
+});
+
+function calculateTotals() {
+
+    let qtys = document.querySelectorAll('.qty');
+
+    let values = document.querySelectorAll('.value');
+
+    let totalQty = 0;
+
+    let totalValue = 0;
+
+    qtys.forEach(q => {
+
+        totalQty += Number(q.value) || 0;
+    });
+
+    values.forEach(v => {
+
+        totalValue += Number(v.value) || 0;
+    });
+
+    document.getElementById('totalQty').value =
+        totalQty;
+
+    document.getElementById('totalValue').value =
+        totalValue.toFixed(2);
+
+    validatePoValueMatch({ showError: false });
+}
+
+document.addEventListener(
+    'click',
+    function (e) {
+        if (e.target.id !== 'saveCustomerBtn') {
+            return;
+        }
+
+        let customerName =
+            document.getElementById(
+                'customerName'
+            ).value;
+
+        let customerPhone =
+            document.getElementById(
+                'customerPhone'
+            ).value.trim();
+
+        let customerAddress =
+            document.getElementById(
+                'customerAddress'
+            ).value;
+
+        let customerRegion =
+            document.getElementById(
+                'customerRegion'
+            ).value;
+
+        let customerNameError =
+            document.getElementById(
+                'customerNameError'
+            );
+        let customerRegionError =
+            document.getElementById(
+                'customerRegionError'
+            );
+        let customerPhoneError =
+            document.getElementById(
+                'customerPhoneError'
+            );
+
+        customerNameError.style.display = 'none';
+        customerRegionError.style.display = 'none';
+        customerPhoneError.style.display = 'none';
+
+        if (!customerName.trim()) {
+            customerNameError.style.display = 'block';
+            return;
+        }
+
+        if (!customerRegion) {
+            customerRegionError.style.display = 'block';
+            return;
+        }
+
+        if (customerPhone && !/^\d{10}$/.test(customerPhone)) {
+            customerPhoneError.style.display = 'block';
+            return;
+        }
+
+        fetch('/add-customer/', {
+
+            method: 'POST',
+
+            headers: {
+
+                'X-CSRFToken':
+                    '{{ csrf_token }}',
+
+                'Content-Type':
+                    'application/x-www-form-urlencoded',
+            },
+
+            body: new URLSearchParams({
+                customer_name: customerName.trim(),
+                region: customerRegion,
+                phone_number: customerPhone,
+                address: customerAddress.trim()
+            })
+        })
+
+        .then(response => response.json())
+
+        .then(data => {
+
+            if (data.status === 'success') {
+
+                let dropdown =
+                    document.getElementById(
+                        'customerDropdown'
+                    );
+
+                let option =
+                    document.createElement(
+                        'option'
+                    );
+
+                option.value = data.id;
+
+                option.text = data.name;
+
+                option.dataset.region = data.region;
+
+                option.selected = true;
+
+                dropdown.appendChild(option);
+
+                document.getElementById('regionDropdown').value = data.region;
+                filterCustomersByRegion();
+
+                let modal =
+                    bootstrap.Modal.getInstance(
+                        document.getElementById(
+                            'customerModal'
+                        )
+                    );
+
+                modal.hide();
+
+                document.getElementById(
+                    'customerName'
+                ).value = '';
+
+                document.getElementById(
+                    'customerPhone'
+                ).value = '';
+
+                document.getElementById(
+                    'customerAddress'
+                ).value = '';
+                document.getElementById(
+                    'customerRegion'
+                ).value = '';
+                customerPhoneError.style.display = 'none';
+                customerRegionError.style.display = 'none';
+            } else {
+                const errorMessage = data.message || 'Unable to save customer';
+                if (data.field === 'phone_number') {
+                    customerPhoneError.textContent = errorMessage;
+                    customerPhoneError.style.display = 'block';
+                } else if (data.field === 'region') {
+                    customerRegionError.textContent = errorMessage;
+                    customerRegionError.style.display = 'block';
+                } else {
+                    customerNameError.textContent = errorMessage;
+                    customerNameError.style.display = 'block';
+                }
+            }
+        })
+        .catch(() => {
+            customerNameError.textContent =
+                'Something went wrong while saving customer';
+            customerNameError.style.display = 'block';
+        });
+    }
+);
+
+calculateTotals();
+
+</script>
+
+<!-- CUSTOMER MODAL -->
+
+<div class="modal fade"
+     id="customerModal"
+     tabindex="-1">
+
+    <div class="modal-dialog">
+
+        <div class="modal-content">
+
+            <div class="modal-header bg-primary text-white">
+
+                <h5 class="modal-title">
+
+                    Add Customer
+
+                </h5>
+
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal">
+
+                </button>
+
+            </div>
+
+            <div class="modal-body">
+
+                <div class="mb-3">
+
+    <label>
+        Customer Name *
+    </label>
+
+    <input type="text"
+           id="customerName"
+           class="form-control">
+
+    <div id="customerNameError"
+         class="text-danger mt-1"
+         style="display:none;">
+
+        Customer Name is required
+
+    </div>
+
+</div>
+
+                <div class="mb-3">
+
+                    <label>
+                        Region *
+                    </label>
+
+                    <select id="customerRegion"
+                            class="form-control">
+                        <option value="">Select Region</option>
+                        <option value="Chennai">Chennai</option>
+                        <option value="Hosur">Hosur</option>
+                    </select>
+
+                    <div id="customerRegionError"
+                         class="text-danger mt-1"
+                         style="display:none;">
+                        Region is required.
+                    </div>
+
+                </div>
+
+                <div class="mb-3">
+
+                    <label>
+                        Phone Number
+                    </label>
+
+                    <input type="text"
+                           id="customerPhone"
+                           class="form-control"
+                           maxlength="10"
+                           inputmode="numeric"
+                           autocomplete="tel"
+                           placeholder="10 digit mobile number">
+
+                    <div id="customerPhoneError"
+                         class="text-danger mt-1"
+                         style="display:none;">
+                        Enter a valid 10-digit mobile number.
+                    </div>
+
+                </div>
+
+                <div class="mb-3">
+
+                    <label>
+                        Address
+                    </label>
+
+                    <textarea id="customerAddress"
+                              class="form-control"></textarea>
+
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+
+                <button type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+
+                    Close
+
+                </button>
+
+                <button type="button"
+                        class="btn btn-success"
+                        id="saveCustomerBtn">
+
+                    Save Customer
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+.dash-card { border: 0; border-radius: 14px; transition: transform 0.2s ease; }
+.dash-card:hover { transform: translateY(-3px); }
+.kpi-card { border-radius: 14px; }
+.kpi-value { font-size: 1.8rem; font-weight: 700; }
+.chart-card { border-radius: 14px; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="mb-0">Dashboard</h3>
+    <span class="badge bg-dark">DPR Operations</span>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="/customer-order/" class="text-decoration-none">
+            <div class="card dash-card bg-primary text-white shadow-sm">
+                <div class="card-body">
+                    <div class="small">Create DPR</div>
+                    <h5 class="mb-0">Customer Order</h5>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{% url 'dpr_view' %}" class="text-decoration-none">
+            <div class="card dash-card bg-success text-white shadow-sm">
+                <div class="card-body">
+                    <div class="small">Create DPR</div>
+                    <h5 class="mb-0">Supplier Order</h5>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{% url 'customer_po_product_details' %}" class="text-decoration-none">
+            <div class="card dash-card bg-info text-white shadow-sm">
+                <div class="card-body">
+                    <div class="small">View DPR</div>
+                    <h5 class="mb-0">Customer Order Details</h5>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{% url 'supplier_po_product_details' %}" class="text-decoration-none">
+            <div class="card dash-card bg-warning text-dark shadow-sm">
+                <div class="card-body">
+                    <div class="small">View DPR</div>
+                    <h5 class="mb-0">Supplier Order Details</h5>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card kpi-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Total DPR</div>
+                <div class="kpi-value text-primary">{{ total_dpr_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card kpi-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Mail Confirmation</div>
+                <div class="kpi-value text-danger">{{ pending_mail_confirmation_count }}</div>
+                <a href="{% url 'dpr_view' %}?confirmation=mail" class="btn btn-outline-danger btn-sm mt-2">View Filtered DPR</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card kpi-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Customer Products</div>
+                <div class="kpi-value text-info">{{ total_customer_products }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card kpi-card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Supplier Products</div>
+                <div class="kpi-value text-warning">{{ total_supplier_products }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card chart-card border-0 shadow-sm h-100">
+            <div class="card-header bg-white"><strong>Customer Product Status</strong></div>
+            <div class="card-body"><canvas id="customerStatusChart" height="180"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card chart-card border-0 shadow-sm h-100">
+            <div class="card-header bg-white"><strong>Supplier Product Status</strong></div>
+            <div class="card-body"><canvas id="supplierStatusChart" height="180"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h5 class="card-title">Customer Validity Alerts</h5>
+                <p class="mb-1">Within 7 days: <strong class="text-warning">{{ customer_within_7_days_count }}</strong></p>
+                <p class="mb-3">Validity expired: <strong class="text-danger">{{ customer_expired_count }}</strong></p>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{% url 'customer_po_product_details' %}" class="btn btn-outline-info btn-sm">View Customer PO Details</a>
+                    <a href="{% url 'supplier_po_product_details' %}" class="btn btn-outline-secondary btn-sm">View Supplier PO Details</a>
+                    <a href="{% url 'customer_po_product_details' %}?validity=within7" class="btn btn-outline-warning btn-sm">Within 7 Days</a>
+                    <a href="{% url 'customer_po_product_details' %}?validity=expired" class="btn btn-outline-danger btn-sm">Expired</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h5 class="card-title">Supplier Validity Alerts</h5>
+                <p class="mb-1">Within 7 days: <strong class="text-warning">{{ supplier_within_7_days_count }}</strong></p>
+                <p class="mb-3">Validity expired: <strong class="text-danger">{{ supplier_expired_count }}</strong></p>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{% url 'supplier_po_product_details' %}" class="btn btn-outline-warning btn-sm">View Supplier Product Details</a>
+                    <a href="{% url 'supplier_po_product_details' %}?validity=within7" class="btn btn-outline-warning btn-sm">Within 7 Days</a>
+                    <a href="{% url 'supplier_po_product_details' %}?validity=expired" class="btn btn-outline-danger btn-sm">Expired</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const customerStatusCtx = document.getElementById('customerStatusChart');
+new Chart(customerStatusCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Pending', 'Partially Delivered', 'Delivered', 'Cancelled'],
+        datasets: [{
+            data: [
+                {{ customer_pending_count }},
+                {{ customer_partial_count }},
+                {{ customer_delivered_count }},
+                {{ customer_cancelled_count }}
+            ],
+            backgroundColor: ['#6c757d', '#0dcaf0', '#198754', '#dc3545']
+        }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+});
+
+const supplierStatusCtx = document.getElementById('supplierStatusChart');
+new Chart(supplierStatusCtx, {
+    type: 'bar',
+    data: {
+        labels: ['Pending', 'Partially Delivered', 'Delivered', 'Cancelled'],
+        datasets: [{
+            label: 'Supplier Products',
+            data: [
+                {{ supplier_pending_count }},
+                {{ supplier_partial_count }},
+                {{ supplier_delivered_count }},
+                {{ supplier_cancelled_count }}
+            ],
+            backgroundColor: ['#6c757d', '#0dcaf0', '#198754', '#dc3545']
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { display: false } }
+    }
+});
+</script>
+
+{% endblock %}

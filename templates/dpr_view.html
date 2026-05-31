@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h1 class="dpr-page-title mb-1">
+            DPR View
+            {% if is_mail_filter %}
+            <span class="badge rounded-pill text-bg-warning ms-2">Mail Confirmation</span>
+            {% endif %}
+        </h1>
+        <p class="dpr-page-subtitle mb-0">Manage DPR records, products, and supplier linkage</p>
+    </div>
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+</div>
+
+<div class="dpr-card dpr-table-card">
+    <div class="dpr-table-toolbar">
+        <div class="row g-2 align-items-center">
+            <div class="col-lg-4">
+                <select id="dprCaseFilter" class="form-select">
+                    <option value="" {% if not case_filter %}selected{% endif %}>All Cases</option>
+                    <option value="qty_matched" {% if case_filter == 'qty_matched' %}selected{% endif %}>Supplier Qty Matched</option>
+                    <option value="mail_alert" {% if case_filter == 'mail_alert' %}selected{% endif %}>Mail Confirmation Alert</option>
+                    <option value="supplier_order_pending" {% if case_filter == 'supplier_order_pending' %}selected{% endif %}>Supplier Order Pending</option>
+                    <option value="due_soon" {% if case_filter == 'due_soon' %}selected{% endif %}>Due Soon</option>
+                    <option value="after_due" {% if case_filter == 'after_due' %}selected{% endif %}>After Due</option>
+                    <option value="normal" {% if case_filter == 'normal' %}selected{% endif %}>Normal</option>
+                </select>
+            </div>
+            <div class="col-lg-8 text-lg-end">
+                <span id="dprRowCount" class="text-muted small"></span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>DPR Serial Number</th>
+                        <th>Customer Name</th>
+                        <th>PO Number</th>
+                        <th>Supplier/Customer Qty Ordered</th>
+                        <th>Supplier/Customer Qty Delivered</th>
+                        <th>PO Value</th>
+                        <th>Action</th>
+                        <th>Download</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dpr in dprs %}
+                    <tr data-dpr-id="{{ dpr.id }}" data-filter-state="{{ dpr.filter_state }}" class="{{ dpr.row_class }}">
+                        <td>{{ dpr.serial_number }}</td>
+                        <td>{{ dpr.customer.customer_name }}</td>
+                        <td>{{ dpr.po_number|default:'-' }}</td>
+                        <td>{{ dpr.supplier_quantity_ordered }}/{{ dpr.total_quantity_ordered }}</td>
+                        <td>{{ dpr.supplier_qty_received }}/{{ dpr.customer_qty_delivered }}</td>
+                        <td>{{ dpr.po_value|default:'-' }}</td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-info btn-sm btn-product-list">Product List</button>
+                                <button type="button" class="btn btn-primary btn-sm btn-edit-dpr">Edit</button>
+                                <button type="button" class="btn btn-warning btn-sm btn-edit-supplier">Edit Supplier</button>
+                                <select class="form-select form-select-sm dpr-status-select" style="width: 120px;">
+                                    <option value="" {% if not dpr.status %}selected{% endif %}>Select</option>
+                                    <option value="hold" {% if dpr.status == 'hold' %}selected{% endif %}>Hold</option>
+                                    <option value="cancel" {% if dpr.status == 'cancel' %}selected{% endif %}>Cancel</option>
+                                </select>
+                            </div>
+                        </td>
+                        <td>
+                            <a href="{% url 'dpr_documents_download' dpr.id %}"
+                               class="btn btn-outline-primary btn-sm"
+                               title="Download all DPR documents">
+                                <i class="bi bi-download me-1"></i>Download
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center">No DPR records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="dpr-table-legend">
+        <span class="legend-item"><span class="legend-swatch dpr-row-qty-matched"></span>Supplier Qty Matched</span>
+        <span class="legend-item"><span class="legend-swatch dpr-row-mail-alert"></span>Mail Confirmation Alert</span>
+        <span class="legend-item"><span class="legend-swatch dpr-row-supplier-order-pending"></span>Supplier Order Pending</span>
+        <span class="legend-item"><span class="legend-swatch dpr-row-due-soon"></span>Due Soon</span>
+        <span class="legend-item"><span class="legend-swatch dpr-row-after-due"></span>After Due</span>
+    </div>
+</div>
+
+<!-- Product List Modal -->
+<div class="modal fade" id="productListModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Product List</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="table table-bordered">
+            <thead>
+              <tr>
+                <th>S.No</th>
+                <th>Product</th>
+                <th>Quantity Ordered</th>
+                <th>Value</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody id="productListBody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function applyDprFilter() {
+    const filterValue = document.getElementById('dprCaseFilter').value;
+    const rows = document.querySelectorAll('tr[data-dpr-id]');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const shouldShow = !filterValue || row.dataset.filterState === filterValue;
+        row.style.display = shouldShow ? '' : 'none';
+        if (shouldShow) visibleCount += 1;
+    });
+
+    document.getElementById('dprRowCount').textContent =
+        `Showing ${visibleCount} of ${rows.length} records`;
+}
+
+document.getElementById('dprCaseFilter').addEventListener('change', applyDprFilter);
+applyDprFilter();
+
+document.addEventListener('click', function (e) {
+    const row = e.target.closest('tr[data-dpr-id]');
+    if (!row) return;
+    const dprId = row.getAttribute('data-dpr-id');
+
+    if (e.target.classList.contains('btn-product-list')) {
+        fetch(`/dpr/${dprId}/products/`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('productListBody');
+            tbody.innerHTML = '';
+            data.products.forEach((p, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${idx + 1}</td>
+                    <td>${p.product_name}</td>
+                    <td>${p.quantity_ordered}</td>
+                    <td>${p.value}</td>
+                    <td>${p.remarks}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            const modalEl = document.getElementById('productListModal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+    }
+
+    if (e.target.classList.contains('btn-edit-dpr')) {
+        window.location.href = `/dpr/${dprId}/edit/`;
+    }
+
+    if (e.target.classList.contains('btn-edit-supplier')) {
+        window.location.href = `/dpr/${dprId}/supplier/`;
+    }
+});
+
+document.addEventListener('change', function (e) {
+    if (!e.target.classList.contains('dpr-status-select')) return;
+    const row = e.target.closest('tr[data-dpr-id]');
+    const dprId = row.getAttribute('data-dpr-id');
+    const value = e.target.value;
+
+    fetch(`/dpr/${dprId}/status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({status: value})
+    });
+});
+</script>
+
+{% endblock %}

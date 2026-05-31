@@ -1,0 +1,4 @@
+Django>=5.0
+mssql-django
+pyodbc
+Pillow

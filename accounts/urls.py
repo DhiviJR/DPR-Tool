@@ -1,0 +1,29 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.dashboard, name='dashboard'),
+    path('dpr-view/', views.dpr_view, name='dpr_view'),
+    path('customer-po-product-details/', views.customer_po_product_details, name='customer_po_product_details'),
+    path('supplier-po-product-details/', views.supplier_po_product_details, name='supplier_po_product_details'),
+    path('dpr/<int:dpr_id>/products/', views.dpr_products, name='dpr_products'),
+    path('dpr/<int:dpr_id>/documents/download/', views.dpr_documents_download, name='dpr_documents_download'),
+    path('customer-product/<int:product_id>/status/', views.customer_product_status_update, name='customer_product_status_update'),
+    path('customer-product/<int:product_id>/supplier-status/', views.supplier_status_details, name='supplier_status_details'),
+    path('supplier-product/<int:supplier_product_id>/status/', views.supplier_product_status_update, name='supplier_product_status_update'),
+    path('supplier-product/<int:supplier_product_id>/expected-date/', views.supplier_product_expected_date_update, name='supplier_product_expected_date_update'),
+    path('dpr/<int:dpr_id>/edit/', views.customer_order_edit, name='customer_order_edit'),
+    path('dpr/<int:dpr_id>/supplier/', views.dpr_supplier, name='dpr_supplier'),
+    path('dpr/<int:dpr_id>/status/', views.dpr_status_update, name='dpr_status_update'),
+
+    path('login/', views.user_login, name='login'),
+    path('logout/', views.user_logout, name='logout'),
+    path('register/', views.register, name='register'),
+
+    path('customer-order/', views.customer_order, name='customer_order'),
+    path('customer-details/', views.customer_details, name='customer_details'),
+    path('supplier-details/', views.supplier_details, name='supplier_details'),
+    path('add-customer/',views.add_customer,name='add_customer'
+),
+    path('add-supplier/', views.add_supplier, name='add_supplier'),
+]
