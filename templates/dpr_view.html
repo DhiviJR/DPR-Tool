@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block content %}
 
@@ -18,59 +19,73 @@
 <div class="dpr-card dpr-table-card">
     <div class="dpr-table-toolbar">
         <div class="row g-2 align-items-center">
-            <div class="col-lg-4">
+            <div class="col-lg-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="search" id="dprSearch" class="form-control"
+                           placeholder="Search DPR, customer, PO, quantities…" autocomplete="off">
+                </div>
+            </div>
+            <div class="col-lg-3">
                 <select id="dprCaseFilter" class="form-select">
-                    <option value="" {% if not case_filter %}selected{% endif %}>All Cases</option>
-                    <option value="qty_matched" {% if case_filter == 'qty_matched' %}selected{% endif %}>Supplier Qty Matched</option>
-                    <option value="mail_alert" {% if case_filter == 'mail_alert' %}selected{% endif %}>Mail Confirmation Alert</option>
-                    <option value="supplier_order_pending" {% if case_filter == 'supplier_order_pending' %}selected{% endif %}>Supplier Order Pending</option>
-                    <option value="due_soon" {% if case_filter == 'due_soon' %}selected{% endif %}>Due Soon</option>
-                    <option value="after_due" {% if case_filter == 'after_due' %}selected{% endif %}>After Due</option>
-                    <option value="normal" {% if case_filter == 'normal' %}selected{% endif %}>Normal</option>
+                    <option value="">All Cases</option>
+                    <option value="completed">Completed</option>
+                    <option value="qty_matched">Supplier Qty Matched</option>
+                    <option value="mail_alert">Mail Confirmation Alert</option>
+                    <option value="supplier_order_pending">Supplier Order Pending</option>
+                    <option value="due_soon">Due Soon</option>
+                    <option value="after_due">After Due</option>
+                    <option value="normal">Normal</option>
                 </select>
             </div>
-            <div class="col-lg-8 text-lg-end">
+            <div class="col-lg-4 text-lg-end">
                 <span id="dprRowCount" class="text-muted small"></span>
             </div>
         </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
+            <table id="dprTable" class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>DPR Serial Number</th>
-                        <th>Customer Name</th>
-                        <th>PO Number</th>
-                        <th>Supplier/Customer Qty Ordered</th>
-                        <th>Supplier/Customer Qty Delivered</th>
-                        <th>PO Value</th>
-                        <th>Action</th>
-                        <th>Download</th>
+                        <th class="sortable" data-col="0" data-sort-type="number">S.No <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="1" data-sort-type="text">DPR Serial Number <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="2" data-sort-type="text">Customer Name <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="3" data-sort-type="text">Region <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="4" data-sort-type="text">PO Number <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="5" data-sort-type="text">Supplier/Customer Qty Ordered <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="6" data-sort-type="text">Supplier/Customer Qty Delivered <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="7" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="8" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="9" data-sort-type="text">Download <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for dpr in dprs %}
                     <tr data-dpr-id="{{ dpr.id }}" data-filter-state="{{ dpr.filter_state }}" class="{{ dpr.row_class }}">
-                        <td>{{ dpr.serial_number }}</td>
-                        <td>{{ dpr.customer.customer_name }}</td>
-                        <td>{{ dpr.po_number|default:'-' }}</td>
-                        <td>{{ dpr.supplier_quantity_ordered }}/{{ dpr.total_quantity_ordered }}</td>
-                        <td>{{ dpr.supplier_qty_received }}/{{ dpr.customer_qty_delivered }}</td>
-                        <td>{{ dpr.po_value|default:'-' }}</td>
-                        <td>
+                        <td data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
+                        <td data-sort-value="{{ dpr.serial_number|default:''|lower }}">{{ dpr.serial_number }}</td>
+                        <td data-sort-value="{{ dpr.customer.customer_name|default:''|lower }}">{{ dpr.customer.customer_name }}</td>
+                        <td data-sort-value="{{ dpr.customer.region|default:''|lower }}">{{ dpr.customer.region|default:'-' }}</td>
+                        <td data-sort-value="{{ dpr.po_number|default:''|lower }}">{{ dpr.po_number|default:'-' }}</td>
+                        <td data-sort-value="{{ dpr.supplier_quantity_ordered }}/{{ dpr.total_quantity_ordered }}">{{ dpr.supplier_quantity_ordered }}/{{ dpr.total_quantity_ordered }}</td>
+                        <td data-sort-value="{{ dpr.supplier_qty_received }}/{{ dpr.customer_qty_delivered }}">{{ dpr.supplier_qty_received }}/{{ dpr.customer_qty_delivered }}</td>
+                        <td data-sort-value="{{ dpr.po_value|default:0 }}">{{ dpr.po_value|default:'-' }}</td>
+                        <td data-sort-value="action">
                             <div class="d-flex flex-wrap gap-2">
                                 <button type="button" class="btn btn-info btn-sm btn-product-list">Product List</button>
                                 <button type="button" class="btn btn-primary btn-sm btn-edit-dpr">Edit</button>
                                 <button type="button" class="btn btn-warning btn-sm btn-edit-supplier">Edit Supplier</button>
+                                {% if dpr.filter_state != 'completed' %}
                                 <select class="form-select form-select-sm dpr-status-select" style="width: 120px;">
                                     <option value="" {% if not dpr.status %}selected{% endif %}>Select</option>
                                     <option value="hold" {% if dpr.status == 'hold' %}selected{% endif %}>Hold</option>
                                     <option value="cancel" {% if dpr.status == 'cancel' %}selected{% endif %}>Cancel</option>
                                 </select>
+                                {% endif %}
                             </div>
                         </td>
-                        <td>
+                        <td data-sort-value="download">
                             <a href="{% url 'dpr_documents_download' dpr.id %}"
                                class="btn btn-outline-primary btn-sm"
                                title="Download all DPR documents">
@@ -80,7 +95,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center">No DPR records found.</td>
+                        <td colspan="10" class="text-center">No DPR records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -88,6 +103,7 @@
         </div>
     </div>
     <div class="dpr-table-legend">
+        <span class="legend-item"><span class="legend-swatch dpr-row-completed"></span>Completed</span>
         <span class="legend-item"><span class="legend-swatch dpr-row-qty-matched"></span>Supplier Qty Matched</span>
         <span class="legend-item"><span class="legend-swatch dpr-row-mail-alert"></span>Mail Confirmation Alert</span>
         <span class="legend-item"><span class="legend-swatch dpr-row-supplier-order-pending"></span>Supplier Order Pending</span>
@@ -95,6 +111,20 @@
         <span class="legend-item"><span class="legend-swatch dpr-row-after-due"></span>After Due</span>
     </div>
 </div>
+
+<script src="{% static 'js/po-table-tools.js' %}?v=2"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    initPoTableTools({
+        tableId: '#dprTable',
+        searchInputId: '#dprSearch',
+        rowCountId: '#dprRowCount',
+        filterSelectId: '#dprCaseFilter',
+        filterAttribute: 'filterState',
+        rowSelector: 'tr[data-dpr-id]'
+    });
+});
+</script>
 
 <!-- Product List Modal -->
 <div class="modal fade" id="productListModal" tabindex="-1">

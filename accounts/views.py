@@ -136,6 +136,8 @@ def _get_status_validity_filter_state(status, validity_state):
 
 
 def _get_dpr_row_class(filter_state):
+    if filter_state == 'completed':
+        return 'dpr-row-completed'
     if filter_state == 'after_due':
         return 'dpr-row-after-due'
     if filter_state == 'due_soon':
@@ -306,7 +308,13 @@ def dpr_view(request):
             and dpr.po_date < po_alert_date
         )
         dpr.validity_state = _get_validity_state(dpr.po_validity, today)
-        if dpr.validity_state == 'expired':
+        if (
+            dpr.total_quantity_ordered > 0
+            and dpr.total_quantity_ordered == dpr.customer_qty_delivered
+            and dpr.supplier_quantity_ordered == dpr.supplier_qty_received
+        ):
+            dpr.filter_state = 'completed'
+        elif dpr.validity_state == 'expired':
             dpr.filter_state = 'after_due'
         elif dpr.validity_state == 'due_soon':
             dpr.filter_state = 'due_soon'
@@ -682,6 +690,47 @@ def supplier_product_expected_date_update(request, supplier_product_id):
 
 
 @login_required
+def check_po_date_status(request, dpr_id):
+    """Check if po_date exists for a DPR when Customer PO is selected"""
+    if request.method != 'GET':
+        raise Http404
+    try:
+        dpr = DPR.objects.get(pk=dpr_id)
+    except DPR.DoesNotExist:
+        raise Http404
+
+    has_po_date = dpr.po_date is not None
+    po_confirmation_date = dpr.po_confirmation_date.strftime('%Y-%m-%d') if dpr.po_confirmation_date else None
+
+    return JsonResponse({
+        'status': 'ok',
+        'has_po_date': has_po_date,
+        'po_date': dpr.po_date.strftime('%Y-%m-%d') if has_po_date else None,
+        'po_confirmation_date': po_confirmation_date,
+        'today': timezone.localdate().strftime('%Y-%m-%d')
+    })
+
+
+@login_required
+def save_po_confirmation_date(request, dpr_id):
+    """Save po_confirmation_date when user confirms via modal"""
+    if request.method != 'POST':
+        raise Http404
+    try:
+        dpr = DPR.objects.get(pk=dpr_id)
+    except DPR.DoesNotExist:
+        raise Http404
+
+    po_confirmation_date = request.POST.get('po_confirmation_date', '').strip() or None
+    if not po_confirmation_date:
+        return JsonResponse({'status': 'error', 'message': 'PO confirmation date is required'}, status=400)
+
+    dpr.po_confirmation_date = po_confirmation_date
+    dpr.save(update_fields=['po_confirmation_date'])
+    return JsonResponse({'status': 'ok'})
+
+
+@login_required
 def customer_order_edit(request, dpr_id):
     try:
         dpr = DPR.objects.get(pk=dpr_id)
@@ -746,6 +795,19 @@ def customer_order_edit(request, dpr_id):
         dpr.po_validity = request.POST.get('po_validity') or None
         dpr.po_date = request.POST.get('po_date') or None
         dpr.po_attachment = request.FILES.get('po_attachment') or dpr.po_attachment
+        
+        # Handle PO confirmation date for Customer PO
+        if confirmation_type == 'Customer PO':
+            po_confirmation_date = request.POST.get('po_confirmation_date', '').strip()
+            if po_confirmation_date:
+                dpr.po_confirmation_date = po_confirmation_date
+            elif not dpr.po_date:
+                # If no po_date exists and no confirmation date provided, set to today
+                dpr.po_confirmation_date = timezone.localdate()
+        else:
+            # For Mail Confirmation, don't modify po_confirmation_date
+            pass
+        
         dpr.save()
 
         CustomerProduct.objects.filter(dpr=dpr).delete()
@@ -754,15 +816,17 @@ def customer_order_edit(request, dpr_id):
         quantities = request.POST.getlist('quantity[]')
         values = request.POST.getlist('value[]')
         remarks_list = request.POST.getlist('remarks[]')
-        attachments = request.FILES.getlist('product_attachment[]')
 
         for i, product_name in enumerate(product_names):
             if product_name.strip() == '':
                 continue
-            quantity = quantities[i]
-            value = values[i]
-            remarks = remarks_list[i]
-            attachment = attachments[i] if i < len(attachments) else None
+            quantity = quantities[i] if i < len(quantities) else None
+            value = values[i] if i < len(values) else None
+            remarks = remarks_list[i] if i < len(remarks_list) else None
+            attachment = request.FILES.get(f'product_attachment_{i}')
+            existing_attachment = request.POST.get(f'existing_attachment_{i}', '')
+            if not attachment and existing_attachment:
+                attachment = existing_attachment
 
             CustomerProduct.objects.create(
                 dpr=dpr,

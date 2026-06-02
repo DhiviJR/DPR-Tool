@@ -52,7 +52,7 @@
                         <th class="sortable" data-col="8" data-sort-type="date">PO Validity <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="10" data-sort-type="date">Expected Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="11" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="11" data-sort-type="text">Inward <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -184,15 +184,15 @@ function postSupplierStatusUpdate(row, selectElement, status, quantityReceived =
             qtyReceivedCell.textContent = '0';
             qtyReceivedCell.setAttribute('data-sort-value', '0');
         }
-        const actionCell = row.cells[11];
-        if (actionCell) {
+        const inwardCell = row.cells[11];
+        if (inwardCell) {
             const statusLabels = {
                 delivered: 'closed',
                 partially_delivered: 'partially closed',
                 cancelled: 'cancelled',
                 '': 'pending'
             };
-            actionCell.setAttribute('data-sort-value', statusLabels[status] || 'pending');
+            inwardCell.setAttribute('data-sort-value', statusLabels[status] || 'pending');
         }
     });
 }

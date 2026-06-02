@@ -488,6 +488,10 @@ th.sortable.sort-desc {
     background-color: #cfe2ff !important;
 }
 
+.dpr-table-card .table tbody tr.dpr-row-completed > td {
+    background-color: #d1e7dd !important;
+}
+
 .dpr-table-card .table tbody tr.dpr-row-mail-alert > td {
     background-color: #fed7aa !important;
 }
@@ -548,6 +552,10 @@ th.sortable.sort-desc {
 
 .dpr-table-legend .legend-swatch.dpr-row-qty-matched {
     background: #cfe2ff;
+}
+
+.dpr-table-legend .legend-swatch.dpr-row-completed {
+    background: #d1e7dd;
 }
 
 .dpr-table-legend .legend-swatch.dpr-row-mail-alert {

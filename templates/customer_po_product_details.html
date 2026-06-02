@@ -53,6 +53,7 @@
                         <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="10" data-sort-type="date">Expected Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="11" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="12" data-sort-type="text">Inward <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -72,23 +73,25 @@
                         <td data-sort-value="{{ product.dpr.po_validity|date:'Y-m-d'|default:'' }}">{{ product.dpr.po_validity|date:'Y-m-d'|default:'-' }}</td>
                         <td data-sort-value="{{ product.dpr.po_value|default:0 }}">{{ product.dpr.po_value|default:'-' }}</td>
                         <td data-sort-value="">-</td>
-                        <td data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
+                        <td data-sort-value="view supplier status">
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="button" class="btn btn-info btn-sm btn-supplier-status">
                                     View Supplier Status
                                 </button>
-                                <select class="form-select form-select-sm customer-product-status" style="width: 160px;" data-prev-status="{{ product.status|default:'' }}">
-                                    <option value="" {% if not product.status %}selected{% endif %}>Select</option>
-                                    <option value="delivered" {% if product.status == 'delivered' %}selected{% endif %}>Closed</option>
-                                    <option value="partially_delivered" {% if product.status == 'partially_delivered' %}selected{% endif %}>Partially Closed</option>
-                                    <option value="cancelled" {% if product.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                                </select>
                             </div>
+                        </td>
+                        <td data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
+                            <select class="form-select form-select-sm customer-product-status" style="width: 160px;" data-prev-status="{{ product.status|default:'' }}">
+                                <option value="" {% if not product.status %}selected{% endif %}>Select</option>
+                                <option value="delivered" {% if product.status == 'delivered' %}selected{% endif %}>Closed</option>
+                                <option value="partially_delivered" {% if product.status == 'partially_delivered' %}selected{% endif %}>Partially Closed</option>
+                                <option value="cancelled" {% if product.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                            </select>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="text-center">No product records found.</td>
+                        <td colspan="13" class="text-center">No product records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -254,15 +257,15 @@ function postStatusUpdate(row, selectElement, status, payload = {}) {
             quantityDeliveredCell.textContent = '0';
             quantityDeliveredCell.setAttribute('data-sort-value', '0');
         }
-        const actionCell = row.cells[11];
-        if (actionCell) {
+        const inwardCell = row.cells[12];
+        if (inwardCell) {
             const statusLabels = {
                 delivered: 'closed',
                 partially_delivered: 'partially closed',
                 cancelled: 'cancelled',
                 '': 'pending'
             };
-            actionCell.setAttribute('data-sort-value', statusLabels[status] || 'pending');
+            inwardCell.setAttribute('data-sort-value', statusLabels[status] || 'pending');
         }
     });
 }

@@ -56,6 +56,8 @@ class DPR(models.Model):
 
     po_date = models.DateField(blank=True, null=True)
 
+    po_confirmation_date = models.DateField(blank=True, null=True)
+
     po_validity = models.DateField(blank=True, null=True)
 
     po_attachment = models.FileField(

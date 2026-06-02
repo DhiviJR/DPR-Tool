@@ -158,14 +158,21 @@
                 <div class="col-md-4 mb-3">
 
                     <label class="form-label">
-                        Quotation Attachment *
+                        Quotation Attachment {% if not dpr or not dpr.quotation_attachment %}*{% endif %}
                     </label>
 
                     <input type="file"
-                           multiple
                            class="form-control"
                            name="quotation_attachment"
-                           required>
+                           {% if not dpr or not dpr.quotation_attachment %}required{% endif %}>
+                    <input type="hidden"
+                           name="existing_quotation_attachment"
+                           value="{% if dpr and dpr.quotation_attachment %}{{ dpr.quotation_attachment.name }}{% endif %}">
+                    {% if dpr and dpr.quotation_attachment %}
+                    <small class="text-muted d-block mt-1">
+                        Current: <a href="{{ dpr.quotation_attachment.url }}" target="_blank">{{ dpr.quotation_attachment.name|slice:'-40:' }}</a>
+                    </small>
+                    {% endif %}
 
                 </div>
 
@@ -281,8 +288,16 @@
                            multiple
                            class="form-control"
                            name="po_attachment">
+                    {% if dpr and dpr.po_attachment %}
+                    <small class="text-muted d-block mt-1">
+                        Current: <a href="{{ dpr.po_attachment.url }}" target="_blank">{{ dpr.po_attachment.name|slice:'-40:' }}</a>
+                    </small>
+                    {% endif %}
 
                 </div>
+
+                <!-- PO Confirmation Date (Hidden) -->
+                <input type="hidden" name="po_confirmation_date" id="poConfirmationDateInput" value="">
 
             </div>
 
@@ -372,7 +387,15 @@
                             <td>
                                 <input type="file"
                                        class="form-control"
-                                       name="product_attachment[]">
+                                       name="product_attachment_{{ forloop.counter0 }}">
+                                <input type="hidden"
+                                       name="existing_attachment_{{ forloop.counter0 }}"
+                                       value="{{ p.attachment.name|default:'' }}">
+                                {% if p.attachment %}
+                                <small class="text-muted d-block mt-1">
+                                    Current: <a href="{{ p.attachment.url }}" target="_blank">{{ p.attachment.name|slice:'-40:' }}</a>
+                                </small>
+                                {% endif %}
                             </td>
                             <td>
                                 <button type="button"
@@ -436,7 +459,10 @@
                             <td>
                                 <input type="file"
                                        class="form-control"
-                                       name="product_attachment[]">
+                                       name="product_attachment_0">
+                                <input type="hidden"
+                                       name="existing_attachment_0"
+                                       value="">
                             </td>
                             <td>
                                 <button type="button"
@@ -564,12 +590,12 @@ document.getElementById('addRow').addEventListener(
         let table =
             document.querySelector('#productTable tbody');
 
-        let rowCount = table.rows.length + 1;
+        let rowCount = table.rows.length;
 
         let row = `
             <tr>
 
-                <td>${rowCount}</td>
+                <td>${rowCount + 1}</td>
 
                 <td>
                     <input type="text"
@@ -627,7 +653,10 @@ document.getElementById('addRow').addEventListener(
                 <td>
                     <input type="file"
                            class="form-control"
-                           name="product_attachment[]">
+                           name="product_attachment_${rowCount}">
+                    <input type="hidden"
+                           name="existing_attachment_${rowCount}"
+                           value="">
                 </td>
 
                 <td>
@@ -643,31 +672,35 @@ document.getElementById('addRow').addEventListener(
         `;
 
         table.insertAdjacentHTML('beforeend', row);
-
-    }
-);
-
-document.addEventListener(
-    'click',
-    function (e) {
+        renumberProductRows();
 
         if (e.target.classList.contains('removeRow')) {
 
             e.target.closest('tr').remove();
 
             calculateTotals();
+            renumberProductRows();
         }
     }
 );
 
-document.addEventListener(
-    'input',
-    function () {
-
-        calculateTotals();
+    function renumberProductRows() {
+        const rows = document.querySelectorAll('#productTable tbody tr');
+        rows.forEach((row, index) => {
+            const fileInput = row.querySelector('input[type="file"]');
+            const hiddenInput = row.querySelector('input[type="hidden"][name^="existing_attachment_"]');
+            const serialCell = row.cells[0];
+            if (serialCell) {
+                serialCell.textContent = index + 1;
+            }
+            if (fileInput) {
+                fileInput.name = `product_attachment_${index}`;
+            }
+            if (hiddenInput) {
+                hiddenInput.name = `existing_attachment_${index}`;
+            }
+        });
     }
-);
-
 function parseAmount(value) {
     const amount = parseFloat(value);
     return Number.isFinite(amount) ? amount : 0;
@@ -699,6 +732,7 @@ function validatePoValueMatch(options = {}) {
 }
 
 document.getElementById('customerOrderForm').addEventListener('submit', function (e) {
+    renumberProductRows();
     calculateTotals();
     if (!validatePoValueMatch({ showError: true })) {
         e.preventDefault();
@@ -898,6 +932,81 @@ document.addEventListener(
 
 calculateTotals();
 
+</script>
+
+<!-- PO CONFIRMATION DATE MODAL -->
+<div class="modal fade" id="poConfirmationModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">Customer PO Confirmation Date</h5>
+            </div>
+            <div class="modal-body">
+                <p>A PO date already exists for this DPR. Please confirm the Customer PO confirmation date.</p>
+                <label for="poConfirmationDateModal" class="form-label">Select PO Confirmation Date *</label>
+                <input type="date" id="poConfirmationDateModal" class="form-control" required>
+                <div id="poConfirmationError" class="text-danger mt-2" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="confirmPoDateBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Handle PO Confirmation Date logic when Customer PO is selected
+const dprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
+const isEdit = '{% if is_edit %}true{% else %}false{% endif %}' === 'true';
+let poConfirmationModalInstance = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmationTypeSelect = document.getElementById('confirmationType');
+    
+    // Initialize modal instance
+    poConfirmationModalInstance = new bootstrap.Modal(document.getElementById('poConfirmationModal'));
+    
+    // Handle confirmation type change
+    confirmationTypeSelect.addEventListener('change', async function() {
+        if (this.value === 'Customer PO' && dprId && isEdit) {
+            // Check if po_date exists
+            try {
+                const response = await fetch(`/dpr/${dprId}/check-po-date/`);
+                const data = await response.json();
+                
+                if (data.has_po_date) {
+                    // PO date already exists, show modal to confirm
+                    document.getElementById('poConfirmationDateModal').value = data.po_confirmation_date || data.today;
+                    poConfirmationModalInstance.show();
+                } else {
+                    // No PO date exists, auto-set confirmation date to today
+                    document.getElementById('poConfirmationDateInput').value = data.today;
+                }
+            } catch (error) {
+                console.error('Error checking PO date:', error);
+            }
+        }
+    });
+    
+    // Handle Confirm button click
+    document.getElementById('confirmPoDateBtn').addEventListener('click', function() {
+        const selectedDate = document.getElementById('poConfirmationDateModal').value;
+        const errorDiv = document.getElementById('poConfirmationError');
+        
+        if (!selectedDate) {
+            errorDiv.textContent = 'Please select a date';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        // Set the hidden input value
+        document.getElementById('poConfirmationDateInput').value = selectedDate;
+        errorDiv.style.display = 'none';
+        
+        // Close modal
+        poConfirmationModalInstance.hide();
+    });
+});
 </script>
 
 <!-- CUSTOMER MODAL -->
