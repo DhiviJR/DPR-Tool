@@ -74,6 +74,9 @@ function initPoTableTools(options) {
 
     function rowMatchesFilter(row) {
         if (!filterSelect || !filterSelect.value) return true;
+        if (typeof options.filterMatcher === 'function') {
+            return options.filterMatcher(row, filterSelect.value);
+        }
         const attribute = options.filterAttribute || 'filterState';
         return row.dataset[attribute] === filterSelect.value;
     }

@@ -29,6 +29,7 @@
                     <option value="due_soon">Due Soon</option>
                     <option value="expired">Expired</option>
                     <option value="pending">Pending</option>
+                    <option value="rework_products">Rework Products</option>
                 </select>
             </div>
             <div class="col-lg-4 text-lg-end">
@@ -57,7 +58,7 @@
                 </thead>
                 <tbody>
                     {% for row in supplier_products %}
-                    <tr data-supplier-product-id="{{ row.id }}" data-validity-state="{{ row.validity_state }}" data-filter-state="{{ row.filter_state }}" class="{{ row.row_class }}">
+                    <tr data-supplier-product-id="{{ row.id }}" data-validity-state="{{ row.validity_state }}" data-filter-state="{{ row.filter_state }}" data-rework-state="{% if row.quantity_not_ok > 0 %}rework_products{% endif %}" class="{{ row.row_class }}">
                         <td data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
                         <td data-sort-value="{{ row.customer_product.dpr.serial_number|default:''|lower }}">{{ row.customer_product.dpr.serial_number }}</td>
                         <td data-sort-value="{{ row.supplier.supplier_name|default:''|lower }}">{{ row.supplier.supplier_name }}</td>
@@ -72,12 +73,22 @@
                             <input type="date" class="form-control form-control-sm expected-date-input" value="{{ row.expected_date|date:'Y-m-d' }}">
                         </td>
                         <td data-sort-value="{% if row.status == 'delivered' %}closed{% elif row.status == 'partially_delivered' %}partially closed{% elif row.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
-                            <select class="form-select form-select-sm supplier-product-status" style="width: 170px;" data-prev-status="{{ row.status|default:'' }}">
-                                <option value="" {% if not row.status %}selected{% endif %}>Select</option>
-                                <option value="delivered" {% if row.status == 'delivered' %}selected{% endif %}>Closed</option>
-                                <option value="partially_delivered" {% if row.status == 'partially_delivered' %}selected{% endif %}>Partially Closed</option>
-                                <option value="cancelled" {% if row.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                            </select>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button"
+                                    class="btn btn-sm btn-outline-primary supplier-inward-btn"
+                                    data-ordered-qty="{{ row.quantity }}"
+                                    data-received-qty="{{ row.quantity_received }}"
+                                    data-ok-qty="{{ row.quantity_ok }}"
+                                    data-not-ok-qty="{{ row.quantity_not_ok }}"
+                                    data-not-ok-reason="{{ row.not_ok_reason|default:'' }}">
+                                    {% if row.status == 'delivered' %}Closed{% elif row.status == 'cancelled' %}Cancelled{% else %}Inward{% endif %}
+                                </button>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger supplier-cancel-order-btn"
+                                        {% if row.status == 'cancelled' %}disabled{% endif %}>
+                                    Cancel Order
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
@@ -97,27 +108,130 @@
     </div>
 </div>
 
-<div class="modal fade" id="partialSupplierModal" tabindex="-1">
+<div class="modal fade" id="supplierInwardModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Partially Received Quantity</h5>
+                <h5 class="modal-title">Supplier Inward</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <label for="partialSupplierQty" class="form-label">Enter quantity received</label>
-                <input type="number" min="1" id="partialSupplierQty" class="form-control">
-                <div class="form-text" id="partialSupplierHint"></div>
+                <div class="mb-3">
+                    <label class="form-label">Ordered Quantity</label>
+                    <input type="number" id="supplierInwardOrderedQty" class="form-control" readonly>
+                </div>
+                <div class="mb-3">
+                    <label for="supplierInwardReceivedQty" class="form-label">Received Quantity</label>
+                    <input type="number" min="0" step="1" required id="supplierInwardReceivedQty" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label for="supplierInwardOkQty" class="form-label">OK Quantity</label>
+                    <input type="number" min="0" step="1" required id="supplierInwardOkQty" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label for="supplierInwardNotOkQty" class="form-label">NOT OK Quantity</label>
+                    <input type="number" min="0" step="1" required id="supplierInwardNotOkQty" class="form-control">
+                </div>
+                <div class="mb-3" id="supplierInwardReasonGroup" style="display:none;">
+                    <label for="supplierInwardNotOkReason" class="form-label">Reason</label>
+                    <textarea id="supplierInwardNotOkReason" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="text-danger small mb-2" id="supplierInwardValidationError" style="display:none;"></div>
+                <div class="form-text" id="supplierInwardHint"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="savePartialSupplierBtn">Save</button>
+                <button type="button" class="btn btn-primary" id="saveSupplierInwardBtn">Save</button>
             </div>
         </div>
     </div>
 </div>
 
-<script src="{% static 'js/po-table-tools.js' %}?v=2"></script>
+<!-- SUPPLIER INWARD ACTION MODAL -->
+<div class="modal fade" id="supplierInwardActionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select Inward Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <div class="d-grid gap-3 col-10 mx-auto">
+                    <button type="button" class="btn btn-primary btn-lg" id="actionRemainingInwardBtn">
+                        Remaining Inward
+                    </button>
+                    <button type="button" class="btn btn-warning btn-lg" id="actionReworkBtn">
+                        Rework
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SUPPLIER REMAINING INWARD MODAL -->
+<div class="modal fade" id="supplierRemainingInwardModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Supplier Remaining Inward</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Pending Quantity</label>
+                    <input type="number" id="remainingInwardPendingQty" class="form-control" readonly>
+                </div>
+                <div class="mb-3">
+                    <label for="remainingInwardReceivedQty" class="form-label">Received Quantity *</label>
+                    <input type="number" min="1" step="1" required id="remainingInwardReceivedQty" class="form-control">
+                </div>
+                <div class="text-danger small mb-2" id="remainingInwardValidationError" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveRemainingInwardBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SUPPLIER REWORK MODAL -->
+<div class="modal fade" id="supplierReworkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Supplier Rework Inward</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Rework Quantity</label>
+                    <input type="number" id="reworkQty" class="form-control" readonly>
+                </div>
+                <div class="mb-3">
+                    <label for="reworkReceivedQty" class="form-label">Received Quantity *</label>
+                    <input type="number" min="1" step="1" required id="reworkReceivedQty" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label for="reworkOkQty" class="form-label">OK Quantity *</label>
+                    <input type="number" min="0" step="1" required id="reworkOkQty" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label for="reworkNotOkQty" class="form-label">NOT OK Quantity *</label>
+                    <input type="number" min="0" step="1" required id="reworkNotOkQty" class="form-control">
+                </div>
+                <div class="text-danger small mb-2" id="reworkValidationError" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveReworkBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/po-table-tools.js' %}?v=3"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     initPoTableTools({
@@ -126,11 +240,17 @@ document.addEventListener('DOMContentLoaded', function () {
         rowCountId: '#supplierPoRowCount',
         filterSelectId: '#supplierPoCaseFilter',
         filterAttribute: 'filterState',
-        rowSelector: 'tr[data-supplier-product-id]'
+        rowSelector: 'tr[data-supplier-product-id]',
+        filterMatcher: function (row, filterValue) {
+            if (filterValue === 'rework_products') {
+                return row.dataset.reworkState === 'rework_products';
+            }
+            return row.dataset.filterState === filterValue;
+        }
     });
 });
 
-let pendingSupplierUpdate = null;
+let pendingSupplierInward = null;
 
 function applySupplierRowColor(row, status) {
     row.classList.remove('table-success', 'table-danger', 'table-warning', 'table-secondary');
@@ -149,10 +269,157 @@ function updateSupplierRowFilterState(row, status) {
     else row.dataset.filterState = 'pending';
 }
 
-function postSupplierStatusUpdate(row, selectElement, status, quantityReceived = '') {
-    const supplierProductId = row.getAttribute('data-supplier-product-id');
-    const qtyOrdered = parseInt(row.children[6].textContent || '0', 10);
+function getSupplierInwardLabel(status, notOkQty = 0) {
+    if (status === 'delivered') return 'Closed';
+    if (status === 'cancelled') return 'Cancelled';
+    return 'Inward';
+}
+
+function getSupplierInwardSortLabel(status) {
+    if (status === 'delivered') return 'closed';
+    if (status === 'partially_delivered') return 'partially closed';
+    if (status === 'cancelled') return 'cancelled';
+    return 'pending';
+}
+
+function toggleSupplierInwardReason() {
+    const notOkQty = parseInt(document.getElementById('supplierInwardNotOkQty').value || '0', 10);
+    document.getElementById('supplierInwardReasonGroup').style.display = notOkQty > 0 ? '' : 'none';
+}
+
+function getSupplierInwardValues() {
+    const receivedValue = document.getElementById('supplierInwardReceivedQty').value.trim();
+    const okValue = document.getElementById('supplierInwardOkQty').value.trim();
+    const notOkValue = document.getElementById('supplierInwardNotOkQty').value.trim();
+    const reason = document.getElementById('supplierInwardNotOkReason').value.trim();
+
+    return {
+        receivedValue: receivedValue,
+        okValue: okValue,
+        notOkValue: notOkValue,
+        receivedQuantity: parseInt(receivedValue || '0', 10),
+        okQuantity: parseInt(okValue || '0', 10),
+        notOkQuantity: parseInt(notOkValue || '0', 10),
+        reason: reason
+    };
+}
+
+function validateSupplierInwardLive(isSubmit = false) {
+    if (!pendingSupplierInward) return false;
+
+    const receivedInput = document.getElementById('supplierInwardReceivedQty');
+    const okInput = document.getElementById('supplierInwardOkQty');
+    const notOkInput = document.getElementById('supplierInwardNotOkQty');
+    const reasonInput = document.getElementById('supplierInwardNotOkReason');
+    const errorEl = document.getElementById('supplierInwardValidationError');
+    const saveBtn = document.getElementById('saveSupplierInwardBtn');
+    const values = getSupplierInwardValues();
+
+    [receivedInput, okInput, notOkInput, reasonInput].forEach(input => {
+        input.classList.remove('is-invalid');
+        input.setCustomValidity('');
+        input.removeAttribute('aria-invalid');
+    });
+
+    let message = '';
+    let invalidInputs = [];
+
+    // 1. Check received quantity bounds (if filled)
+    if (values.receivedValue !== '') {
+        if (values.receivedQuantity < 0) {
+            message = 'Received quantity cannot be negative.';
+            invalidInputs = [receivedInput];
+        } else if (values.receivedQuantity > pendingSupplierInward.orderedQty) {
+            message = `Received quantity cannot exceed ordered quantity (${pendingSupplierInward.orderedQty}).`;
+            invalidInputs = [receivedInput];
+        }
+    }
+
+    // 2. Check OK and NOT OK are negative (if filled)
+    if (!message && values.okValue !== '' && values.okQuantity < 0) {
+        message = 'OK quantity cannot be negative.';
+        invalidInputs = [okInput];
+    }
+    if (!message && values.notOkValue !== '' && values.notOkQuantity < 0) {
+        message = 'NOT OK quantity cannot be negative.';
+        invalidInputs = [notOkInput];
+    }
+
+    // 3. Check OK + NOT OK <= Received (if all three are filled)
+    if (!message && values.receivedValue !== '' && values.okValue !== '' && values.notOkValue !== '') {
+        if (values.okQuantity + values.notOkQuantity > values.receivedQuantity) {
+            message = `OK quantity plus NOT OK quantity cannot exceed received quantity (${values.receivedQuantity}).`;
+            invalidInputs = [okInput, notOkInput];
+        }
+    }
+
+    // 4. Check reason (if notOkQuantity > 0 and filled)
+    if (!message && values.notOkValue !== '' && values.notOkQuantity > 0 && !values.reason) {
+        message = 'Reason is required when NOT OK quantity is greater than 0.';
+        invalidInputs = [reasonInput];
+    }
+
+    // 5. Check empty fields on submit
+    if (!message && isSubmit) {
+        if (!values.receivedValue || !values.okValue || !values.notOkValue) {
+            message = 'Received, OK and NOT OK quantities are required.';
+            invalidInputs = [
+                ...(!values.receivedValue ? [receivedInput] : []),
+                ...(!values.okValue ? [okInput] : []),
+                ...(!values.notOkValue ? [notOkInput] : [])
+            ];
+        }
+    }
+
+    if (message) {
+        invalidInputs.forEach(input => {
+            input.classList.add('is-invalid');
+            input.setCustomValidity(message);
+            input.setAttribute('aria-invalid', 'true');
+        });
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+        if (saveBtn) saveBtn.disabled = true;
+        return false;
+    }
+
+    errorEl.textContent = '';
+    errorEl.style.display = 'none';
+    if (saveBtn) saveBtn.disabled = false;
+    return true;
+}
+
+function refreshSupplierInwardRow(row, status, receivedQty, notOkQty, notOkReason, okQty = null) {
     const qtyReceivedCell = row.querySelector('.quantity-received-cell');
+    const inwardButton = row.querySelector('.supplier-inward-btn');
+    const cancelButton = row.querySelector('.supplier-cancel-order-btn');
+
+    updateSupplierRowFilterState(row, status);
+    row.dataset.reworkState = parseInt(notOkQty || '0', 10) > 0 ? 'rework_products' : '';
+    applySupplierRowColor(row, status);
+    document.getElementById('supplierPoCaseFilter').dispatchEvent(new Event('change'));
+
+    qtyReceivedCell.textContent = receivedQty;
+    qtyReceivedCell.setAttribute('data-sort-value', receivedQty);
+
+    inwardButton.textContent = getSupplierInwardLabel(status, notOkQty);
+    inwardButton.dataset.receivedQty = receivedQty;
+    inwardButton.dataset.okQty = okQty === null ? Math.max(receivedQty - notOkQty, 0) : okQty;
+    inwardButton.dataset.notOkQty = notOkQty;
+    inwardButton.dataset.notOkReason = notOkReason;
+
+    if (cancelButton) {
+        cancelButton.disabled = status === 'cancelled';
+    }
+
+    const inwardCell = row.cells[11];
+    if (inwardCell) {
+        inwardCell.setAttribute('data-sort-value', getSupplierInwardSortLabel(status));
+    }
+}
+
+function postSupplierInwardUpdate(row, buttonElement, receivedQuantity, okQuantity, notOkQuantity, notOkReason) {
+    const supplierProductId = row.getAttribute('data-supplier-product-id');
 
     fetch(`/supplier-product/${supplierProductId}/status/`, {
         method: 'POST',
@@ -161,62 +428,280 @@ function postSupplierStatusUpdate(row, selectElement, status, quantityReceived =
             'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-            status: status,
-            quantity_received: quantityReceived
+            quantity_received: receivedQuantity,
+            ok_quantity: okQuantity,
+            not_ok_quantity: notOkQuantity,
+            not_ok_reason: notOkReason
         })
     }).then(response => response.json()).then(data => {
         if (data.status !== 'ok') {
             alert(data.message || 'Unable to update status');
-            selectElement.value = selectElement.dataset.prevStatus || '';
             return;
         }
-        selectElement.dataset.prevStatus = status;
-        updateSupplierRowFilterState(row, status);
-        applySupplierRowColor(row, status);
-        document.getElementById('supplierPoCaseFilter').dispatchEvent(new Event('change'));
-        if (status === 'delivered') {
-            qtyReceivedCell.textContent = qtyOrdered;
-            qtyReceivedCell.setAttribute('data-sort-value', qtyOrdered);
-        } else if (status === 'partially_delivered') {
-            qtyReceivedCell.textContent = quantityReceived;
-            qtyReceivedCell.setAttribute('data-sort-value', quantityReceived);
-        } else if (status === 'cancelled' || status === '') {
-            qtyReceivedCell.textContent = '0';
-            qtyReceivedCell.setAttribute('data-sort-value', '0');
-        }
-        const inwardCell = row.cells[11];
-        if (inwardCell) {
-            const statusLabels = {
-                delivered: 'closed',
-                partially_delivered: 'partially closed',
-                cancelled: 'cancelled',
-                '': 'pending'
-            };
-            inwardCell.setAttribute('data-sort-value', statusLabels[status] || 'pending');
-        }
+        const status = data.inward_status || '';
+        refreshSupplierInwardRow(
+            row,
+            status,
+            data.quantity_received || 0,
+            data.quantity_not_ok || 0,
+            data.not_ok_reason || '',
+            data.quantity_ok || 0
+        );
+
+        ['supplierInwardModal', 'supplierRemainingInwardModal', 'supplierReworkModal'].forEach(id => {
+            const modalEl = document.getElementById(id);
+            if (modalEl) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+        });
+        pendingSupplierInward = null;
     });
 }
 
-document.addEventListener('change', function (e) {
-    if (!e.target.classList.contains('supplier-product-status')) return;
-    const row = e.target.closest('tr[data-supplier-product-id]');
-    const status = e.target.value;
-    const qtyOrdered = parseInt(row.children[6].textContent || '0', 10);
+function showFirstTimeInwardModal() {
+    const orderedQty = pendingSupplierInward.orderedQty;
+    document.getElementById('supplierInwardOrderedQty').value = orderedQty;
+    
+    const receivedInput = document.getElementById('supplierInwardReceivedQty');
+    const okInput = document.getElementById('supplierInwardOkQty');
+    const notOkInput = document.getElementById('supplierInwardNotOkQty');
+    receivedInput.max = orderedQty;
+    okInput.max = orderedQty;
+    notOkInput.max = orderedQty;
+    
+    receivedInput.value = pendingSupplierInward.receivedQty || pendingSupplierInward.okQty || '0';
+    okInput.value = pendingSupplierInward.okQty || '0';
+    notOkInput.value = pendingSupplierInward.notOkQty || '0';
+    document.getElementById('supplierInwardNotOkReason').value = pendingSupplierInward.notOkReason || '';
+    document.getElementById('supplierInwardHint').textContent =
+        `Received quantity cannot exceed ${orderedQty}. OK quantity plus NOT OK quantity cannot exceed received quantity.`;
+    
+    updateInwardFieldsState();
+    toggleSupplierInwardReason();
+    validateSupplierInwardLive();
+    new bootstrap.Modal(document.getElementById('supplierInwardModal')).show();
+}
 
-    if (status === 'partially_delivered') {
-        pendingSupplierUpdate = {
-            row: row,
-            selectElement: e.target,
-            qtyOrdered: qtyOrdered
-        };
-        document.getElementById('partialSupplierQty').value = '';
-        document.getElementById('partialSupplierHint').textContent =
-            `Quantity must be greater than 0 and less than ${qtyOrdered}.`;
-        new bootstrap.Modal(document.getElementById('partialSupplierModal')).show();
+document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('supplier-inward-btn')) return;
+    const row = e.target.closest('tr[data-supplier-product-id]');
+    const orderedQty = parseInt(e.target.dataset.orderedQty || row.children[6].textContent || '0', 10);
+    const receivedQty = parseInt(e.target.dataset.receivedQty || '0', 10);
+    const okQty = parseInt(e.target.dataset.okQty || '0', 10);
+    const notOkQty = parseInt(e.target.dataset.notOkQty || '0', 10);
+    const notOkReason = e.target.dataset.notOkReason || '';
+    const status = row.dataset.filterState;
+
+    pendingSupplierInward = {
+        row: row,
+        buttonElement: e.target,
+        orderedQty: orderedQty,
+        receivedQty: receivedQty,
+        okQty: okQty,
+        notOkQty: notOkQty,
+        notOkReason: notOkReason,
+        status: status
+    };
+
+    if (receivedQty > 0 && status !== 'closed' && status !== 'cancelled') {
+        new bootstrap.Modal(document.getElementById('supplierInwardActionModal')).show();
+    } else {
+        showFirstTimeInwardModal();
+    }
+});
+
+document.getElementById('actionRemainingInwardBtn')?.addEventListener('click', function() {
+    const actionModalEl = document.getElementById('supplierInwardActionModal');
+    bootstrap.Modal.getInstance(actionModalEl).hide();
+    
+    const pendingQty = pendingSupplierInward.orderedQty - pendingSupplierInward.receivedQty;
+    document.getElementById('remainingInwardPendingQty').value = pendingQty;
+    document.getElementById('remainingInwardReceivedQty').value = '';
+    document.getElementById('remainingInwardReceivedQty').max = pendingQty;
+    document.getElementById('remainingInwardValidationError').style.display = 'none';
+    
+    new bootstrap.Modal(document.getElementById('supplierRemainingInwardModal')).show();
+});
+
+document.getElementById('actionReworkBtn')?.addEventListener('click', function() {
+    const actionModalEl = document.getElementById('supplierInwardActionModal');
+    bootstrap.Modal.getInstance(actionModalEl).hide();
+    
+    const reworkQtyVal = pendingSupplierInward.notOkQty;
+    document.getElementById('reworkQty').value = reworkQtyVal;
+    document.getElementById('reworkReceivedQty').value = '';
+    document.getElementById('reworkReceivedQty').max = reworkQtyVal;
+    document.getElementById('reworkOkQty').value = '';
+    document.getElementById('reworkNotOkQty').value = '';
+    
+    updateReworkFieldsState();
+    validateReworkLive();
+    new bootstrap.Modal(document.getElementById('supplierReworkModal')).show();
+});
+
+document.getElementById('saveRemainingInwardBtn')?.addEventListener('click', function() {
+    if (!pendingSupplierInward) return;
+    const receivedInput = document.getElementById('remainingInwardReceivedQty');
+    const enteredVal = receivedInput.value.trim();
+    const enteredQty = parseInt(enteredVal || '0', 10);
+    const pendingQty = pendingSupplierInward.orderedQty - pendingSupplierInward.receivedQty;
+    const errorEl = document.getElementById('remainingInwardValidationError');
+
+    if (!enteredVal || enteredQty <= 0) {
+        errorEl.textContent = 'Received quantity is required and must be greater than 0.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    if (enteredQty > pendingQty) {
+        errorEl.textContent = `Received quantity cannot exceed pending quantity (${pendingQty}).`;
+        errorEl.style.display = 'block';
+        return;
+    }
+    errorEl.style.display = 'none';
+
+    const newReceivedTotal = pendingSupplierInward.receivedQty + enteredQty;
+    const newOkTotal = pendingSupplierInward.okQty + enteredQty;
+    const newNotOkTotal = pendingSupplierInward.notOkQty;
+    const newNotOkReason = pendingSupplierInward.notOkReason;
+
+    postSupplierInwardUpdate(
+        pendingSupplierInward.row,
+        pendingSupplierInward.buttonElement,
+        newReceivedTotal,
+        newOkTotal,
+        newNotOkTotal,
+        newNotOkReason
+    );
+});
+
+function validateReworkLive(isSubmit = false) {
+    if (!pendingSupplierInward) return false;
+
+    const receivedInput = document.getElementById('reworkReceivedQty');
+    const okInput = document.getElementById('reworkOkQty');
+    const notOkInput = document.getElementById('reworkNotOkQty');
+    const errorEl = document.getElementById('reworkValidationError');
+    const saveBtn = document.getElementById('saveReworkBtn');
+
+    const receivedVal = receivedInput.value.trim();
+    const okVal = okInput.value.trim();
+    const notOkVal = notOkInput.value.trim();
+
+    const receivedQty = parseInt(receivedVal || '0', 10);
+    const okQty = parseInt(okVal || '0', 10);
+    const notOkQty = parseInt(notOkVal || '0', 10);
+    const reworkQtyVal = pendingSupplierInward.notOkQty;
+
+    [receivedInput, okInput, notOkInput].forEach(input => {
+        input.classList.remove('is-invalid');
+    });
+
+    let message = '';
+    let invalidInputs = [];
+
+    // 1. Check bounds if received is filled
+    if (receivedVal !== '') {
+        if (receivedQty <= 0) {
+            message = 'Received quantity must be greater than 0.';
+            invalidInputs = [receivedInput];
+        } else if (receivedQty > reworkQtyVal) {
+            message = `Received quantity cannot exceed Rework quantity (${reworkQtyVal}).`;
+            invalidInputs = [receivedInput];
+        }
+    }
+
+    // 2. Check OK / NOT OK bounds if filled
+    if (!message && okVal !== '' && okQty < 0) {
+        message = 'OK quantity cannot be negative.';
+        invalidInputs = [okInput];
+    }
+    if (!message && notOkVal !== '' && notOkQty < 0) {
+        message = 'NOT OK quantity cannot be negative.';
+        invalidInputs = [notOkInput];
+    }
+
+    // 3. Check sum matches received if all are filled
+    if (!message && receivedVal !== '' && okVal !== '' && notOkVal !== '') {
+        if (okQty + notOkQty !== receivedQty) {
+            message = `OK quantity plus NOT OK quantity must equal Received quantity (${receivedQty}).`;
+            invalidInputs = [okInput, notOkInput];
+        }
+    }
+
+    // 4. Check empty fields on submit
+    if (!message && isSubmit) {
+        if (!receivedVal || !okVal || !notOkVal) {
+            message = 'All fields are required.';
+            invalidInputs = [
+                ...(!receivedVal ? [receivedInput] : []),
+                ...(!okVal ? [okInput] : []),
+                ...(!notOkVal ? [notOkInput] : [])
+            ];
+        }
+    }
+
+    if (message) {
+        invalidInputs.forEach(input => {
+            input.classList.add('is-invalid');
+        });
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+        if (saveBtn) saveBtn.disabled = true;
+        return false;
+    }
+
+    errorEl.textContent = '';
+    errorEl.style.display = 'none';
+    if (saveBtn) saveBtn.disabled = false;
+    return true;
+}
+
+document.getElementById('saveReworkBtn')?.addEventListener('click', function() {
+    if (!pendingSupplierInward) return;
+    if (!validateReworkLive(true)) return;
+
+    const okQty = parseInt(document.getElementById('reworkOkQty').value || '0', 10);
+
+    const newReceivedTotal = pendingSupplierInward.receivedQty; 
+    const newNotOkTotal = pendingSupplierInward.notOkQty - okQty;
+    const newOkTotal = pendingSupplierInward.okQty + okQty;
+    const newNotOkReason = pendingSupplierInward.notOkReason;
+
+    postSupplierInwardUpdate(
+        pendingSupplierInward.row,
+        pendingSupplierInward.buttonElement,
+        newReceivedTotal,
+        newOkTotal,
+        newNotOkTotal,
+        newNotOkReason
+    );
+});
+
+document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('supplier-cancel-order-btn')) return;
+    const row = e.target.closest('tr[data-supplier-product-id]');
+    const supplierProductId = row.getAttribute('data-supplier-product-id');
+    const orderedQty = parseInt(row.children[6].textContent || '0', 10);
+
+    if (!confirm('Are you sure you want to cancel this supplier order?')) {
         return;
     }
 
-    postSupplierStatusUpdate(row, e.target, status);
+    fetch(`/supplier-product/${supplierProductId}/status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({status: 'cancelled'})
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'ok') {
+            alert(data.message || 'Unable to cancel order');
+            return;
+        }
+        refreshSupplierInwardRow(row, 'cancelled', 0, orderedQty, '');
+    });
 });
 
 document.addEventListener('change', function (e) {
@@ -242,33 +727,139 @@ document.addEventListener('change', function (e) {
     });
 });
 
-document.getElementById('savePartialSupplierBtn').addEventListener('click', function () {
-    if (!pendingSupplierUpdate) return;
-    const value = document.getElementById('partialSupplierQty').value.trim();
-    const parsed = parseInt(value || '0', 10);
+function updateInwardFieldsState() {
+    const receivedVal = document.getElementById('supplierInwardReceivedQty').value.trim();
+    const okInput = document.getElementById('supplierInwardOkQty');
+    const notOkInput = document.getElementById('supplierInwardNotOkQty');
 
-    if (!value || Number.isNaN(parsed) || parsed <= 0 || parsed >= pendingSupplierUpdate.qtyOrdered) {
-        alert(`Quantity received must be greater than 0 and less than ${pendingSupplierUpdate.qtyOrdered}.`);
-        return;
+    if (receivedVal === '' || parseInt(receivedVal, 10) <= 0) {
+        okInput.disabled = true;
+        notOkInput.disabled = true;
+        okInput.value = '';
+        notOkInput.value = '';
+    } else {
+        okInput.disabled = false;
+        notOkInput.disabled = false;
+        const maxVal = parseInt(receivedVal, 10);
+        okInput.max = maxVal;
+        notOkInput.max = maxVal;
     }
+}
 
-    postSupplierStatusUpdate(
-        pendingSupplierUpdate.row,
-        pendingSupplierUpdate.selectElement,
-        'partially_delivered',
-        value
-    );
+function updateReworkFieldsState() {
+    const receivedVal = document.getElementById('reworkReceivedQty').value.trim();
+    const okInput = document.getElementById('reworkOkQty');
+    const notOkInput = document.getElementById('reworkNotOkQty');
 
-    const modalEl = document.getElementById('partialSupplierModal');
-    bootstrap.Modal.getInstance(modalEl).hide();
-    pendingSupplierUpdate = null;
+    if (receivedVal === '' || parseInt(receivedVal, 10) <= 0) {
+        okInput.disabled = true;
+        notOkInput.disabled = true;
+        okInput.value = '';
+        notOkInput.value = '';
+    } else {
+        okInput.disabled = false;
+        notOkInput.disabled = false;
+        const maxVal = parseInt(receivedVal, 10);
+        okInput.max = maxVal;
+        notOkInput.max = maxVal;
+    }
+}
+
+[
+    'supplierInwardReceivedQty',
+    'supplierInwardOkQty',
+    'supplierInwardNotOkQty',
+    'supplierInwardNotOkReason'
+].forEach(id => {
+    ['input', 'change'].forEach(eventName => {
+        document.getElementById(id).addEventListener(eventName, function () {
+            if (id === 'supplierInwardReceivedQty') {
+                updateInwardFieldsState();
+            }
+            toggleSupplierInwardReason();
+            validateSupplierInwardLive();
+        });
+    });
 });
 
-document.getElementById('partialSupplierModal').addEventListener('hidden.bs.modal', function () {
-    if (!pendingSupplierUpdate) return;
-    pendingSupplierUpdate.selectElement.value =
-        pendingSupplierUpdate.selectElement.dataset.prevStatus || '';
-    pendingSupplierUpdate = null;
+function autoFillNotOkQty() {
+    const receivedVal = parseInt(document.getElementById('supplierInwardReceivedQty').value || '0', 10);
+    const okVal = parseInt(document.getElementById('supplierInwardOkQty').value || '0', 10);
+    const notOkInput = document.getElementById('supplierInwardNotOkQty');
+    
+    if (document.getElementById('supplierInwardOkQty').value !== '') {
+        const calculatedNotOk = Math.max(0, receivedVal - okVal);
+        notOkInput.value = calculatedNotOk;
+        toggleSupplierInwardReason();
+        validateSupplierInwardLive();
+    }
+}
+
+document.getElementById('supplierInwardOkQty').addEventListener('input', autoFillNotOkQty);
+document.getElementById('supplierInwardReceivedQty').addEventListener('input', function() {
+    updateInwardFieldsState();
+    autoFillNotOkQty();
+});
+document.getElementById('supplierInwardOkQty').addEventListener('change', autoFillNotOkQty);
+document.getElementById('supplierInwardReceivedQty').addEventListener('change', function() {
+    updateInwardFieldsState();
+    autoFillNotOkQty();
+});
+
+function autoFillReworkNotOkQty() {
+    const receivedVal = parseInt(document.getElementById('reworkReceivedQty').value || '0', 10);
+    const okVal = parseInt(document.getElementById('reworkOkQty').value || '0', 10);
+    const notOkInput = document.getElementById('reworkNotOkQty');
+    
+    if (document.getElementById('reworkOkQty').value !== '') {
+        const calculatedNotOk = Math.max(0, receivedVal - okVal);
+        notOkInput.value = calculatedNotOk;
+        validateReworkLive();
+    }
+}
+
+document.getElementById('reworkOkQty').addEventListener('input', autoFillReworkNotOkQty);
+document.getElementById('reworkReceivedQty').addEventListener('input', function() {
+    updateReworkFieldsState();
+    autoFillReworkNotOkQty();
+});
+document.getElementById('reworkOkQty').addEventListener('change', autoFillReworkNotOkQty);
+document.getElementById('reworkReceivedQty').addEventListener('change', function() {
+    updateReworkFieldsState();
+    autoFillReworkNotOkQty();
+});
+
+[
+    'reworkReceivedQty',
+    'reworkOkQty',
+    'reworkNotOkQty'
+].forEach(id => {
+    ['input', 'change'].forEach(eventName => {
+        document.getElementById(id).addEventListener(eventName, function () {
+            if (id === 'reworkReceivedQty') {
+                updateReworkFieldsState();
+            }
+            validateReworkLive();
+        });
+    });
+});
+
+document.getElementById('saveSupplierInwardBtn').addEventListener('click', function () {
+    if (!pendingSupplierInward) return;
+
+    if (!validateSupplierInwardLive()) {
+        return;
+    }
+    const values = getSupplierInwardValues();
+
+    postSupplierInwardUpdate(
+        pendingSupplierInward.row,
+        pendingSupplierInward.buttonElement,
+        values.receivedQuantity,
+        values.okQuantity,
+        values.notOkQuantity,
+        values.reason
+    );
 });
 </script>
 {% endblock %}

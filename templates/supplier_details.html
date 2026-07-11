@@ -27,6 +27,10 @@
                 <input type="text" name="supplier_name" class="form-control" required>
             </div>
             <div class="col-lg-3">
+                <label class="form-label">Email</label>
+                <input type="email" name="email" class="form-control">
+            </div>
+            <div class="col-lg-3">
                 <label class="form-label">Phone Number</label>
                 <input type="tel" name="phone_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric">
             </div>
@@ -51,6 +55,7 @@
                     <tr>
                         <th>S.No</th>
                         <th>Supplier Name</th>
+                        <th>Email</th>
                         <th>Phone Number</th>
                         <th>Address</th>
                         <th>Created At</th>
@@ -61,26 +66,35 @@
                     {% for supplier in suppliers %}
                     <tr>
                         <td>{{ forloop.counter }}</td>
-                        <td colspan="5">
+                        <td colspan="6">
                             <form method="post" class="dpr-inline-row-form">
                                 {% csrf_token %}
                                 <input type="hidden" name="supplier_id" value="{{ supplier.id }}">
                                 <div class="row g-2 align-items-center">
                                     <div class="col-lg-3">
-                                        <input type="text" name="supplier_name" class="form-control form-control-sm" value="{{ supplier.supplier_name }}" required>
+                                        <input type="text" name="supplier_name" class="form-control form-control-sm master-edit-field" value="{{ supplier.supplier_name }}" required disabled>
                                     </div>
                                     <div class="col-lg-2">
-                                        <input type="tel" name="phone_number" class="form-control form-control-sm js-phone-input" value="{{ supplier.phone_number|default:'' }}" maxlength="10" inputmode="numeric">
+                                        <input type="email" name="email" class="form-control form-control-sm master-edit-field" value="{{ supplier.email|default:'' }}" disabled>
                                     </div>
-                                    <div class="col-lg-3">
-                                        <input type="text" name="address" class="form-control form-control-sm" value="{{ supplier.address|default:'' }}">
+                                    <div class="col-lg-2">
+                                        <input type="tel" name="phone_number" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ supplier.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
                                     </div>
-                                    <div class="col-lg-2 small text-muted">
+                                    <div class="col-lg-2">
+                                        <input type="text" name="address" class="form-control form-control-sm master-edit-field" value="{{ supplier.address|default:'' }}" disabled>
+                                    </div>
+                                    <div class="col-lg-1 small text-muted">
                                         {{ supplier.created_at|date:'Y-m-d H:i' }}
                                     </div>
                                     <div class="col-lg-2 d-flex gap-2">
-                                        <button type="submit" name="action" value="edit" class="btn btn-primary btn-sm">
+                                        <button type="button" class="btn btn-primary btn-sm master-edit-btn">
                                             <i class="bi bi-pencil-square me-1"></i>Edit
+                                        </button>
+                                        <button type="submit" name="action" value="edit" class="btn btn-success btn-sm master-save-btn d-none">
+                                            <i class="bi bi-check2 me-1"></i>Save
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm master-cancel-btn d-none">
+                                            Cancel
                                         </button>
                                         <button type="submit" name="action" value="delete" class="btn btn-outline-danger btn-sm"
                                                 onclick="return confirm('Delete this supplier?');">
@@ -93,7 +107,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="text-center">No supplier records found.</td>
+                        <td colspan="7" class="text-center">No supplier records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -106,6 +120,41 @@
 document.addEventListener('input', function (e) {
     if (!e.target.classList.contains('js-phone-input')) return;
     e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+});
+
+document.addEventListener('click', function (e) {
+    const editButton = e.target.closest('.master-edit-btn');
+    const cancelButton = e.target.closest('.master-cancel-btn');
+
+    if (editButton) {
+        const form = editButton.closest('form');
+        form.querySelectorAll('.master-edit-field').forEach(field => {
+            field.dataset.originalValue = field.value;
+            field.disabled = false;
+        });
+        form.querySelector('.master-save-btn').classList.remove('d-none');
+        form.querySelector('.master-cancel-btn').classList.remove('d-none');
+        editButton.classList.add('d-none');
+        return;
+    }
+
+    if (cancelButton) {
+        const form = cancelButton.closest('form');
+        form.querySelectorAll('.master-edit-field').forEach(field => {
+            field.value = field.dataset.originalValue || '';
+            field.disabled = true;
+        });
+        form.querySelector('.master-edit-btn').classList.remove('d-none');
+        form.querySelector('.master-save-btn').classList.add('d-none');
+        cancelButton.classList.add('d-none');
+    }
+});
+
+document.addEventListener('submit', function (e) {
+    if (!e.target.classList.contains('dpr-inline-row-form')) return;
+    e.target.querySelectorAll('.master-edit-field').forEach(field => {
+        field.disabled = false;
+    });
 });
 </script>
 {% endblock %}

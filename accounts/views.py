@@ -3,11 +3,17 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from .models import CustomUser
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
+from django.core.mail import EmailMessage
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from customers.models import Customer
 from suppliers.models import Supplier
 from dpr.models import DPR
 from products.models import CustomerProduct, SupplierProduct
+from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation
 from django.http import HttpResponse, JsonResponse, Http404
+from django.db import transaction
 from django.db.models import Sum, Case, When, Value, IntegerField
 from django.db.models.functions import Coalesce
 from decimal import Decimal, InvalidOperation
@@ -16,11 +22,45 @@ from datetime import timedelta
 from io import BytesIO
 from pathlib import PurePath
 from zipfile import ZIP_DEFLATED, ZipFile
+from types import SimpleNamespace
 import re
 
 
 def _pct(part, whole):
     return round((part * 100) / whole) if whole else 0
+
+
+def _get_rfq_row_alert_class(rfq):
+    """
+    Determine if RFQ row should be highlighted based on quotation status.
+
+    Returns a CSS class string for row highlighting:
+    - 'table-danger': Red background when any product is waiting for price details or quotation not sent after 3 days.
+    - 'table-success': Green background when all products are quotation sent.
+    - Empty string: No highlighting (normal row)
+    """
+
+    if not rfq.mail_date:
+        return ''
+
+    products = list(rfq.products.all())
+    if not products:
+        return ''
+
+    # Check if any product is waiting for price details
+    if any(not product.price_known or product.value == 0 for product in products):
+        return 'table-danger'
+
+    # Check if all products have quotation sent
+    if all(product.price_known and product.value > 0 and product.quotation_email_sent for product in products):
+        return 'table-success'
+
+    # Check if quotation is not sent after 3 days from the mail date
+    today = timezone.localdate()
+    if (today - rfq.mail_date).days >= 3:
+        return 'table-danger'
+
+    return ''
 
 
 def _resolve_po_number(confirmation_type, po_number_raw):
@@ -32,7 +72,19 @@ def _resolve_po_number(confirmation_type, po_number_raw):
     return None, None
 
 
-def _validate_po_value_matches_total(po_value_raw, product_names, values):
+def _calculate_product_line_value(quantity_raw, rate_raw, row_number):
+    try:
+        quantity = int(quantity_raw or 0)
+    except ValueError:
+        raise ValueError(f'Invalid quantity for product in row {row_number}.')
+    try:
+        rate = Decimal(str(rate_raw or '0')).quantize(Decimal('0.01'))
+    except InvalidOperation:
+        raise ValueError(f'Invalid rate for product in row {row_number}.')
+    return quantity, rate, (Decimal(quantity) * rate).quantize(Decimal('0.01'))
+
+
+def _validate_po_value_matches_total(po_value_raw, product_names, quantities, rates):
     try:
         po_value = Decimal(str(po_value_raw or '0'))
     except InvalidOperation:
@@ -42,11 +94,15 @@ def _validate_po_value_matches_total(po_value_raw, product_names, values):
     for i, product_name in enumerate(product_names):
         if not product_name.strip():
             continue
-        raw_value = values[i] if i < len(values) else '0'
         try:
-            total_value += Decimal(str(raw_value or '0'))
-        except InvalidOperation:
-            return False, f'Invalid value for product in row {i + 1}.'
+            _, _, line_value = _calculate_product_line_value(
+                quantities[i] if i < len(quantities) else '0',
+                rates[i] if i < len(rates) else '0',
+                i + 1
+            )
+            total_value += line_value
+        except ValueError as exc:
+            return False, str(exc)
 
     po_normalized = po_value.quantize(Decimal('0.01'))
     total_normalized = total_value.quantize(Decimal('0.01'))
@@ -55,6 +111,466 @@ def _validate_po_value_matches_total(po_value_raw, product_names, values):
             f'PO Value ({po_normalized}) must equal Total Value ({total_normalized}).'
         )
     return True, None
+
+
+def _format_money(value):
+    return f"{Decimal(value or 0):,.2f}"
+
+
+def _get_mes_quote_no(rfq):
+    year = timezone.localdate().year
+    quote_seq = RFQ.objects.filter(id__lte=rfq.id).count()
+    return f"MES_{str(year)[-2:]}-{str(year + 1)[-2:]}_Q{quote_seq:04d}"
+
+
+
+def _format_mes_quote_no(rfq, revision_number=0):
+    base_quote_no = _get_mes_quote_no(rfq)
+    if revision_number:
+        return f"{base_quote_no}_R{revision_number}"
+    return base_quote_no
+
+
+def _serialize_quotation_products(products):
+    serialized = []
+    for product in products:
+        serialized.append({
+            'product_id': product.id,
+            'product_name': product.product_name,
+            'product_type': product.product_type or '',
+            'quantity': product.quantity,
+            'rate_per_unit': str(product.rate_per_unit),
+            'value': str(product.value),
+            'remarks': product.remarks or '',
+            'selected_supplier_name': getattr(product, 'selected_supplier_name', ''),
+        })
+    return serialized
+
+
+def _product_snapshot_ids(snapshot):
+    return {
+        str(product.get('product_id'))
+        for product in (snapshot or [])
+        if product.get('product_id') is not None
+    }
+
+
+def _find_latest_matching_quotation(rfq, product_ids, email_sent=None):
+    selected_ids = {str(product_id) for product_id in product_ids}
+    queryset = RFQQuotation.objects.filter(rfq=rfq).order_by('-revision_number', '-created_at')
+    if email_sent is not None:
+        queryset = queryset.filter(email_sent=email_sent)
+    for quotation in queryset:
+        if _product_snapshot_ids(quotation.products_snapshot) == selected_ids:
+            return quotation
+    return None
+
+
+def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False):
+    latest = RFQQuotation.objects.filter(rfq=rfq).order_by('-revision_number').first()
+    revision_number = 0 if latest is None else latest.revision_number + 1
+    quotation = RFQQuotation.objects.create(
+        rfq=rfq,
+        quotation_number=_format_mes_quote_no(rfq, revision_number),
+        revision_number=revision_number,
+        products_snapshot=_serialize_quotation_products(products),
+        email_sent=email_sent,
+    )
+    return quotation
+
+def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids):
+    selected_product_ids = {
+        int(product_id)
+        for product_id in product_ids
+        if str(product_id).isdigit()
+    }
+    selected_supplier_price_ids = [
+        int(price_id)
+        for price_id in supplier_price_ids
+        if str(price_id).isdigit()
+    ]
+
+    supplier_prices = list(
+        RFQSupplierPrice.objects.select_related('product', 'supplier').filter(
+            product__rfq=rfq,
+            id__in=selected_supplier_price_ids
+        ).order_by('product_id', 'supplier__supplier_name')
+    )
+    supplier_prices_by_product = {}
+    for supplier_price in supplier_prices:
+        selected_product_ids.add(supplier_price.product_id)
+        supplier_prices_by_product.setdefault(supplier_price.product_id, []).append(supplier_price)
+
+    products = list(
+        RFQProduct.objects.filter(
+            rfq=rfq,
+            id__in=selected_product_ids
+        ).prefetch_related('supplier_prices__supplier').order_by('id')
+    )
+
+    quotation_products = []
+    for product in products:
+        selected_prices = supplier_prices_by_product.get(product.id, [])
+        if selected_prices:
+            for supplier_price in selected_prices:
+                quotation_products.append(SimpleNamespace(
+                    id=product.id,
+                    product_name=product.product_name,
+                    product_type=product.product_type,
+                    price_known=True,
+                    quotation_email_sent=product.quotation_email_sent,
+                    quantity=product.quantity,
+                    rate_per_unit=supplier_price.price,
+                    value=supplier_price.value,
+                    remarks=product.remarks,
+                    selected_supplier_name=supplier_price.supplier.supplier_name,
+                ))
+        else:
+            product.selected_supplier_name = ''
+            quotation_products.append(product)
+
+    return quotation_products, [product.id for product in products]
+
+def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
+    from xml.sax.saxutils import escape as xml_escape
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Paragraph,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=10 * mm,
+        bottomMargin=12 * mm,
+    )
+    styles = getSampleStyleSheet()
+    normal = ParagraphStyle(
+        'MESNormal',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8.5,
+        leading=11,
+        alignment=TA_LEFT,
+    )
+    small = ParagraphStyle(
+        'MESSmall',
+        parent=normal,
+        fontSize=7.5,
+        leading=9,
+    )
+    header_title = ParagraphStyle(
+        'MESHeaderTitle',
+        parent=normal,
+        fontName='Helvetica-Bold',
+        fontSize=13,
+        leading=15,
+        alignment=TA_CENTER,
+    )
+    centered = ParagraphStyle(
+        'MESCentered',
+        parent=normal,
+        alignment=TA_CENTER,
+    )
+    right = ParagraphStyle(
+        'MESRight',
+        parent=normal,
+        alignment=TA_RIGHT,
+    )
+
+    story = []
+    def pdf_text(value):
+        return xml_escape(str(value or ''))
+
+    story.append(Paragraph('METROLOGY ENGINEERING SOLUTIONS', header_title))
+    story.append(Paragraph(
+        'No. 684/9, Sri Sai Jayalakshmi Complex, Maruthi, Nagar, 2nd Cross,<br/>'
+        'Dharga Opposite to Sathiya Mess, Hosur, Krishnagiri, Tamil Nadu - 635109',
+        centered
+    ))
+    story.append(Paragraph(
+        'Phone: +91-965-577-8807 / +91-965-577-8871',
+        centered
+    ))
+    story.append(Paragraph(
+        'Email-ID: info@mesinstruments.co.in | Web: www.mesinstruments.co.in',
+        centered
+    ))
+    story.append(Paragraph(
+        'GST: 33ABKFM1033E1ZS | PAN: ABKFM1033E',
+        centered
+    ))
+    story.append(Spacer(1, 8))
+
+    quote_no = quote_no or _get_mes_quote_no(rfq)
+    quote_date = timezone.localdate().strftime('%d-%m-%Y')
+    enquiry_date = rfq.mail_date.strftime('%d-%m-%Y') if rfq.mail_date else '-'
+    customer = rfq.customer
+    customer_address = customer.address or ''
+    customer_phone = customer.phone_number or '-'
+
+    story.append(Table(
+        [[
+            Paragraph(f'<b>Quote No:</b> {quote_no}', normal),
+            Paragraph(f'<b>Date:</b> {quote_date}', right),
+        ]],
+        colWidths=[90 * mm, 76 * mm],
+        style=TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LINEABOVE', (0, 0), (-1, 0), 0.5, colors.black),
+        ])
+    ))
+    story.append(Paragraph('<b>Quotation (Confidential)</b>', centered))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph(f'<b>Quote No:</b> {quote_no}', normal))
+    story.append(Paragraph(f'<b>Enquiry No:</b> {enquiry_date}', normal))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph('<b>To:</b>', normal))
+    story.append(Paragraph(f'M/s. {pdf_text(customer.customer_name)}', normal))
+    if customer_address:
+        story.append(Paragraph(pdf_text(customer_address).replace('\n', '<br/>'), normal))
+    if customer.region:
+        story.append(Paragraph(pdf_text(customer.region), normal))
+    story.append(Paragraph(f'<b>Phone:</b> {pdf_text(customer_phone)}', normal))
+    story.append(Spacer(1, 5))
+    story.append(Paragraph('Dear Sir,', normal))
+    story.append(Paragraph(
+        'As per your enquiry, we are glad to submit our best offer. Assuring of our best and prompt services at all times.',
+        normal
+    ))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph('<b>Your Investment</b>', centered))
+    story.append(Spacer(1, 4))
+
+    table_data = [[
+        Paragraph('<b>SI.<br/>NO</b>', centered),
+        Paragraph('<b>Part code</b>', centered),
+        Paragraph('<b>Description</b>', centered),
+        Paragraph('<b>HSN/SAC</b>', centered),
+        Paragraph('<b>QTY</b>', centered),
+        Paragraph('<b>Unit</b>', centered),
+        Paragraph('<b>Rate<br/>( INR )</b>', centered),
+        Paragraph('<b>Total<br/>( INR )</b>', centered),
+    ]]
+
+    subtotal = Decimal('0.00')
+    for index, product in enumerate(products, start=1):
+        line_total = Decimal(product.value or 0).quantize(Decimal('0.01'))
+        subtotal += line_total
+        description_lines = [pdf_text(product.product_name)]
+        if product.product_type:
+            description_lines.append(f'Product Type: {pdf_text(product.product_type)}')
+        selected_supplier_name = getattr(product, 'selected_supplier_name', '')
+        if selected_supplier_name:
+            description_lines.append(f'Supplier: {pdf_text(selected_supplier_name)}')
+        if product.remarks:
+            description_lines.append(pdf_text(product.remarks))
+        table_data.append([
+            Paragraph(str(index), centered),
+            Paragraph(pdf_text(product.product_type or '-'), centered),
+            Paragraph('<br/>'.join(description_lines), small),
+            Paragraph('-', centered),
+            Paragraph(str(product.quantity), centered),
+            Paragraph('Nos', centered),
+            Paragraph(_format_money(product.rate_per_unit), right),
+            Paragraph(_format_money(line_total), right),
+        ])
+
+    product_table = Table(
+        table_data,
+        colWidths=[11 * mm, 22 * mm, 58 * mm, 20 * mm, 12 * mm, 14 * mm, 23 * mm, 24 * mm],
+        repeatRows=1,
+        style=TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (6, 1), (7, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ])
+    )
+    story.append(product_table)
+    story.append(Spacer(1, 8))
+
+    packing = (subtotal * Decimal('0.02')).quantize(Decimal('0.01'))
+    taxable = subtotal + packing
+    gst = (taxable * Decimal('0.18')).quantize(Decimal('0.01'))
+    grand_total = taxable + gst
+    summary = Table(
+        [
+            [Paragraph('Basic Total', normal), Paragraph(_format_money(subtotal), right)],
+            [Paragraph('Packing & Forwarding @ 2%', normal), Paragraph(_format_money(packing), right)],
+            [Paragraph('GST @ 18%', normal), Paragraph(_format_money(gst), right)],
+            [Paragraph('<b>Grand Total</b>', normal), Paragraph(f'<b>{_format_money(grand_total)}</b>', right)],
+        ],
+        colWidths=[55 * mm, 35 * mm],
+        hAlign='RIGHT',
+        style=TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.whitesmoke),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ])
+    )
+    story.append(summary)
+    story.append(Spacer(1, 8))
+    story.append(Paragraph('<b>Our Terms & Conditions</b>', centered))
+    terms = [
+        'Goods & Service Tax (GST): 18% Extra as Applicable',
+        'Delivery: 4 to 5 Weeks',
+        'Packing & Forwarding: 2%',
+        'Freight: NA',
+        'Dispatch Mode: By courier',
+        'Installation: NA',
+        'Payment Terms: 30 Days',
+        'Warranty: NA',
+        'Offer Validity: 60 Days.',
+        'Inspection: Customer inspection, should be done within 15 days from the date of delivery.',
+        'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
+        'Force Majeure: The company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
+        'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
+        'Jurisdiction: All disputes are subject to the jurisdiction of Hosur / Tamil Nadu courts only.',
+    ]
+    for index, term in enumerate(terms, start=1):
+        story.append(Paragraph(f'({index}). {term}', small))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+def _get_default_supplier_email_subject():
+    return 'Price request for {rfq_no}'
+
+
+def _get_default_supplier_email_body():
+    return (
+        'Dear {supplier_name},\n\n'
+        'Please share your price for the following RFQ products.\n'
+        'RFQ No: {rfq_no}\n'
+        'Customer: {customer_name}\n'
+        'Enquiry Details: {enquiry_details}\n\n'
+        'Products:\n{products}\n\n'
+        'Regards,\n'
+        'Metrology Engineering Solutions'
+    )
+
+
+def _send_rfq_supplier_price_requests(
+    rfq,
+    product_rows,
+    subject_template=None,
+    body_template=None,
+    email_attachment=None,
+    to_emails=None,
+    cc_emails=None,
+):
+    supplier_product_map = {}
+    for product_row in product_rows:
+        if product_row.get('price_known'):
+            continue
+        suppliers = product_row.get('suppliers') or []
+        for supplier in suppliers:
+            supplier_product_map.setdefault(supplier, []).append(product_row)
+
+    sent_count = 0
+    failed_suppliers = []
+    attachment_payload = None
+    if email_attachment:
+        attachment_payload = (
+            email_attachment.name,
+            email_attachment.read(),
+            getattr(email_attachment, 'content_type', None) or 'application/octet-stream'
+        )
+
+    def render_template(template, context):
+        rendered = template or ''
+        for key, value in context.items():
+            rendered = rendered.replace('{' + key + '}', str(value))
+        return rendered
+
+    def normalize_email_list(values):
+        normalized = []
+        seen = set()
+        for value in values or []:
+            email_value = (value or '').strip()
+            if not email_value:
+                continue
+            key = email_value.lower()
+            if key in seen:
+                continue
+            normalized.append(email_value)
+            seen.add(key)
+        return normalized
+
+    selected_supplier_emails = normalize_email_list(
+        supplier.email for supplier in supplier_product_map.keys() if supplier.email
+    )
+    selected_supplier_email_keys = {email.lower() for email in selected_supplier_emails}
+
+    for supplier, rows in supplier_product_map.items():
+        if not supplier.email:
+            failed_suppliers.append(f'{supplier.supplier_name} (missing email)')
+            continue
+
+        product_lines = []
+        for index, row in enumerate(rows, start=1):
+            product_lines.append(
+                f"{index}. {row['product_name']} | Type: {row['product_type'] or '-'} | "
+                f"Qty: {row['quantity']} | Remarks: {row['remarks'] or '-'}"
+            )
+
+        context = {
+            'supplier_name': supplier.supplier_name,
+            'rfq_no': rfq.rfq_no,
+            'customer_name': rfq.customer.customer_name,
+            'customer_email': rfq.customer.email or '',
+            'enquiry_details': rfq.enquiry_details,
+            'products': '\n'.join(product_lines),
+        }
+        subject = render_template(
+            subject_template or _get_default_supplier_email_subject(),
+            context
+        )
+        message = render_template(
+            body_template or _get_default_supplier_email_body(),
+            context
+        )
+
+        extra_to_emails = [
+            email_address
+            for email_address in (to_emails or [])
+            if email_address.lower() not in selected_supplier_email_keys
+        ]
+        recipient_list = normalize_email_list([supplier.email, *extra_to_emails])
+        cc_list = normalize_email_list(cc_emails or [])
+
+        try:
+            email = EmailMessage(
+                subject=subject,
+                body=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=recipient_list,
+                cc=cc_list,
+            )
+            if attachment_payload:
+                email.attach(*attachment_payload)
+            email.send(fail_silently=False)
+            sent_count += 1
+        except Exception as exc:
+            failed_suppliers.append(f'{supplier.supplier_name} ({str(exc)[:180]})')
+
+    return sent_count, failed_suppliers
 
 
 def _sync_dpr_supplier_qty_ordered(dpr):
@@ -112,6 +628,8 @@ def _get_validity_state(validity_date, today):
 def _get_status_validity_row_class(status, validity_state):
     if status == 'delivered':
         return 'table-success'
+    if status == 'invoice_pending':
+        return 'table-info'
     if status == 'cancelled':
         return 'table-secondary'
     if validity_state == 'expired':
@@ -124,6 +642,8 @@ def _get_status_validity_row_class(status, validity_state):
 def _get_status_validity_filter_state(status, validity_state):
     if status == 'delivered':
         return 'closed'
+    if status == 'invoice_pending':
+        return 'invoice_pending'
     if status == 'cancelled':
         return 'cancelled'
     if validity_state == 'expired':
@@ -202,6 +722,7 @@ def dashboard(request):
     within_7_days = today + timedelta(days=5)
 
     total_dpr_count = DPR.objects.count()
+    total_rfq_count = RFQ.objects.count()
     pending_mail_confirmation_count = DPR.objects.filter(
         confirmation_type__icontains='mail'
     ).count()
@@ -215,6 +736,7 @@ def dashboard(request):
         dpr__po_validity__lt=today
     ).count()
     customer_delivered_count = CustomerProduct.objects.filter(status='delivered').count()
+    customer_invoice_pending_count = CustomerProduct.objects.filter(status='invoice_pending').count()
     customer_partial_count = CustomerProduct.objects.filter(status='partially_delivered').count()
     customer_cancelled_count = CustomerProduct.objects.filter(status='cancelled').count()
     customer_pending_count = CustomerProduct.objects.filter(status__isnull=True).count()
@@ -243,14 +765,18 @@ def dashboard(request):
         0
     )
 
+    rfq_quotation_not_sent_count = RFQ.objects.filter(quotation_email_sent=False).count()
+
     return render(request, 'dashboard.html', {
         'total_dpr_count': total_dpr_count,
+        'total_rfq_count': total_rfq_count,
         'total_customer_products': total_customer_products,
         'total_supplier_products': total_supplier_products,
         'pending_mail_confirmation_count': pending_mail_confirmation_count,
         'customer_within_7_days_count': customer_within_7_days_count,
         'customer_expired_count': customer_expired_count,
         'customer_delivered_count': customer_delivered_count,
+        'customer_invoice_pending_count': customer_invoice_pending_count,
         'customer_partial_count': customer_partial_count,
         'customer_cancelled_count': customer_cancelled_count,
         'customer_pending_count': customer_pending_count,
@@ -265,6 +791,7 @@ def dashboard(request):
         'mail_confirmation_pct': mail_confirmation_pct,
         'overall_delivery_pct': overall_delivery_pct,
         'supplier_order_pending_difference': supplier_order_pending_difference,
+        'rfq_quotation_not_sent_count': rfq_quotation_not_sent_count,
     })
 
 
@@ -308,28 +835,48 @@ def dpr_view(request):
             and dpr.po_date < po_alert_date
         )
         dpr.validity_state = _get_validity_state(dpr.po_validity, today)
-        if (
+        is_completed = (
             dpr.total_quantity_ordered > 0
             and dpr.total_quantity_ordered == dpr.customer_qty_delivered
             and dpr.supplier_quantity_ordered == dpr.supplier_qty_received
-        ):
+        )
+        is_supplier_order_pending = (
+            dpr.po_date is not None
+            and dpr.po_date <= today
+            and dpr.total_quantity_ordered > dpr.supplier_quantity_ordered
+        )
+        is_qty_matched = (
+            dpr.total_quantity_ordered > 0
+            and dpr.supplier_quantity_ordered == dpr.total_quantity_ordered
+        )
+
+        dpr.filter_states = []
+        if is_completed:
+            dpr.filter_states.append('completed')
+        if dpr.validity_state == 'expired':
+            dpr.filter_states.append('after_due')
+        if dpr.validity_state == 'due_soon':
+            dpr.filter_states.append('due_soon')
+        if is_supplier_order_pending:
+            dpr.filter_states.append('supplier_order_pending')
+        if dpr.is_alert_row:
+            dpr.filter_states.append('mail_alert')
+        if is_qty_matched:
+            dpr.filter_states.append('qty_matched')
+        if not dpr.filter_states:
+            dpr.filter_states.append('normal')
+
+        if is_completed:
             dpr.filter_state = 'completed'
         elif dpr.validity_state == 'expired':
             dpr.filter_state = 'after_due'
         elif dpr.validity_state == 'due_soon':
             dpr.filter_state = 'due_soon'
-        elif (
-            dpr.po_date is not None
-            and dpr.po_date <= today
-            and dpr.total_quantity_ordered > dpr.supplier_quantity_ordered
-        ):
+        elif is_supplier_order_pending:
             dpr.filter_state = 'supplier_order_pending'
         elif dpr.is_alert_row:
             dpr.filter_state = 'mail_alert'
-        elif (
-            dpr.total_quantity_ordered > 0
-            and dpr.supplier_quantity_ordered == dpr.total_quantity_ordered
-        ):
+        elif is_qty_matched:
             dpr.filter_state = 'qty_matched'
         else:
             dpr.filter_state = 'normal'
@@ -393,6 +940,12 @@ def dpr_documents_download(request, dpr_id):
             return
 
     with ZipFile(archive, 'w', ZIP_DEFLATED) as zip_file:
+        add_file(
+            zip_file,
+            dpr.enquiry_attachment,
+            f'enquiry/{PurePath(dpr.enquiry_attachment.name).name}'
+            if dpr.enquiry_attachment else ''
+        )
         add_file(
             zip_file,
             dpr.quotation_attachment,
@@ -502,23 +1055,30 @@ def customer_product_status_update(request, product_id):
         raise Http404
 
     status = request.POST.get('status', '').strip() or None
-    if status not in ('delivered', 'partially_delivered', 'cancelled', None):
+    if status not in ('delivered', 'invoice_pending', 'partially_delivered', 'cancelled', None):
         return JsonResponse({'status': 'error', 'message': 'Invalid status'}, status=400)
 
     customer_product.status = status
-    if status == 'delivered':
+    if status in ('delivered', 'invoice_pending'):
+        delivery_detail_type = request.POST.get('delivery_detail_type', '').strip()
         invoice_dc_number = request.POST.get('invoice_dc_number', '').strip()
         invoice_dc_attachment = request.FILES.get('invoice_dc_attachment')
+        if delivery_detail_type not in ('invoice', 'dc'):
+            return JsonResponse({'status': 'error', 'message': 'Delivery Detail is required'}, status=400)
         if not invoice_dc_number:
-            return JsonResponse({'status': 'error', 'message': 'Invoice/DC number is required'}, status=400)
+            label = 'Invoice number' if delivery_detail_type == 'invoice' else 'DC Number'
+            return JsonResponse({'status': 'error', 'message': f'{label} is required'}, status=400)
         if not invoice_dc_attachment and not customer_product.invoice_dc_attachment:
             return JsonResponse({'status': 'error', 'message': 'Invoice/DC attachment is required'}, status=400)
         customer_product.quantity_delivered = customer_product.quantity_ordered
+        customer_product.delivery_detail_type = delivery_detail_type
+        customer_product.status = 'delivered' if delivery_detail_type == 'invoice' else 'invoice_pending'
         customer_product.invoice_dc_number = invoice_dc_number
         if invoice_dc_attachment:
             customer_product.invoice_dc_attachment = invoice_dc_attachment
     elif status == 'cancelled':
         customer_product.quantity_delivered = 0
+        customer_product.delivery_detail_type = None
         customer_product.invoice_dc_number = None
         customer_product.invoice_dc_attachment = None
     elif status == 'partially_delivered':
@@ -535,21 +1095,27 @@ def customer_product_status_update(request, product_id):
                 'message': f'Quantity delivered must be greater than 0 and less than quantity ordered ({customer_product.quantity_ordered})'
             }, status=400)
         customer_product.quantity_delivered = delivered_qty
+        customer_product.delivery_detail_type = None
         customer_product.invoice_dc_number = None
         customer_product.invoice_dc_attachment = None
     else:
         customer_product.quantity_delivered = 0
+        customer_product.delivery_detail_type = None
         customer_product.invoice_dc_number = None
         customer_product.invoice_dc_attachment = None
 
     customer_product.save(update_fields=[
         'status',
         'quantity_delivered',
+        'delivery_detail_type',
         'invoice_dc_number',
         'invoice_dc_attachment'
     ])
     _sync_dpr_customer_qty_delivered(customer_product.dpr)
-    return JsonResponse({'status': 'ok'})
+    return JsonResponse({
+        'status': 'ok',
+        'product_status': customer_product.status or ''
+    })
 
 
 @login_required
@@ -624,6 +1190,10 @@ def supplier_po_product_details(request):
             supplier_product.status,
             supplier_product.validity_state
         )
+        supplier_product.quantity_ok = max(
+            supplier_product.quantity_received - supplier_product.quantity_not_ok,
+            0
+        )
 
     return render(
         request,
@@ -643,15 +1213,94 @@ def supplier_product_status_update(request, supplier_product_id):
     except SupplierProduct.DoesNotExist:
         raise Http404
 
+    ok_raw = request.POST.get('ok_quantity')
+    not_ok_raw = request.POST.get('not_ok_quantity')
+    received_raw = request.POST.get('quantity_received')
+
+    if ok_raw is not None or not_ok_raw is not None:
+        try:
+            received_quantity = int(received_raw or 0)
+            ok_quantity = int(ok_raw or 0)
+            not_ok_quantity = int(not_ok_raw or 0)
+        except ValueError:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Received, OK and NOT OK quantities must be numbers.'
+            }, status=400)
+
+        if received_quantity < 0 or ok_quantity < 0 or not_ok_quantity < 0:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Received, OK and NOT OK quantities cannot be negative.'
+            }, status=400)
+
+        if received_quantity > supplier_product.quantity:
+            return JsonResponse({
+                'status': 'error',
+                'message': (
+                    'Received quantity cannot be greater than '
+                    f'ordered quantity ({supplier_product.quantity}).'
+                )
+            }, status=400)
+
+        if ok_quantity + not_ok_quantity > received_quantity:
+            return JsonResponse({
+                'status': 'error',
+                'message': (
+                    'OK quantity plus NOT OK quantity cannot exceed '
+                    f'received quantity ({received_quantity}).'
+                )
+            }, status=400)
+
+        not_ok_reason = request.POST.get('not_ok_reason', '').strip()
+        if not_ok_quantity > 0 and not not_ok_reason:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Reason is required when NOT OK quantity is greater than 0.'
+            }, status=400)
+
+        if (
+            received_quantity == supplier_product.quantity
+            and ok_quantity == supplier_product.quantity
+            and not_ok_quantity == 0
+        ):
+            supplier_product.status = 'delivered'
+        elif received_quantity > 0:
+            supplier_product.status = 'partially_delivered'
+        else:
+            supplier_product.status = None
+
+        supplier_product.quantity_received = received_quantity
+        supplier_product.quantity_not_ok = not_ok_quantity
+        supplier_product.not_ok_reason = not_ok_reason if not_ok_quantity > 0 else None
+        supplier_product.save(update_fields=[
+            'status',
+            'quantity_received',
+            'quantity_not_ok',
+            'not_ok_reason'
+        ])
+        _sync_dpr_supplier_qty_received(supplier_product.customer_product.dpr)
+        return JsonResponse({
+            'status': 'ok',
+            'inward_status': supplier_product.status or '',
+            'quantity_received': supplier_product.quantity_received,
+            'quantity_ok': ok_quantity,
+            'quantity_not_ok': supplier_product.quantity_not_ok,
+            'not_ok_reason': supplier_product.not_ok_reason or ''
+        })
+
     status = request.POST.get('status', '').strip() or None
     if status not in ('delivered', 'partially_delivered', 'cancelled', None):
         return JsonResponse({'status': 'error', 'message': 'Invalid status'}, status=400)
 
     supplier_product.status = status
+    supplier_product.quantity_not_ok = 0
+    supplier_product.not_ok_reason = None
     if status == 'delivered':
         supplier_product.quantity_received = supplier_product.quantity
     elif status == 'cancelled':
         supplier_product.quantity_received = 0
+        supplier_product.quantity_not_ok = supplier_product.quantity
     elif status == 'partially_delivered':
         qty_raw = request.POST.get('quantity_received', '').strip()
         if not qty_raw:
@@ -669,7 +1318,12 @@ def supplier_product_status_update(request, supplier_product_id):
     else:
         supplier_product.quantity_received = 0
 
-    supplier_product.save(update_fields=['status', 'quantity_received'])
+    supplier_product.save(update_fields=[
+        'status',
+        'quantity_received',
+        'quantity_not_ok',
+        'not_ok_reason'
+    ])
     _sync_dpr_supplier_qty_received(supplier_product.customer_product.dpr)
     return JsonResponse({'status': 'ok'})
 
@@ -754,6 +1408,10 @@ def customer_order_edit(request, dpr_id):
             })
 
         dpr.customer = customer
+        dpr.enquiry_attachment = (
+            request.FILES.get('enquiry_attachment')
+            or dpr.enquiry_attachment
+        )
         dpr.quotation_number = request.POST.get('quotation_number')
         dpr.quotation_value = request.POST.get('quotation_value') or None
         dpr.quotation_attachment = request.FILES.get('quotation_attachment') or dpr.quotation_attachment
@@ -773,11 +1431,13 @@ def customer_order_edit(request, dpr_id):
             })
 
         product_names = request.POST.getlist('product_name[]')
-        values = request.POST.getlist('value[]')
+        quantities = request.POST.getlist('quantity[]')
+        rates = request.POST.getlist('rate_per_unit[]')
         _, po_value_error = _validate_po_value_matches_total(
             request.POST.get('po_value'),
             product_names,
-            values
+            quantities,
+            rates
         )
         if po_value_error:
             messages.error(request, po_value_error)
@@ -795,7 +1455,7 @@ def customer_order_edit(request, dpr_id):
         dpr.po_validity = request.POST.get('po_validity') or None
         dpr.po_date = request.POST.get('po_date') or None
         dpr.po_attachment = request.FILES.get('po_attachment') or dpr.po_attachment
-        
+
         # Handle PO confirmation date for Customer PO
         if confirmation_type == 'Customer PO':
             po_confirmation_date = request.POST.get('po_confirmation_date', '').strip()
@@ -807,21 +1467,28 @@ def customer_order_edit(request, dpr_id):
         else:
             # For Mail Confirmation, don't modify po_confirmation_date
             pass
-        
+
         dpr.save()
 
         CustomerProduct.objects.filter(dpr=dpr).delete()
 
         product_types = request.POST.getlist('product_type[]')
         quantities = request.POST.getlist('quantity[]')
-        values = request.POST.getlist('value[]')
+        rates = request.POST.getlist('rate_per_unit[]')
         remarks_list = request.POST.getlist('remarks[]')
 
         for i, product_name in enumerate(product_names):
             if product_name.strip() == '':
                 continue
-            quantity = quantities[i] if i < len(quantities) else None
-            value = values[i] if i < len(values) else None
+            try:
+                quantity, rate_per_unit, value = _calculate_product_line_value(
+                    quantities[i] if i < len(quantities) else '0',
+                    rates[i] if i < len(rates) else '0',
+                    i + 1
+                )
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return redirect('customer_order_edit', dpr_id=dpr.id)
             remarks = remarks_list[i] if i < len(remarks_list) else None
             attachment = request.FILES.get(f'product_attachment_{i}')
             existing_attachment = request.POST.get(f'existing_attachment_{i}', '')
@@ -833,6 +1500,7 @@ def customer_order_edit(request, dpr_id):
                 product_name=product_name,
                 product_type=product_types[i] if i < len(product_types) else None,
                 quantity_ordered=quantity,
+                rate_per_unit=rate_per_unit,
                 value=value,
                 remarks=remarks,
                 attachment=attachment
@@ -880,6 +1548,50 @@ def dpr_supplier(request, dpr_id):
         customer_product__dpr=dpr
     ).select_related('customer_product', 'supplier')
 
+    customer_products = list(products)
+    product_lookup = {
+        (
+            (product.product_name or '').strip().lower(),
+            product.product_type or ''
+        ): product.id
+        for product in customer_products
+    }
+    rfq_rate_map = {}
+    product_default_rate_map = {}
+    rfq_supplier_prices = RFQSupplierPrice.objects.filter(
+        product__rfq__customer=dpr.customer
+    ).select_related('product', 'supplier').order_by('product__rfq__created_at')
+    for supplier_price in rfq_supplier_prices:
+        product_key = (
+            (supplier_price.product.product_name or '').strip().lower(),
+            supplier_price.product.product_type or ''
+        )
+        customer_product_id = product_lookup.get(product_key)
+        if not customer_product_id:
+            continue
+        rfq_rate_map.setdefault(str(customer_product_id), {})[
+            str(supplier_price.supplier_id)
+        ] = str(supplier_price.price)
+        # Use the first supplier price as the default rate for the product
+        if str(customer_product_id) not in product_default_rate_map:
+            product_default_rate_map[str(customer_product_id)] = str(supplier_price.price)
+
+    # Also check known-price RFQ products (rate_per_unit > 0) as default rates
+    rfq_products_known = RFQProduct.objects.filter(
+        rfq__customer=dpr.customer,
+        price_known=True,
+        rate_per_unit__gt=0
+    ).order_by('rfq__created_at')
+    for rfq_product in rfq_products_known:
+        product_key = (
+            (rfq_product.product_name or '').strip().lower(),
+            rfq_product.product_type or ''
+        )
+        customer_product_id = product_lookup.get(product_key)
+        if not customer_product_id:
+            continue
+        # Known-price products override the supplier-price default
+        product_default_rate_map[str(customer_product_id)] = str(rfq_product.rate_per_unit)
     total_supplier_quantity = supplier_orders.aggregate(
         total=Coalesce(Sum('quantity'), 0)
     )['total']
@@ -895,7 +1607,7 @@ def dpr_supplier(request, dpr_id):
     if request.method == 'POST':
         product_ids = request.POST.getlist('product[]')
         supplier_ids = request.POST.getlist('supplier[]')
-        po_values = request.POST.getlist('po_value[]')
+        rates = request.POST.getlist('rate_per_unit[]')
         po_dates = request.POST.getlist('po_date[]')
         quantities = request.POST.getlist('quantity[]')
         po_numbers = request.POST.getlist('po_number[]')
@@ -916,7 +1628,7 @@ def dpr_supplier(request, dpr_id):
             required_values = [
                 product_ids[i],
                 supplier_ids[i],
-                po_values[i] if i < len(po_values) else '',
+                rates[i] if i < len(rates) else '',
                 po_dates[i] if i < len(po_dates) else '',
                 quantities[i] if i < len(quantities) else '',
                 po_numbers[i] if i < len(po_numbers) else '',
@@ -941,7 +1653,15 @@ def dpr_supplier(request, dpr_id):
                 return redirect('dpr_supplier', dpr_id=dpr.id)
 
             customer_product = CustomerProduct.objects.get(pk=product_ids[i])
-            entered_quantity = int(quantities[i] or 0)
+            try:
+                entered_quantity, _, _ = _calculate_product_line_value(
+                    quantities[i] if i < len(quantities) else '0',
+                    rates[i] if i < len(rates) else '0',
+                    i + 1
+                )
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return redirect('dpr_supplier', dpr_id=dpr.id)
             total_entered_supplier_qty += entered_quantity
 
             if entered_quantity <= 0:
@@ -983,6 +1703,11 @@ def dpr_supplier(request, dpr_id):
 
             customer_product = CustomerProduct.objects.get(pk=product_ids[i])
             supplier = Supplier.objects.get(pk=supplier_ids[i])
+            quantity, rate, po_value = _calculate_product_line_value(
+                quantities[i] if i < len(quantities) else '0',
+                rates[i] if i < len(rates) else '0',
+                i + 1
+            )
             existing_id = (
                 supplier_product_ids[i]
                 if i < len(supplier_product_ids)
@@ -996,10 +1721,11 @@ def dpr_supplier(request, dpr_id):
             SupplierProduct.objects.create(
                 customer_product=customer_product,
                 supplier=supplier,
-                po_value=po_values[i] or 0,
+                rate_per_unit=rate,
+                po_value=po_value,
                 po_date=po_dates[i] or None,
                 po_validity=po_validities[i] or None,
-                quantity=quantities[i] or 0,
+                quantity=quantity,
                 po_number=po_numbers[i],
                 po_attachment=po_attachment
             )
@@ -1021,6 +1747,8 @@ def dpr_supplier(request, dpr_id):
         'total_supplier_quantity': total_supplier_quantity,
         'is_edit': is_edit,
         'is_fully_allocated': is_edit,
+        'rfq_rate_map': rfq_rate_map,
+        'product_default_rate_map': product_default_rate_map,
     }
     return render(request, 'supplier_order.html', context)
 
@@ -1058,8 +1786,10 @@ def customer_details(request):
         customer_id = request.POST.get('customer_id')
         customer_name = request.POST.get('customer_name', '').strip()
         region = request.POST.get('region', '').strip()
+        email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
+
 
         if action in ('add', 'edit'):
             if not customer_name:
@@ -1069,6 +1799,12 @@ def customer_details(request):
             if region_error:
                 messages.error(request, region_error)
                 return redirect('customer_details')
+            if email:
+                try:
+                    validate_email(email)
+                except ValidationError:
+                    messages.error(request, 'Enter a valid customer email address.')
+                    return redirect('customer_details')
             phone_error = _validate_master_phone(phone_number)
             if phone_error:
                 messages.error(request, phone_error)
@@ -1078,6 +1814,7 @@ def customer_details(request):
             Customer.objects.create(
                 customer_name=customer_name,
                 region=region,
+                email=email or None,
                 phone_number=phone_number or None,
                 address=address or None
             )
@@ -1089,9 +1826,10 @@ def customer_details(request):
                 raise Http404
             customer.customer_name = customer_name
             customer.region = region
+            customer.email = email or None
             customer.phone_number = phone_number or None
             customer.address = address or None
-            customer.save(update_fields=['customer_name', 'region', 'phone_number', 'address'])
+            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address'])
             messages.success(request, 'Customer updated successfully.')
         elif action == 'delete':
             try:
@@ -1114,13 +1852,582 @@ def customer_details(request):
 
 
 @login_required
+def rfq_details(request):
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        rfq_id = request.POST.get('rfq_id')
+        mail_date = request.POST.get('mail_date', '').strip()
+        customer_id = request.POST.get('customer_id', '').strip()
+        enquiry_details = request.POST.get('enquiry_details', '').strip()
+        remarks = request.POST.get('remarks', '').strip()
+        attachment = request.FILES.get('attachment')
+        product_names = request.POST.getlist('product_name[]')
+        product_ids = request.POST.getlist('product_id[]')
+        product_types = request.POST.getlist('product_type[]')
+        price_known_values = request.POST.getlist('price_known[]')
+        quantities = request.POST.getlist('quantity[]')
+        rates = request.POST.getlist('rate_per_unit[]')
+        product_remarks = request.POST.getlist('product_remarks[]')
+        supplier_email_to = request.POST.get('supplier_email_to', '').strip()
+        supplier_email_cc = request.POST.get('supplier_email_cc', '').strip()
+        supplier_email_subject = request.POST.get('supplier_email_subject', '').strip()
+        supplier_email_body = request.POST.get('supplier_email_body', '').strip()
+        supplier_email_attachment = request.FILES.get('supplier_email_attachment')
+        has_unknown_price = any(val == 'no' for val in price_known_values)
+        send_supplier_email = (
+            request.POST.get('send_supplier_email') == '1'
+            or (has_unknown_price and bool(supplier_email_to.strip()))
+        )
+        product_rows = []
+
+        if send_supplier_email:
+            supplier_to_emails = [
+                email.strip()
+                for email in re.split(r'[;,]', supplier_email_to)
+                if email.strip()
+            ]
+            supplier_cc_emails = [
+                email.strip()
+                for email in re.split(r'[;,]', supplier_email_cc)
+                if email.strip()
+            ]
+            for email_address in supplier_to_emails + supplier_cc_emails:
+                try:
+                    validate_email(email_address)
+                except ValidationError:
+                    messages.error(request, f'Enter a valid supplier email address: {email_address}')
+                    return redirect('rfq_details')
+        else:
+            supplier_to_emails = []
+            supplier_cc_emails = []
+
+        if action in ('add', 'edit'):
+            if not mail_date:
+                messages.error(request, 'Mail Date is required.')
+                return redirect('rfq_details')
+            if not customer_id:
+                messages.error(request, 'Customer is required.')
+                return redirect('rfq_details')
+            if not enquiry_details:
+                messages.error(request, 'Enquiry Details is required.')
+                return redirect('rfq_details')
+
+            try:
+                customer = Customer.objects.get(pk=customer_id)
+            except Customer.DoesNotExist:
+                messages.error(request, 'Select a valid customer.')
+                return redirect('rfq_details')
+
+            for i, product_name in enumerate(product_names):
+                if not product_name.strip():
+                    continue
+                product_id_val = product_ids[i] if i < len(product_ids) else ''
+                product_id = int(product_id_val) if product_id_val and product_id_val.isdigit() else None
+                product_type = product_types[i] if i < len(product_types) else ''
+                price_known = (price_known_values[i] if i < len(price_known_values) else 'yes') == 'yes'
+                selected_supplier_ids = [
+                    supplier_id
+                    for supplier_id in request.POST.getlist(f'supplier_ids_{i}[]')
+                    if supplier_id
+                ]
+                supplier_price_rows = []
+                seen_price_supplier_ids = set()
+                price_supplier_ids = request.POST.getlist(f'supplier_price_supplier_{i}[]')
+                supplier_price_values = request.POST.getlist(f'supplier_price_{i}[]')
+                for price_index, supplier_id in enumerate(price_supplier_ids):
+                    supplier_id = (supplier_id or '').strip()
+                    price_raw = supplier_price_values[price_index] if price_index < len(supplier_price_values) else ''
+                    price_raw = (price_raw or '').strip()
+                    if not supplier_id and not price_raw:
+                        continue
+                    if not supplier_id or not price_raw:
+                        messages.error(request, f'Supplier and price are required in price detail row {price_index + 1} for product row {i + 1}.')
+                        return redirect('rfq_details')
+                    if supplier_id in seen_price_supplier_ids:
+                        messages.error(request, f'Duplicate supplier price detail in product row {i + 1}.')
+                        return redirect('rfq_details')
+                    try:
+                        supplier_price = Decimal(price_raw)
+                    except (InvalidOperation, TypeError):
+                        messages.error(request, f'Enter a valid supplier price in product row {i + 1}.')
+                        return redirect('rfq_details')
+                    if supplier_price < 0:
+                        messages.error(request, f'Supplier price cannot be negative in product row {i + 1}.')
+                        return redirect('rfq_details')
+                    seen_price_supplier_ids.add(supplier_id)
+                    supplier_price_rows.append({
+                        'supplier_id': supplier_id,
+                        'price': supplier_price,
+                    })
+                selected_supplier_ids = list(dict.fromkeys(selected_supplier_ids + list(seen_price_supplier_ids)))
+                if supplier_price_rows:
+                    price_known = True
+                quantity_raw = quantities[i] if i < len(quantities) else ''
+                rate_raw = rates[i] if i < len(rates) else ''
+                if supplier_price_rows and rate_raw in ('', None):
+                    rate_raw = str(supplier_price_rows[0]['price'])
+                remarks_raw = product_remarks[i] if i < len(product_remarks) else ''
+
+                if not product_type or quantity_raw in ('', None):
+                    messages.error(request, f'Product Type and Qty are required in product row {i + 1}.')
+                    return redirect('rfq_details')
+                if price_known and rate_raw in ('', None):
+                    messages.error(request, f'Add at least one supplier price detail in product row {i + 1}.')
+                    return redirect('rfq_details')
+                try:
+                    quantity, rate_per_unit, value = _calculate_product_line_value(
+                        quantity_raw,
+                        rate_raw if price_known else '0',
+                        i + 1
+                    )
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    return redirect('rfq_details')
+
+                if quantity <= 0:
+                    messages.error(request, f'Qty must be greater than 0 in product row {i + 1}.')
+                    return redirect('rfq_details')
+                if rate_per_unit < 0:
+                    messages.error(request, f'Rate Per Unit cannot be negative in product row {i + 1}.')
+                    return redirect('rfq_details')
+                for supplier_price_row in supplier_price_rows:
+                    supplier_price_row['value'] = (Decimal(quantity) * supplier_price_row['price']).quantize(Decimal('0.01'))
+
+                suppliers_for_price = []
+                if selected_supplier_ids:
+                    suppliers_for_price = list(Supplier.objects.filter(pk__in=selected_supplier_ids))
+                    if len(suppliers_for_price) != len(set(selected_supplier_ids)):
+                        messages.error(request, f'Select a valid supplier in product row {i + 1}.')
+                        return redirect('rfq_details')
+
+                product_rows.append({
+                    'id': product_id,
+                    'product_name': product_name.strip(),
+                    'product_type': product_type,
+                    'price_known': price_known,
+                    'supplier': suppliers_for_price[0] if suppliers_for_price else None,
+                    'suppliers': suppliers_for_price,
+                    'quantity': quantity,
+                    'rate_per_unit': rate_per_unit,
+                    'value': value,
+                    'remarks': remarks_raw.strip() or None,
+                    'supplier_prices': supplier_price_rows,
+                })
+
+            if not product_rows:
+                messages.error(request, 'Add at least one RFQ product.')
+                return redirect('rfq_details')
+
+        if action == 'add':
+            with transaction.atomic():
+                rfq = RFQ.objects.create(
+                    mail_date=mail_date,
+                    customer=customer,
+                    enquiry_details=enquiry_details,
+                    remarks=remarks or None,
+                    attachment=attachment
+                )
+                for product_row in product_rows:
+                    selected_suppliers = product_row.pop('suppliers', [])
+                    supplier_prices = product_row.pop('supplier_prices', [])
+                    product_row.pop('id', None)
+                    rfq_product = RFQProduct.objects.create(rfq=rfq, **product_row)
+                    if selected_suppliers:
+                        rfq_product.suppliers.set(selected_suppliers)
+                    RFQSupplierPrice.objects.bulk_create([
+                        RFQSupplierPrice(
+                            product=rfq_product,
+                            supplier_id=price_row['supplier_id'],
+                            price=price_row['price'],
+                            value=price_row['value']
+                        )
+                        for price_row in supplier_prices
+                    ])
+                    product_row['suppliers'] = selected_suppliers
+                    product_row['supplier_prices'] = supplier_prices
+            if send_supplier_email:
+                sent_count, failed_suppliers = _send_rfq_supplier_price_requests(
+                    rfq,
+                    product_rows,
+                    supplier_email_subject,
+                    supplier_email_body,
+                    supplier_email_attachment,
+                    supplier_to_emails,
+                    supplier_cc_emails
+                )
+                if failed_suppliers:
+                    messages.warning(request, f"RFQ added, but price request email failed for: {', '.join(failed_suppliers)}.")
+                elif sent_count:
+                    messages.success(request, f'RFQ added successfully. Price request email sent to {sent_count} supplier(s).')
+                else:
+                    messages.warning(request, 'RFQ added, but no supplier email was sent because there are no unknown-price products with suppliers.')
+            else:
+                messages.success(request, 'RFQ added successfully.')
+        elif action == 'edit':
+            try:
+                rfq = RFQ.objects.get(pk=rfq_id)
+            except RFQ.DoesNotExist:
+                raise Http404
+            rfq.mail_date = mail_date
+            rfq.customer = customer
+            rfq.enquiry_details = enquiry_details
+            rfq.remarks = remarks or None
+            update_fields = [
+                'mail_date',
+                'customer',
+                'enquiry_details',
+                'remarks',
+            ]
+            if attachment:
+                rfq.attachment = attachment
+                update_fields.append('attachment')
+            with transaction.atomic():
+                rfq.save(update_fields=update_fields)
+
+                # Fetch existing products
+                existing_products_map = {p.id: p for p in rfq.products.all()}
+                submitted_product_ids = [row['id'] for row in product_rows if row.get('id')]
+
+                # Delete any products that were removed in edit modal
+                rfq.products.exclude(id__in=submitted_product_ids).delete()
+
+                for product_row in product_rows:
+                    selected_suppliers = product_row.pop('suppliers', [])
+                    supplier_prices = product_row.pop('supplier_prices', [])
+                    prod_id = product_row.pop('id', None)
+                    if prod_id and prod_id in existing_products_map:
+                        # Update existing product
+                        rfq_product = existing_products_map[prod_id]
+                        rfq_product.product_name = product_row['product_name']
+                        rfq_product.product_type = product_row['product_type']
+                        rfq_product.price_known = product_row['price_known']
+                        rfq_product.supplier = product_row['supplier']
+                        rfq_product.quantity = product_row['quantity']
+                        rfq_product.rate_per_unit = product_row['rate_per_unit']
+                        rfq_product.value = product_row['value']
+                        rfq_product.remarks = product_row['remarks']
+                        rfq_product.save()
+                    else:
+                        # Create new product
+                        rfq_product = RFQProduct.objects.create(rfq=rfq, **product_row)
+
+                    if selected_suppliers:
+                        rfq_product.suppliers.set(selected_suppliers)
+                    else:
+                        rfq_product.suppliers.clear()
+                    rfq_product.supplier_prices.all().delete()
+                    RFQSupplierPrice.objects.bulk_create([
+                        RFQSupplierPrice(
+                            product=rfq_product,
+                            supplier_id=price_row['supplier_id'],
+                            price=price_row['price'],
+                            value=price_row['value']
+                        )
+                        for price_row in supplier_prices
+                    ])
+
+                    product_row['suppliers'] = selected_suppliers
+                    product_row['supplier_prices'] = supplier_prices
+
+                # Recalculate RFQ level fields
+                all_products = list(rfq.products.all())
+                if all_products and all(p.quotation_email_sent for p in all_products):
+                    rfq.quotation_email_sent = True
+                else:
+                    rfq.quotation_email_sent = False
+                    rfq.email_sent_date = None
+                    rfq.quotation_due_date = None
+                rfq.save(update_fields=['quotation_email_sent', 'email_sent_date', 'quotation_due_date'])
+            if send_supplier_email:
+                sent_count, failed_suppliers = _send_rfq_supplier_price_requests(
+                    rfq,
+                    product_rows,
+                    supplier_email_subject,
+                    supplier_email_body,
+                    supplier_email_attachment,
+                    supplier_to_emails,
+                    supplier_cc_emails
+                )
+                if failed_suppliers:
+                    messages.warning(request, f"RFQ updated, but price request email failed for: {', '.join(failed_suppliers)}.")
+                elif sent_count:
+                    messages.success(request, f'RFQ updated successfully. Price request email sent to {sent_count} supplier(s).')
+                else:
+                    messages.warning(request, 'RFQ updated, but no supplier email was sent because there are no unknown-price products with suppliers.')
+            else:
+                messages.success(request, 'RFQ updated successfully.')
+        elif action == 'send_email':
+            quotation_record = None
+            try:
+                rfq = RFQ.objects.select_related('customer').prefetch_related('products').get(pk=rfq_id)
+            except RFQ.DoesNotExist:
+                raise Http404
+
+            customer_email = request.POST.get('customer_email', '').strip()
+            quotation_email_subject = request.POST.get('quotation_email_subject', '').strip()
+            quotation_email_body = request.POST.get('quotation_email_body', '').strip()
+            quotation_attachment = request.FILES.get('quotation_email_attachment')
+            quotation_product_ids = request.POST.getlist('quotation_product_ids')
+            quotation_supplier_price_ids = request.POST.getlist('quotation_supplier_price_ids')
+
+            customer_emails = [
+                email.strip()
+                for email in re.split(r'[;,]', customer_email)
+                if email.strip()
+            ]
+            if not customer_emails:
+                messages.error(request, 'Customer email is required to send quotation email.')
+                return redirect('rfq_details')
+            for email_address in customer_emails:
+                try:
+                    validate_email(email_address)
+                except ValidationError:
+                    messages.error(request, f'Enter a valid customer email address: {email_address}')
+                    return redirect('rfq_details')
+            if not quotation_email_subject or not quotation_email_body:
+                messages.error(request, 'Email subject and body are required.')
+                return redirect('rfq_details')
+
+            quotation_products, quotation_product_ids_to_mark = _build_selected_quotation_products(
+                rfq,
+                quotation_product_ids,
+                quotation_supplier_price_ids
+            )
+            if quotation_product_ids or quotation_supplier_price_ids:
+                if not quotation_products:
+                    messages.error(request, 'Select valid RFQ products or supplier prices for quotation attachment.')
+                    return redirect('rfq_details')
+
+            if not quotation_products and not quotation_attachment:
+                messages.error(request, 'Select products to auto-attach quotation or upload an attachment.')
+                return redirect('rfq_details')
+
+            # Quotation Email Validation: Check if all selected products have finalized prices
+            # A product has a known price if: price_known=True AND value > 0
+            # This validation is applied before generating PDF or sending email
+            if quotation_products:
+                invalid_products = [
+                    p for p in quotation_products
+                    if not p.price_known or not p.value or p.value == 0
+                ]
+
+                if invalid_products:
+                    messages.error(
+                        request,
+                        'Quotation email cannot be sent because one or more selected products do not have finalized prices.'
+                    )
+                    return redirect('rfq_details')
+
+            try:
+                email = EmailMessage(
+                    subject=quotation_email_subject,
+                    body=quotation_email_body,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=customer_emails,
+                )
+                if quotation_products:
+                    quotation_record = _find_latest_matching_quotation(
+                        rfq,
+                        quotation_product_ids_to_mark,
+                        email_sent=False
+                    )
+                    if quotation_record is None:
+                        quotation_record = _find_latest_matching_quotation(
+                            rfq,
+                            quotation_product_ids_to_mark,
+                            email_sent=None
+                        )
+                    if quotation_record is None:
+                        quotation_record = _create_rfq_quotation_record(
+                            rfq,
+                            quotation_products,
+                            quotation_product_ids_to_mark,
+                            email_sent=False
+                        )
+                    quote_no = quotation_record.quotation_number
+                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no)
+                    filename = f"{quote_no.replace('/', '_')}.pdf"
+                    email.attach(filename, pdf_buffer.getvalue(), 'application/pdf')
+                if quotation_attachment:
+                    email.attach(
+                        quotation_attachment.name,
+                        quotation_attachment.read(),
+                        getattr(quotation_attachment, 'content_type', None) or 'application/octet-stream'
+                    )
+                email.send(fail_silently=False)
+
+                if quotation_products:
+                    RFQProduct.objects.filter(
+                        rfq=rfq,
+                        id__in=quotation_product_ids_to_mark
+                    ).update(quotation_email_sent=True, quotation_prepared=True)
+
+                    if quotation_record:
+                        quotation_record.email_sent = True
+                        quotation_record.save(update_fields=['email_sent', 'updated_at'])
+
+                rfq.email_sent_date = timezone.now()
+                rfq.quotation_due_date = timezone.localdate() + timedelta(days=3)
+                rfq.quotation_prepared = True
+                rfq.quotation_email_sent = not RFQProduct.objects.filter(
+                    rfq=rfq,
+                    quotation_email_sent=False
+                ).exists()
+                rfq.save(update_fields=['email_sent_date', 'quotation_due_date', 'quotation_prepared', 'quotation_email_sent'])
+
+                messages.success(request, f"Quotation email sent to {', '.join(customer_emails)}.")
+            except Exception as exc:
+                messages.warning(request, f"Quotation email failed for {', '.join(customer_emails)}: {str(exc)[:180]}")
+        elif action == 'delete':
+            try:
+                rfq = RFQ.objects.get(pk=rfq_id)
+            except RFQ.DoesNotExist:
+                raise Http404
+            rfq.delete()
+            messages.success(request, 'RFQ deleted successfully.')
+
+        return redirect('rfq_details')
+
+    status_filter = request.GET.get('status')
+    if status_filter == 'pending':
+        rfqs = list(RFQ.objects.filter(quotation_email_sent=False).select_related('customer').prefetch_related('products__suppliers', 'products__supplier_prices__supplier').all())
+    else:
+        rfqs = list(RFQ.objects.select_related('customer').prefetch_related('products__suppliers', 'products__supplier_prices__supplier').all())
+    today = timezone.localdate()
+    for rfq in rfqs:
+        rfq.row_class = _get_rfq_row_alert_class(rfq)
+        rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
+
+    # Sort RFQs: red (table-danger) -> white ('') -> green (table-success)
+    class_order = {
+        'table-danger': 0,
+        '': 1,
+        'table-success': 2
+    }
+    rfqs.sort(key=lambda r: class_order.get(r.row_class, 1))
+
+    rfq_payloads = []
+    for rfq in rfqs:
+        row_class = rfq.row_class
+        rfq_payloads.append({
+            'id': rfq.id,
+            'rfq_no': rfq.rfq_no,
+            'mail_date': rfq.mail_date.strftime('%Y-%m-%d') if rfq.mail_date else '',
+            'customer_id': rfq.customer_id,
+            'customer_name': rfq.customer.customer_name,
+            'customer_email': rfq.customer.email or '',
+            'enquiry_details': rfq.enquiry_details,
+            'remarks': rfq.remarks or '',
+            'row_class': row_class,  # Row highlighting class for color-based alerts
+            'products': [
+                {
+                    'id': product.id,
+                    'product_name': product.product_name,
+                    'product_type': product.product_type or '',
+                    'price_known': product.price_known,
+                    'quotation_email_sent': product.quotation_email_sent,
+                    'quotation_prepared': product.quotation_prepared,
+                    'supplier_id': product.supplier_id,
+                    'supplier_ids': list(product.suppliers.values_list('id', flat=True)),
+                    'supplier_prices': [
+                        {
+                            'id': supplier_price.id,
+                            'supplier_id': supplier_price.supplier_id,
+                            'supplier_name': supplier_price.supplier.supplier_name,
+                            'price': str(supplier_price.price),
+                            'value': str(supplier_price.value),
+                        }
+                        for supplier_price in product.supplier_prices.all()
+                    ],
+                    'quantity': product.quantity,
+                    'rate_per_unit': str(product.rate_per_unit),
+                    'value': str(product.value),
+                    'remarks': product.remarks or '',
+                }
+                for product in rfq.products.all()
+            ],
+        })
+    customers = Customer.objects.order_by('customer_name')
+    suppliers = Supplier.objects.order_by('supplier_name')
+    return render(request, 'rfq_details.html', {
+        'rfqs': rfqs,
+        'customers': customers,
+        'suppliers': suppliers,
+        'product_type_choices': CustomerProduct.PRODUCT_TYPE_CHOICES,
+        'rfq_payloads': rfq_payloads,
+        'default_supplier_email_subject': _get_default_supplier_email_subject(),
+        'default_supplier_email_body': _get_default_supplier_email_body(),
+        'status_filter': status_filter,
+    })
+
+
+@login_required
+def rfq_quotation_download(request, rfq_id):
+    if request.method != 'POST':
+        raise Http404
+    try:
+        rfq = RFQ.objects.select_related('customer').get(pk=rfq_id)
+    except RFQ.DoesNotExist:
+        raise Http404
+
+    product_ids = request.POST.getlist('product_ids')
+    supplier_price_ids = request.POST.getlist('supplier_price_ids')
+    products, quotation_product_ids_to_mark = _build_selected_quotation_products(rfq, product_ids, supplier_price_ids)
+    if not products:
+        messages.error(request, 'Select at least one product to prepare quotation.')
+        return redirect('rfq_details')
+
+    # Quotation Validation: Check if all selected products have finalized prices
+    # A product has a known price if: price_known=True AND value > 0
+    invalid_products = [
+        p for p in products
+        if not p.price_known or not p.value or p.value == 0
+    ]
+
+    if invalid_products:
+        messages.error(
+            request,
+            'Cannot prepare quotation because one or more selected products do not have a finalized price.'
+        )
+        return redirect('rfq_details')
+
+    disposition = 'inline' if request.POST.get('preview') == '1' else 'attachment'
+    quotation_record = None
+    quote_no = _get_mes_quote_no(rfq)
+    if disposition == 'attachment' and quotation_product_ids_to_mark:
+        quotation_record = _create_rfq_quotation_record(
+            rfq,
+            products,
+            quotation_product_ids_to_mark,
+            email_sent=False
+        )
+        quote_no = quotation_record.quotation_number
+
+    pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+    filename = f"{quote_no.replace('/', '_')}.pdf"
+    response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+    if quotation_record:
+        RFQProduct.objects.filter(
+            rfq=rfq,
+            id__in=quotation_product_ids_to_mark
+        ).update(quotation_prepared=True)
+        rfq.quotation_prepared = True
+        rfq.save(update_fields=['quotation_prepared'])
+    response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
+    return response
+
+
+@login_required
 def supplier_details(request):
     if request.method == 'POST':
         action = request.POST.get('action')
         supplier_id = request.POST.get('supplier_id')
         supplier_name = request.POST.get('supplier_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
+
 
         if action in ('add', 'edit'):
             if not supplier_name:
@@ -1134,6 +2441,7 @@ def supplier_details(request):
         if action == 'add':
             Supplier.objects.create(
                 supplier_name=supplier_name,
+                email=email or None,
                 phone_number=phone_number or None,
                 address=address or None
             )
@@ -1144,9 +2452,10 @@ def supplier_details(request):
             except Supplier.DoesNotExist:
                 raise Http404
             supplier.supplier_name = supplier_name
+            supplier.email = email or None
             supplier.phone_number = phone_number or None
             supplier.address = address or None
-            supplier.save(update_fields=['supplier_name', 'phone_number', 'address'])
+            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'address'])
             messages.success(request, 'Supplier updated successfully.')
         elif action == 'delete':
             try:
@@ -1204,6 +2513,10 @@ def customer_order(request):
             'quotation_attachment'
         )
 
+        enquiry_attachment = request.FILES.get(
+            'enquiry_attachment'
+        )
+
         confirmation_type = request.POST.get(
             'confirmation_type'
         )
@@ -1222,11 +2535,13 @@ def customer_order(request):
             })
 
         product_names = request.POST.getlist('product_name[]')
-        values = request.POST.getlist('value[]')
+        quantities = request.POST.getlist('quantity[]')
+        rates = request.POST.getlist('rate_per_unit[]')
         _, po_value_error = _validate_po_value_matches_total(
             request.POST.get('po_value'),
             product_names,
-            values
+            quantities,
+            rates
         )
         if po_value_error:
             messages.error(request, po_value_error)
@@ -1250,6 +2565,8 @@ def customer_order(request):
         dpr = DPR.objects.create(
 
             customer=customer,
+
+            enquiry_attachment=enquiry_attachment,
 
             quotation_number=quotation_number,
 
@@ -1280,16 +2597,12 @@ def customer_order(request):
             'quantity[]'
         )
 
-        values = request.POST.getlist(
-            'value[]'
+        rates = request.POST.getlist(
+            'rate_per_unit[]'
         )
 
         remarks_list = request.POST.getlist(
             'remarks[]'
-        )
-
-        attachments = request.FILES.getlist(
-            'product_attachment[]'
         )
 
         for i in range(len(product_names)):
@@ -1299,16 +2612,19 @@ def customer_order(request):
             if product_name.strip() == '':
                 continue
 
-            quantity = quantities[i]
-
-            value = values[i]
+            try:
+                quantity, rate_per_unit, value = _calculate_product_line_value(
+                    quantities[i] if i < len(quantities) else '0',
+                    rates[i] if i < len(rates) else '0',
+                    i + 1
+                )
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return redirect('customer_order')
 
             remarks = remarks_list[i]
 
-            attachment = None
-
-            if i < len(attachments):
-                attachment = attachments[i]
+            attachment = request.FILES.get(f'product_attachment_{i}')
 
             CustomerProduct.objects.create(
 
@@ -1318,6 +2634,8 @@ def customer_order(request):
                 product_type=product_types[i] if i < len(product_types) else None,
 
                 quantity_ordered=quantity,
+
+                rate_per_unit=rate_per_unit,
 
                 value=value,
 
@@ -1369,6 +2687,10 @@ def add_customer(request):
             'region'
         , '').strip()
 
+        email = request.POST.get(
+            'email'
+        , '').strip()
+
         phone_number = request.POST.get(
             'phone_number'
         , '').strip()
@@ -1390,6 +2712,16 @@ def add_customer(request):
                 'field': 'region'
             }, status=400)
 
+        if email:
+            try:
+                validate_email(email)
+            except ValidationError:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Enter a valid customer email address.',
+                    'field': 'email'
+                }, status=400)
+
         if phone_number and not re.fullmatch(r'\d{10}', phone_number):
             return JsonResponse({
                 'status': 'error',
@@ -1402,6 +2734,8 @@ def add_customer(request):
             customer_name=customer_name,
 
             region=region,
+
+            email=email or None,
 
             phone_number=phone_number or None,
 
@@ -1416,7 +2750,9 @@ def add_customer(request):
 
             'name': customer.customer_name,
 
-            'region': customer.region
+            'region': customer.region,
+
+            'email': customer.email or ''
         })
 
     return JsonResponse({
@@ -1440,6 +2776,7 @@ def add_customer(request):
 def add_supplier(request):
     if request.method == 'POST':
         supplier_name = request.POST.get('supplier_name', '').strip()
+        email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
 
@@ -1462,3 +2799,76 @@ def add_supplier(request):
         })
 
     return JsonResponse({'status': 'error'})
+
+
+@login_required
+def get_customer_quotations(request):
+    customer_id = request.GET.get('customer_id')
+    if not customer_id:
+        return JsonResponse({'status': 'error', 'message': 'customer_id is required'}, status=400)
+    try:
+        customer = Customer.objects.get(id=customer_id)
+    except Customer.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Customer not found'}, status=404)
+
+    rfqs = RFQ.objects.filter(customer=customer).prefetch_related('products', 'quotations').order_by('-created_at')
+
+    quotations = []
+    for rfq in rfqs:
+        quotation_records = list(rfq.quotations.all().order_by('revision_number'))
+        if quotation_records:
+            for quotation in quotation_records:
+                prepared_not_emailed = not quotation.email_sent
+                products_list = []
+                for product in quotation.products_snapshot or []:
+                    product_data = dict(product)
+                    product_data['quotation_email_sent'] = quotation.email_sent
+                    product_data['quotation_prepared'] = True
+                    product_data['prepared_not_emailed'] = prepared_not_emailed
+                    products_list.append(product_data)
+
+                if products_list:
+                    quotations.append({
+                        'rfq_no': rfq.rfq_no,
+                        'quotation_number': quotation.quotation_number,
+                        'revision_number': quotation.revision_number,
+                        'status_label': 'Prepared - Email not sent' if prepared_not_emailed else 'Email sent',
+                        'prepared_not_emailed': prepared_not_emailed,
+                        'products': products_list,
+                    })
+            continue
+
+        quote_no = _get_mes_quote_no(rfq)
+        products_list = []
+        has_prepared_not_emailed = False
+        for p in rfq.products.all():
+            if p.quotation_email_sent or p.quotation_prepared:
+                prepared_not_emailed = p.quotation_prepared and not p.quotation_email_sent
+                has_prepared_not_emailed = has_prepared_not_emailed or prepared_not_emailed
+                products_list.append({
+                    'product_id': p.id,
+                    'product_name': p.product_name,
+                    'product_type': p.product_type or '',
+                    'quantity': p.quantity,
+                    'rate_per_unit': str(p.rate_per_unit),
+                    'value': str(p.value),
+                    'remarks': p.remarks or '',
+                    'quotation_email_sent': p.quotation_email_sent,
+                    'quotation_prepared': p.quotation_prepared,
+                    'prepared_not_emailed': prepared_not_emailed,
+                })
+
+        if products_list:
+            quotations.append({
+                'rfq_no': rfq.rfq_no,
+                'quotation_number': quote_no,
+                'revision_number': 0,
+                'status_label': 'Prepared - Email not sent' if has_prepared_not_emailed else 'Email sent',
+                'prepared_not_emailed': has_prepared_not_emailed,
+                'products': products_list,
+            })
+
+    return JsonResponse({'status': 'success', 'quotations': quotations})
+
+
+

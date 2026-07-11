@@ -30,6 +30,7 @@ class CustomerProduct(models.Model):
     )
     STATUS_CHOICES = (
         ('delivered', 'Delivered'),
+        ('invoice_pending', 'Invoice Pending'),
         ('partially_delivered', 'Partially Delivered'),
         ('cancelled', 'Cancelled'),
     )
@@ -45,6 +46,8 @@ class CustomerProduct(models.Model):
     )
 
     quantity_ordered = models.IntegerField(default=0)
+
+    rate_per_unit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     value = models.DecimalField(max_digits=12, decimal_places=2)
 
@@ -63,6 +66,7 @@ class CustomerProduct(models.Model):
         default=None
     )
     quantity_delivered = models.IntegerField(default=0)
+    delivery_detail_type = models.CharField(max_length=20, blank=True, null=True)
     invoice_dc_number = models.CharField(max_length=150, blank=True, null=True)
     invoice_dc_attachment = models.FileField(
         upload_to='invoice_dc_attachments/',
@@ -84,6 +88,7 @@ class SupplierProduct(models.Model):
     customer_product = models.ForeignKey(CustomerProduct, on_delete=models.CASCADE)
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
 
+    rate_per_unit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     po_value = models.DecimalField(max_digits=12, decimal_places=2)
     po_date = models.DateField(blank=True, null=True)
     expected_date = models.DateField(blank=True, null=True)
@@ -95,6 +100,8 @@ class SupplierProduct(models.Model):
 
     po_attachment = models.FileField(upload_to='supplier_po/', blank=True, null=True)
     quantity_received = models.IntegerField(default=0)
+    quantity_not_ok = models.IntegerField(default=0)
+    not_ok_reason = models.TextField(blank=True, null=True)
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,

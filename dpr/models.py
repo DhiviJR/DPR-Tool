@@ -20,6 +20,12 @@ class DPR(models.Model):
 
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
 
+    enquiry_attachment = models.FileField(
+        upload_to='enquiry_files/',
+        blank=True,
+        null=True
+    )
+
     quotation_number = models.CharField(max_length=100, blank=True, null=True)
 
     quotation_value = models.DecimalField(

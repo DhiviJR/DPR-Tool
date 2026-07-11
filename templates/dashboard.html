@@ -67,6 +67,15 @@
             </div>
         </a>
     </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
+            <div class="dpr-action-card dpr-action-info">
+                <i class="bi bi-envelope-paper fs-4 mb-2 d-block"></i>
+                <small>Manage RFQ</small>
+                <h6 class="mb-0">RFQ</h6>
+            </div>
+        </a>
+    </div>
 </div>
 
 <!-- KPI summary cards (clickable) -->
@@ -98,6 +107,19 @@
                     {% if pending_mail_confirmation_count %}
                     <span class="dpr-badge-pending">Pending</span>
                     {% endif %}
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
+            <div class="dpr-card p-3 h-100">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon green"><i class="bi bi-envelope-paper"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value">{{ total_rfq_count }}</div>
+                        <div class="dpr-kpi-label">Total RFQs</div>
+                    </div>
                 </div>
             </div>
         </a>
@@ -214,12 +236,14 @@
 <!-- Charts + validity alerts -->
 <div class="row g-3 mb-4">
     <div class="col-lg-4">
-        <div class="dpr-card dpr-chart-card h-100">
+        <div class="dpr-card dpr-chart-card h-100 d-flex flex-column">
             <div class="card-header">Customer Product Status</div>
-            <div class="card-body">
-                <div class="row align-items-center">
+            <div class="card-body flex-grow-1 d-flex align-items-center">
+                <div class="row align-items-center w-100 g-0">
                     <div class="col-7">
-                        <canvas id="customerStatusChart" height="200"></canvas>
+                        <div style="height: 240px; position: relative;">
+                            <canvas id="customerStatusChart"></canvas>
+                        </div>
                     </div>
                     <div class="col-5">
                         <ul class="dpr-chart-legend">
@@ -234,12 +258,14 @@
         </div>
     </div>
     <div class="col-lg-4">
-        <div class="dpr-card dpr-chart-card h-100">
+        <div class="dpr-card dpr-chart-card h-100 d-flex flex-column">
             <div class="card-header">Supplier Product Status</div>
-            <div class="card-body">
-                <div class="row align-items-center">
+            <div class="card-body flex-grow-1 d-flex align-items-center">
+                <div class="row align-items-center w-100 g-0">
                     <div class="col-7">
-                        <canvas id="supplierStatusChart" height="200"></canvas>
+                        <div style="height: 240px; position: relative;">
+                            <canvas id="supplierStatusChart"></canvas>
+                        </div>
                     </div>
                     <div class="col-5">
                         <ul class="dpr-chart-legend">
@@ -281,6 +307,17 @@
 
             <div class="dpr-alert-item">
                 <div class="alert-left">
+                    <div class="dpr-alert-icon info"><i class="bi bi-receipt"></i></div>
+                    <div>
+                        <div class="fw-semibold small">Customer — invoice pending</div>
+                        <a href="{% url 'customer_po_product_details' %}?case=invoice_pending" class="small text-decoration-none">View details &rsaquo;</a>
+                    </div>
+                </div>
+                <span class="dpr-alert-count">{{ customer_invoice_pending_count }}</span>
+            </div>
+
+            <div class="dpr-alert-item">
+                <div class="alert-left">
                     <div class="dpr-alert-icon info"><i class="bi bi-clock-history"></i></div>
                     <div>
                         <div class="fw-semibold small">Supplier — expiring within 5 days</div>
@@ -301,6 +338,17 @@
                 <span class="dpr-alert-count">{{ supplier_expired_count }}</span>
             </div>
 
+            <div class="dpr-alert-item">
+                <div class="alert-left">
+                    <div class="dpr-alert-icon info"><i class="bi bi-envelope"></i></div>
+                    <div>
+                        <div class="fw-semibold small">RFQ — pending quotation</div>
+                        <a href="{% url 'rfq_details' %}?status=pending" class="small text-decoration-none">View details &rsaquo;</a>
+                    </div>
+                </div>
+                <span class="dpr-alert-count">{{ rfq_quotation_not_sent_count }}</span>
+            </div>
+
             <div class="text-end mt-2">
                 <a href="{% url 'customer_po_product_details' %}" class="small fw-semibold text-decoration-none">View all customer PO &rsaquo;</a>
             </div>
@@ -315,6 +363,7 @@
         <span class="dpr-pill danger"><i class="bi bi-exclamation-circle"></i> Customer expired: {{ customer_expired_count }}</span>
         <span class="dpr-pill warn"><i class="bi bi-clock"></i> Supplier expiring: {{ supplier_within_7_days_count }}</span>
         <span class="dpr-pill danger"><i class="bi bi-exclamation-circle"></i> Supplier expired: {{ supplier_expired_count }}</span>
+        <span class="dpr-pill warn"><i class="bi bi-envelope"></i> RFQ pending: {{ rfq_quotation_not_sent_count }}</span>
     </div>
    
 </div>
@@ -404,6 +453,7 @@ new Chart(document.getElementById('customerStatusChart'), {
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         cutout: '62%',
         plugins: { legend: { display: false } }
     }
@@ -431,6 +481,7 @@ new Chart(document.getElementById('supplierStatusChart'), {
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         cutout: '62%',
         plugins: { legend: { display: false } }
     }

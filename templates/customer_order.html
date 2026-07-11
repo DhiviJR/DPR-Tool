@@ -38,7 +38,7 @@
                 <div class="col-md-4 mb-3">
 
                     <label class="form-label">
-                        S.No
+                        DPR.NO
                     </label>
 
                     <input type="text"
@@ -120,20 +120,67 @@
 
 </div>
 
-                <!-- Quotation Number -->
+                <!-- Enquiry Attachment -->
 
                 <div class="col-md-4 mb-3">
+
+                    <label class="form-label">
+                        Enquiry Attachment
+                    </label>
+
+                    <input type="file"
+                           class="form-control"
+                           name="enquiry_attachment">
+                    <input type="hidden"
+                           name="existing_enquiry_attachment"
+                           value="{% if dpr and dpr.enquiry_attachment %}{{ dpr.enquiry_attachment.name }}{% endif %}">
+                    {% if dpr and dpr.enquiry_attachment %}
+                    <small class="text-muted d-block mt-1">
+                        Current: <a href="{{ dpr.enquiry_attachment.url }}" target="_blank">{{ dpr.enquiry_attachment.name|slice:'-40:' }}</a>
+                    </small>
+                    {% endif %}
+
+                </div>
+
+                <!-- Quotation Number -->
+
+                <div class="col-md-4 mb-3 position-relative">
 
                     <label class="form-label">
                         Quotation Number *
                     </label>
 
+                    <div class="dropdown" id="quotationDropdownContainer">
+                        <button class="form-control text-start dropdown-toggle d-flex justify-content-between align-items-center"
+                                type="button"
+                                id="quotationDropdownBtn"
+                                data-bs-toggle="dropdown"
+                                data-bs-auto-close="outside"
+                                aria-expanded="false"
+                                style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            Select Quotation Number
+                        </button>
+                        <div class="dropdown-menu w-100 p-2" 
+                             id="quotationDropdownMenu" 
+                             aria-labelledby="quotationDropdownBtn" 
+                             style="max-height: 250px; overflow-y: auto;">
+                            <!-- Checkboxes will be populated here -->
+                        </div>
+                    </div>
+
                     <input type="text"
-                           class="form-control"
+                           id="quotationNumberInput"
                            name="quotation_number"
                            value="{% if dpr %}{{ dpr.quotation_number|default:'' }}{% endif %}"
+                           style="opacity: 0; position: absolute; bottom: 0; left: 15px; width: 1px; height: 1px; pointer-events: none;"
                            required>
 
+
+                    <div id="quotationEmailWarning"
+                         class="alert alert-warning py-2 px-3 mt-2 mb-0 d-none"
+                         role="alert">
+                        Warning: selected quotation is prepared, but email has not been sent.
+                    </div>
                 </div>
 
                 <!-- Quotation Value -->
@@ -318,6 +365,7 @@
                         <th>Product</th>
                         <th>Product Type</th>
                         <th>Quantity Ordered</th>
+                        <th>Rate Per Unit</th>
                         <th>Value</th>
                         <th>Remarks</th>
                         <th>Attachment</th>
@@ -374,9 +422,17 @@
                             <td>
                                 <input type="number"
                                        step="0.01"
+                                       class="form-control rate"
+                                       name="rate_per_unit[]"
+                                       value="{{ p.rate_per_unit }}">
+                            </td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
                                        class="form-control value"
                                        name="value[]"
-                                       value="{{ p.value }}">
+                                       value="{{ p.value }}"
+                                       readonly>
                             </td>
                             <td>
                                 <input type="text"
@@ -448,8 +504,15 @@
                             <td>
                                 <input type="number"
                                        step="0.01"
+                                       class="form-control rate"
+                                       name="rate_per_unit[]">
+                            </td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
                                        class="form-control value"
-                                       name="value[]">
+                                       name="value[]"
+                                       readonly>
                             </td>
                             <td>
                                 <input type="text"
@@ -554,6 +617,212 @@ function updatePoNumberVisibility() {
 document.getElementById('confirmationType').addEventListener('change', updatePoNumberVisibility);
 updatePoNumberVisibility();
 
+const productTypesList = [
+    "APG steel", "ARG steel", "APG carbide", "ARG carbide", "SAPG", "SARG",
+    "Multi-Gauge", "unit Std Air", "unit SPC Air", "unit Std lvdt", "unit SPC lvdt",
+    "AMC", "Service", "Spares", "TPG", "TRG", "STPG", "STRG", "PPG", "PRG", "SPPG", "SPRG"
+];
+
+function generateProductRow(index, p = {}) {
+    const name = p.product_name || '';
+    const type = p.product_type || '';
+    const qty = p.quantity || '';
+    const rate = p.rate_per_unit || '';
+    const val = p.value || '';
+    const remarks = p.remarks || '';
+    
+    let typeOptions = '<option value="">Select Type</option>';
+    productTypesList.forEach(t => {
+        const selected = (t === type) ? 'selected' : '';
+        typeOptions += `<option value="${t}" ${selected}>${t}</option>`;
+    });
+
+    return `
+        <tr>
+            <td>${index + 1}</td>
+            <td>
+                <input type="text" class="form-control" name="product_name[]" value="${name}">
+            </td>
+            <td>
+                <select class="form-control" name="product_type[]">
+                    ${typeOptions}
+                </select>
+            </td>
+            <td>
+                <input type="number" class="form-control qty" name="quantity[]" value="${qty}">
+            </td>
+            <td>
+                <input type="number" step="0.01" class="form-control rate" name="rate_per_unit[]" value="${rate}">
+            </td>
+            <td>
+                <input type="number" step="0.01" class="form-control value" name="value[]" value="${val}" readonly>
+            </td>
+            <td>
+                <input type="text" class="form-control" name="remarks[]" value="${remarks}">
+            </td>
+            <td>
+                <input type="file" class="form-control" name="product_attachment_${index}">
+                <input type="hidden" name="existing_attachment_${index}" value="">
+            </td>
+            <td>
+                <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+            </td>
+        </tr>
+    `;
+}
+
+function populateProductsFromSelectedQuotations() {
+    const checkboxes = document.querySelectorAll('#quotationDropdownMenu .quote-checkbox');
+    const selectedQuotes = [];
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            selectedQuotes.push(cb.value);
+        }
+    });
+
+    const allProducts = [];
+    let totalQuotationValue = 0;
+    if (window.customerQuotations) {
+        window.customerQuotations.forEach(q => {
+            if (selectedQuotes.includes(q.quotation_number)) {
+                if (q.products) {
+                    allProducts.push(...q.products);
+                    q.products.forEach(p => {
+                        totalQuotationValue += parseFloat(p.value) || 0;
+                    });
+                }
+            }
+        });
+    }
+
+    const tbody = document.querySelector('#productTable tbody');
+    tbody.innerHTML = '';
+    
+    if (allProducts.length > 0) {
+        allProducts.forEach((p, idx) => {
+            tbody.insertAdjacentHTML('beforeend', generateProductRow(idx, p));
+        });
+        const quotationValueInput = document.querySelector('input[name="quotation_value"]');
+        if (quotationValueInput) {
+            quotationValueInput.value = totalQuotationValue.toFixed(2);
+        }
+    } else {
+        tbody.innerHTML = generateProductRow(0);
+    }
+
+    renumberProductRows();
+    calculateTotals();
+}
+
+function loadCustomerQuotations() {
+    const customerDropdown = document.getElementById('customerDropdown');
+    const customerId = customerDropdown.value;
+    const menu = document.getElementById('quotationDropdownMenu');
+    const input = document.getElementById('quotationNumberInput');
+    const selectedQuoteVal = input.value || '';
+    const selectedQuotes = selectedQuoteVal.split(',').map(s => s.trim()).filter(Boolean);
+    const warning = document.getElementById('quotationEmailWarning');
+
+    const updatePreparedEmailWarning = (checkedValues) => {
+        if (!warning) {
+            return;
+        }
+        const hasPreparedNotEmailed = Array.from(menu.querySelectorAll('.quote-checkbox')).some(cb =>
+            cb.checked && cb.dataset.preparedNotEmailed === 'true'
+        );
+        warning.classList.toggle('d-none', !hasPreparedNotEmailed);
+    };
+
+
+    menu.innerHTML = '';
+
+    const updateDisplay = () => {
+        const checkboxes = menu.querySelectorAll('.quote-checkbox');
+        const checkedValues = [];
+        checkboxes.forEach(cb => {
+            if (cb.checked) {
+                checkedValues.push(cb.value);
+            }
+        });
+        input.value = checkedValues.join(', ');
+        const btn = document.getElementById('quotationDropdownBtn');
+        if (checkedValues.length > 0) {
+            btn.textContent = checkedValues.join(', ');
+        } else {
+            btn.textContent = 'Select Quotation Number';
+        }
+        updatePreparedEmailWarning(checkedValues);
+    };
+
+    const addCheckbox = (value, labelText, checked, preparedNotEmailed = false) => {
+        const label = document.createElement('label');
+        label.className = 'dropdown-item d-flex align-items-center gap-2 py-1 m-0';
+        label.style.cursor = 'pointer';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'form-check-input quote-checkbox m-0';
+        cb.value = value;
+        cb.checked = checked;
+        cb.dataset.preparedNotEmailed = preparedNotEmailed ? 'true' : 'false';
+        cb.addEventListener('change', () => {
+            updateDisplay();
+            populateProductsFromSelectedQuotations();
+        });
+
+        const span = document.createElement('span');
+        span.className = 'ms-1';
+        span.textContent = labelText;
+
+        label.appendChild(cb);
+        label.appendChild(span);
+        menu.appendChild(label);
+    };
+
+    if (!customerId) {
+        if (selectedQuotes.length > 0) {
+            selectedQuotes.forEach(q => {
+                addCheckbox(q, q, true);
+            });
+            updateDisplay();
+        } else {
+            document.getElementById('quotationDropdownBtn').textContent = 'Select Quotation Number';
+            updatePreparedEmailWarning([]);
+        }
+        return;
+    }
+
+    fetch(`/get-customer-quotations/?customer_id=${customerId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.customerQuotations = data.quotations;
+                const fetchedQuotes = data.quotations.map(q => q.quotation_number);
+                
+                data.quotations.forEach(q => {
+                    const isChecked = selectedQuotes.includes(q.quotation_number);
+                    const statusText = q.status_label ? ` - ${q.status_label}` : '';
+                    addCheckbox(
+                        q.quotation_number,
+                        `${q.quotation_number} (${q.rfq_no})${statusText}`,
+                        isChecked,
+                        q.prepared_not_emailed
+                    );
+                });
+
+                // Preserve any previously selected quotes that are not in the fetched list
+                selectedQuotes.forEach(q => {
+                    if (!fetchedQuotes.includes(q)) {
+                        addCheckbox(q, q, true);
+                    }
+                });
+
+                updateDisplay();
+            }
+        })
+        .catch(err => console.error('Error fetching quotations:', err));
+}
+
 function filterCustomersByRegion() {
     const region = document.getElementById('regionDropdown').value;
     const dropdown = document.getElementById('customerDropdown');
@@ -571,9 +840,12 @@ function filterCustomersByRegion() {
     ) {
         dropdown.value = '';
     }
+
+    loadCustomerQuotations();
 }
 
 document.getElementById('regionDropdown').addEventListener('change', filterCustomersByRegion);
+document.getElementById('customerDropdown').addEventListener('change', loadCustomerQuotations);
 filterCustomersByRegion();
 
 document.addEventListener('input', function (e) {
@@ -586,121 +858,41 @@ document.addEventListener('input', function (e) {
 document.getElementById('addRow').addEventListener(
     'click',
     function () {
-
-        let table =
-            document.querySelector('#productTable tbody');
-
+        let table = document.querySelector('#productTable tbody');
         let rowCount = table.rows.length;
-
-        let row = `
-            <tr>
-
-                <td>${rowCount + 1}</td>
-
-                <td>
-                    <input type="text"
-                           class="form-control"
-                           name="product_name[]">
-                </td>
-
-                <td>
-                    <select class="form-control" name="product_type[]">
-                        <option value="">Select Type</option>
-                        <option value="APG steel">APG steel</option>
-                        <option value="ARG steel">ARG steel</option>
-                        <option value="APG carbide">APG carbide</option>
-                        <option value="ARG carbide">ARG carbide</option>
-                        <option value="SAPG">SAPG</option>
-                        <option value="SARG">SARG</option>
-                        <option value="Multi-Gauge">Multi-Gauge</option>
-                        <option value="unit Std Air">unit Std Air</option>
-                        <option value="unit SPC Air">unit SPC Air</option>
-                        <option value="unit Std lvdt">unit Std lvdt</option>
-                        <option value="unit SPC lvdt">unit SPC lvdt</option>
-                        <option value="AMC">AMC</option>
-                        <option value="Service">Service</option>
-                        <option value="Spares">Spares</option>
-                        <option value="TPG">TPG</option>
-                        <option value="TRG">TRG</option>
-                        <option value="STPG">STPG</option>
-                        <option value="STRG">STRG</option>
-                        <option value="PPG">PPG</option>
-                        <option value="PRG">PRG</option>
-                        <option value="SPPG">SPPG</option>
-                        <option value="SPRG">SPRG</option>
-                    </select>
-                </td>
-
-                <td>
-                    <input type="number"
-                           class="form-control qty"
-                           name="quantity[]">
-                </td>
-
-                <td>
-                    <input type="number"
-                           step="0.01"
-                           class="form-control value"
-                           name="value[]">
-                </td>
-
-                <td>
-                    <input type="text"
-                           class="form-control"
-                           name="remarks[]">
-                </td>
-
-                <td>
-                    <input type="file"
-                           class="form-control"
-                           name="product_attachment_${rowCount}">
-                    <input type="hidden"
-                           name="existing_attachment_${rowCount}"
-                           value="">
-                </td>
-
-                <td>
-                    <button type="button"
-                            class="btn btn-danger btn-sm removeRow">
-
-                        X
-
-                    </button>
-                </td>
-
-            </tr>
-        `;
-
+        let row = generateProductRow(rowCount);
         table.insertAdjacentHTML('beforeend', row);
         renumberProductRows();
-
-        if (e.target.classList.contains('removeRow')) {
-
-            e.target.closest('tr').remove();
-
-            calculateTotals();
-            renumberProductRows();
-        }
+        calculateTotals();
     }
 );
 
-    function renumberProductRows() {
-        const rows = document.querySelectorAll('#productTable tbody tr');
-        rows.forEach((row, index) => {
-            const fileInput = row.querySelector('input[type="file"]');
-            const hiddenInput = row.querySelector('input[type="hidden"][name^="existing_attachment_"]');
-            const serialCell = row.cells[0];
-            if (serialCell) {
-                serialCell.textContent = index + 1;
-            }
-            if (fileInput) {
-                fileInput.name = `product_attachment_${index}`;
-            }
-            if (hiddenInput) {
-                hiddenInput.name = `existing_attachment_${index}`;
-            }
-        });
+document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('removeRow')) {
+        return;
     }
+    e.target.closest('tr').remove();
+    calculateTotals();
+    renumberProductRows();
+});
+
+function renumberProductRows() {
+    const rows = document.querySelectorAll('#productTable tbody tr');
+    rows.forEach((row, index) => {
+        const fileInput = row.querySelector('input[type="file"]');
+        const hiddenInput = row.querySelector('input[type="hidden"][name^="existing_attachment_"]');
+        const serialCell = row.cells[0];
+        if (serialCell) {
+            serialCell.textContent = index + 1;
+        }
+        if (fileInput) {
+            fileInput.name = `product_attachment_${index}`;
+        }
+        if (hiddenInput) {
+            hiddenInput.name = `existing_attachment_${index}`;
+        }
+    });
+}
 function parseAmount(value) {
     const amount = parseFloat(value);
     return Number.isFinite(amount) ? amount : 0;
@@ -745,24 +937,39 @@ document.getElementById('poValueInput').addEventListener('input', function () {
     validatePoValueMatch({ showError: true });
 });
 
+document.addEventListener('input', function (e) {
+    if (
+        !e.target.classList.contains('qty')
+        && !e.target.classList.contains('rate')
+    ) {
+        return;
+    }
+
+    calculateTotals();
+});
+
 function calculateTotals() {
-
-    let qtys = document.querySelectorAll('.qty');
-
-    let values = document.querySelectorAll('.value');
 
     let totalQty = 0;
 
     let totalValue = 0;
 
-    qtys.forEach(q => {
+    document.querySelectorAll('#productTable tbody tr').forEach(row => {
+        const qtyInput = row.querySelector('.qty');
+        const rateInput = row.querySelector('.rate');
+        const valueInput = row.querySelector('.value');
+        if (!qtyInput || !rateInput || !valueInput) {
+            return;
+        }
 
-        totalQty += Number(q.value) || 0;
-    });
+        const qty = Number(qtyInput.value) || 0;
+        const rate = Number(rateInput.value) || 0;
+        const lineValue = qty * rate;
 
-    values.forEach(v => {
+        valueInput.value = lineValue.toFixed(2);
+        totalQty += qty;
+        totalValue += lineValue;
 
-        totalValue += Number(v.value) || 0;
     });
 
     document.getElementById('totalQty').value =

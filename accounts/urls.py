@@ -6,6 +6,8 @@ urlpatterns = [
     path('dpr-view/', views.dpr_view, name='dpr_view'),
     path('customer-po-product-details/', views.customer_po_product_details, name='customer_po_product_details'),
     path('supplier-po-product-details/', views.supplier_po_product_details, name='supplier_po_product_details'),
+    path('rfq/', views.rfq_details, name='rfq_details'),
+    path('rfq/<int:rfq_id>/quotation/download/', views.rfq_quotation_download, name='rfq_quotation_download'),
     path('dpr/<int:dpr_id>/products/', views.dpr_products, name='dpr_products'),
     path('dpr/<int:dpr_id>/documents/download/', views.dpr_documents_download, name='dpr_documents_download'),
     path('customer-product/<int:product_id>/status/', views.customer_product_status_update, name='customer_product_status_update'),
@@ -28,4 +30,5 @@ urlpatterns = [
     path('add-customer/',views.add_customer,name='add_customer'
 ),
     path('add-supplier/', views.add_supplier, name='add_supplier'),
+    path('get-customer-quotations/', views.get_customer_quotations, name='get_customer_quotations'),
 ]

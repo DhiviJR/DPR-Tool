@@ -24,6 +24,7 @@
                 <select id="customerPoCaseFilter" class="form-select">
                     <option value="">All Cases</option>
                     <option value="closed">Closed</option>
+                    <option value="invoice_pending">Invoice Pending</option>
                     <option value="partially_closed">Partially Closed</option>
                     <option value="cancelled">Cancelled</option>
                     <option value="due_soon">Due Soon</option>
@@ -53,7 +54,7 @@
                         <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="10" data-sort-type="date">Expected Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="11" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="12" data-sort-type="text">Inward <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="12" data-sort-type="text">Delivery Status <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -80,12 +81,15 @@
                                 </button>
                             </div>
                         </td>
-                        <td data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
+                        <td data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'invoice_pending' %}invoice pending{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
                             <select class="form-select form-select-sm customer-product-status" style="width: 160px;" data-prev-status="{{ product.status|default:'' }}">
                                 <option value="" {% if not product.status %}selected{% endif %}>Select</option>
                                 <option value="delivered" {% if product.status == 'delivered' %}selected{% endif %}>Closed</option>
                                 <option value="partially_delivered" {% if product.status == 'partially_delivered' %}selected{% endif %}>Partially Closed</option>
                                 <option value="cancelled" {% if product.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                                {% if product.status == 'invoice_pending' %}
+                                <option value="invoice_pending" selected hidden>Invoice Pending</option>
+                                {% endif %}
                             </select>
                         </td>
                     </tr>
@@ -100,6 +104,7 @@
     </div>
     <div class="dpr-table-legend">
         <span class="legend-item"><span class="legend-swatch table-success"></span>Closed</span>
+        <span class="legend-item"><span class="legend-swatch table-info"></span>Invoice Pending</span>
         <span class="legend-item"><span class="legend-swatch table-secondary"></span>Cancelled</span>
         <span class="legend-item"><span class="legend-swatch table-warning"></span>Due Soon</span>
         <span class="legend-item"><span class="legend-swatch table-danger"></span>Expired</span>
@@ -165,7 +170,14 @@
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label for="invoiceDcNumber" class="form-label">Invoice/DC number</label>
+                    <label for="deliveryDetailType" class="form-label">Delivery Detail</label>
+                    <select id="deliveryDetailType" class="form-select">
+                        <option value="invoice">Invoice</option>
+                        <option value="dc">DC</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="invoiceDcNumber" class="form-label" id="invoiceDcNumberLabel">Invoice number</label>
                     <input type="text" id="invoiceDcNumber" class="form-control">
                 </div>
                 <div class="mb-3">
@@ -184,6 +196,12 @@
 <script src="{% static 'js/po-table-tools.js' %}?v=2"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const caseFilter = document.getElementById('customerPoCaseFilter');
+    const initialCase = new URLSearchParams(window.location.search).get('case');
+    if (caseFilter && initialCase) {
+        caseFilter.value = initialCase;
+    }
+
     initPoTableTools({
         tableId: '#customerPoTable',
         searchInputId: '#customerPoSearch',
@@ -198,8 +216,9 @@ let pendingPartialUpdate = null;
 let pendingDeliveredUpdate = null;
 
 function applyRowStatusColor(row, status) {
-    row.classList.remove('table-success', 'table-danger', 'table-warning', 'table-secondary');
+    row.classList.remove('table-success', 'table-info', 'table-danger', 'table-warning', 'table-secondary');
     if (status === 'delivered') row.classList.add('table-success');
+    else if (status === 'invoice_pending') row.classList.add('table-info');
     else if (status === 'cancelled') row.classList.add('table-secondary');
     else if (row.dataset.validityState === 'expired') row.classList.add('table-danger');
     else if (row.dataset.validityState === 'due_soon') row.classList.add('table-warning');
@@ -207,11 +226,33 @@ function applyRowStatusColor(row, status) {
 
 function updateRowFilterState(row, status) {
     if (status === 'delivered') row.dataset.filterState = 'closed';
+    else if (status === 'invoice_pending') row.dataset.filterState = 'invoice_pending';
     else if (status === 'cancelled') row.dataset.filterState = 'cancelled';
     else if (row.dataset.validityState === 'expired') row.dataset.filterState = 'expired';
     else if (row.dataset.validityState === 'due_soon') row.dataset.filterState = 'due_soon';
     else if (status === 'partially_delivered') row.dataset.filterState = 'partially_closed';
     else row.dataset.filterState = 'pending';
+}
+
+function updateDeliveryStatusDropdown(selectElement, status) {
+    const displayOnlyValue = 'invoice_pending';
+    let displayOnlyOption = selectElement.querySelector(`option[value="${displayOnlyValue}"]`);
+
+    if (status === displayOnlyValue) {
+        if (!displayOnlyOption) {
+            displayOnlyOption = document.createElement('option');
+            displayOnlyOption.value = displayOnlyValue;
+            displayOnlyOption.textContent = 'Invoice Pending';
+            displayOnlyOption.hidden = true;
+            selectElement.appendChild(displayOnlyOption);
+        }
+        displayOnlyOption.selected = true;
+    } else if (displayOnlyOption) {
+        displayOnlyOption.remove();
+        selectElement.value = status;
+    } else {
+        selectElement.value = status;
+    }
 }
 
 function postStatusUpdate(row, selectElement, status, payload = {}) {
@@ -222,6 +263,9 @@ function postStatusUpdate(row, selectElement, status, payload = {}) {
     formData.append('status', status);
     if (payload.quantityDelivered) {
         formData.append('quantity_delivered', payload.quantityDelivered);
+    }
+    if (payload.deliveryDetailType) {
+        formData.append('delivery_detail_type', payload.deliveryDetailType);
     }
     if (payload.invoiceDcNumber) {
         formData.append('invoice_dc_number', payload.invoiceDcNumber);
@@ -243,17 +287,19 @@ function postStatusUpdate(row, selectElement, status, payload = {}) {
             return;
         }
 
-        selectElement.dataset.prevStatus = status;
-        updateRowFilterState(row, status);
-        applyRowStatusColor(row, status);
+        const savedStatus = data.product_status || status;
+        selectElement.dataset.prevStatus = savedStatus;
+        updateDeliveryStatusDropdown(selectElement, savedStatus);
+        updateRowFilterState(row, savedStatus);
+        applyRowStatusColor(row, savedStatus);
         document.getElementById('customerPoCaseFilter').dispatchEvent(new Event('change'));
-        if (status === 'delivered') {
+        if (savedStatus === 'delivered' || savedStatus === 'invoice_pending') {
             quantityDeliveredCell.textContent = quantityOrdered;
             quantityDeliveredCell.setAttribute('data-sort-value', quantityOrdered);
-        } else if (status === 'partially_delivered') {
+        } else if (savedStatus === 'partially_delivered') {
             quantityDeliveredCell.textContent = payload.quantityDelivered;
             quantityDeliveredCell.setAttribute('data-sort-value', payload.quantityDelivered);
-        } else if (status === 'cancelled' || status === '') {
+        } else if (savedStatus === 'cancelled' || savedStatus === '') {
             quantityDeliveredCell.textContent = '0';
             quantityDeliveredCell.setAttribute('data-sort-value', '0');
         }
@@ -261,11 +307,12 @@ function postStatusUpdate(row, selectElement, status, payload = {}) {
         if (inwardCell) {
             const statusLabels = {
                 delivered: 'closed',
+                invoice_pending: 'invoice pending',
                 partially_delivered: 'partially closed',
                 cancelled: 'cancelled',
                 '': 'pending'
             };
-            inwardCell.setAttribute('data-sort-value', statusLabels[status] || 'pending');
+            inwardCell.setAttribute('data-sort-value', statusLabels[savedStatus] || 'pending');
         }
     });
 }
@@ -331,6 +378,8 @@ document.addEventListener('change', function (e) {
             row: row,
             selectElement: e.target,
         };
+        document.getElementById('deliveryDetailType').value = 'invoice';
+        updateDeliveryDetailNumberLabel();
         document.getElementById('invoiceDcNumber').value = '';
         document.getElementById('invoiceDcAttachment').value = '';
         const modal = new bootstrap.Modal(document.getElementById('deliveredDetailsModal'));
@@ -365,13 +414,23 @@ document.getElementById('savePartialDeliveryBtn').addEventListener('click', func
     pendingPartialUpdate = null;
 });
 
+function updateDeliveryDetailNumberLabel() {
+    const deliveryDetailType = document.getElementById('deliveryDetailType').value;
+    const label = document.getElementById('invoiceDcNumberLabel');
+    label.textContent = deliveryDetailType === 'dc' ? 'DC Number' : 'Invoice number';
+}
+
+document.getElementById('deliveryDetailType').addEventListener('change', updateDeliveryDetailNumberLabel);
+
 document.getElementById('saveDeliveredDetailsBtn').addEventListener('click', function () {
     if (!pendingDeliveredUpdate) return;
+    const deliveryDetailType = document.getElementById('deliveryDetailType').value;
     const invoiceDcNumber = document.getElementById('invoiceDcNumber').value.trim();
     const invoiceDcAttachment = document.getElementById('invoiceDcAttachment').files[0];
+    const numberLabel = deliveryDetailType === 'dc' ? 'DC Number' : 'Invoice number';
 
     if (!invoiceDcNumber) {
-        alert('Invoice/DC number is required.');
+        alert(`${numberLabel} is required.`);
         return;
     }
     if (!invoiceDcAttachment) {
@@ -384,6 +443,7 @@ document.getElementById('saveDeliveredDetailsBtn').addEventListener('click', fun
         pendingDeliveredUpdate.selectElement,
         'delivered',
         {
+            deliveryDetailType: deliveryDetailType,
             invoiceDcNumber: invoiceDcNumber,
             invoiceDcAttachment: invoiceDcAttachment
         }

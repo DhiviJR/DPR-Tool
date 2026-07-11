@@ -29,12 +29,13 @@
               <th>S.No</th>
               <th>Product</th>
               <th>Supplier</th>
-              <th>PO Value</th>
-              <th>PO Date</th>
-              <th>PO Attachment</th>
+              <th>Rate Per Unit</th>
               <th>Quantity</th>
+              <th>PO Value</th>
               <th>PO Number</th>
+              <th>PO Date</th>
               <th>Validity</th>
+              <th>PO Attachment</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -48,7 +49,7 @@
                   <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
                     <option value="">Select</option>
                     {% for p in products %}
-                    <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" {% if p.id == sp.customer_product.id %}selected{% endif %}>{{ p.product_name }}</option>
+                    <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" data-rate="{{ p.rate_per_unit }}" {% if p.id == sp.customer_product.id %}selected{% endif %}>{{ p.product_name }}</option>
                     {% endfor %}
                   </select>
                 </td>
@@ -66,22 +67,23 @@
                             data-bs-target="#supplierModal">+</button>
                   </div>
                 </td>
-                <td><input type="number" step="0.01" name="po_value[]" class="form-control" style="min-width: 180px;" value="{{ sp.po_value }}" required></td>
-                <td><input type="date" name="po_date[]" class="form-control" value="{{ sp.po_date|date:'Y-m-d' }}" required></td>
-                <td>
-                  <input type="file" name="po_attachment_{{ forloop.counter0 }}" class="form-control" style="min-width: 200px;">
-                  {% if sp.po_attachment %}
-                  <small class="text-muted d-block mt-1">Current: {{ sp.po_attachment.name }}</small>
-                  {% endif %}
-                </td>
+                <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" value="{{ sp.rate_per_unit }}" required></td>
                 <td>
                   <div class="d-flex align-items-center">
                     <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" value="{{ sp.quantity }}" required>
                     <span class="ms-2 quantity-max-label">/(0)</span>
                   </div>
                 </td>
+                <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" value="{{ sp.po_value }}" readonly required></td>
                 <td><input type="text" name="po_number[]" class="form-control" value="{{ sp.po_number }}" required></td>
+                <td><input type="date" name="po_date[]" class="form-control" value="{{ sp.po_date|date:'Y-m-d' }}" required></td>
                 <td><input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" required></td>
+                <td>
+                  <input type="file" name="po_attachment_{{ forloop.counter0 }}" class="form-control" style="min-width: 200px;">
+                  {% if sp.po_attachment %}
+                  <small class="text-muted d-block mt-1">Current: {{ sp.po_attachment.name }}</small>
+                  {% endif %}
+                </td>
                 <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
                 </td>
@@ -95,7 +97,7 @@
                   <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
                     <option value="">Select</option>
                     {% for p in products %}
-                    <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}">{{ p.product_name }}</option>
+                    <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" data-rate="{{ p.rate_per_unit }}">{{ p.product_name }}</option>
                     {% endfor %}
                   </select>
                 </td>
@@ -113,17 +115,18 @@
                             data-bs-target="#supplierModal">+</button>
                   </div>
                 </td>
-                <td><input type="number" step="0.01" name="po_value[]" class="form-control" style="min-width: 180px;" required></td>
-                <td><input type="date" name="po_date[]" class="form-control" required></td>
-                <td><input type="file" name="po_attachment_0" class="form-control" style="min-width: 200px;" required></td>
+                <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" required></td>
                 <td>
                   <div class="d-flex align-items-center">
                     <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" required>
                     <span class="ms-2 quantity-max-label">/(0)</span>
                   </div>
                 </td>
+                <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
                 <td><input type="text" name="po_number[]" class="form-control" required></td>
+                <td><input type="date" name="po_date[]" class="form-control" required></td>
                 <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
+                <td><input type="file" name="po_attachment_0" class="form-control" style="min-width: 200px;" required></td>
                 <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
                 </td>
@@ -144,12 +147,40 @@
       <div>
         <button type="submit" class="btn btn-success">{% if is_edit %}Update{% else %}Submit{% endif %}</button>
         <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary">Cancel</a>
+        <a id="generatePoBtn"
+           href="{% if supplier_orders %}{% url 'generate_supplier_po' dpr.id %}{% else %}javascript:void(0){% endif %}"
+           target="_blank"
+           class="btn btn-primary ms-2 {% if not supplier_orders %}disabled{% endif %}"
+           {% if not supplier_orders %}style="pointer-events: none; opacity: 0.65;"{% endif %}
+           title="Download Purchase Order PDF">
+          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
+        </a>
+        <a id="sendMailBtn"
+           href="javascript:void(0)"
+           class="btn btn-info ms-2 disabled"
+           style="pointer-events: none; opacity: 0.65;"
+           title="Send Purchase Order PDF by email to supplier">
+          <i class="bi bi-envelope me-1"></i> Send Mail
+        </a>
+        {% if supplier_orders and missing_email_suppliers %}
+        <div class="text-danger small mt-2">
+          * Send Mail is disabled because the following suppliers do not have an Email ID configured: <strong>{{ missing_email_suppliers|join:", " }}</strong>. 
+          Please add their email address in <a href="{% url 'supplier_details' %}">Masters -> Suppliers</a>.
+        </div>
+        {% endif %}
       </div>
     </form>
   </div>
 </div>
 
+{{ rfq_rate_map|json_script:'rfq-rate-map' }}
+{{ product_default_rate_map|json_script:'product-default-rate-map' }}
+{{ po_data_list|json_script:"po-email-data" }}
 <script>
+const rfqRateMap = JSON.parse(document.getElementById('rfq-rate-map').textContent);
+const productDefaultRateMap = JSON.parse(document.getElementById('product-default-rate-map').textContent);
+const poEmailData = JSON.parse(document.getElementById('po-email-data').textContent || '[]');
+
 function getNextRowIndex() {
   return document.querySelectorAll('#supplierTable tbody tr').length;
 }
@@ -166,7 +197,7 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
       <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
         <option value="">Select</option>
         {% for p in products %}
-        <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}">{{ p.product_name }}</option>
+        <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" data-rate="{{ p.rate_per_unit }}">{{ p.product_name }}</option>
         {% endfor %}
       </select>
     </td>
@@ -184,23 +215,25 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
                 data-bs-target="#supplierModal">+</button>
       </div>
     </td>
-    <td><input type="number" step="0.01" name="po_value[]" class="form-control" style="min-width: 180px;" required></td>
-    <td><input type="date" name="po_date[]" class="form-control" required></td>
-    <td><input type="file" name="po_attachment_${rowIndex}" class="form-control" style="min-width: 200px;" required></td>
+    <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" required></td>
     <td>
       <div class="d-flex align-items-center">
         <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" required>
         <span class="ms-2 quantity-max-label">/(0)</span>
       </div>
     </td>
+    <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
     <td><input type="text" name="po_number[]" class="form-control" required></td>
+    <td><input type="date" name="po_date[]" class="form-control" required></td>
     <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
+    <td><input type="file" name="po_attachment_${rowIndex}" class="form-control" style="min-width: 200px;" required></td>
     <td>
       <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
     </td>
   `;
   tbody.appendChild(row);
   updateQuantityLimits();
+  updateSupplierRowValues();
 });
 
 let activeSupplierRow = null;
@@ -208,6 +241,8 @@ let activeSupplierRow = null;
 document.addEventListener('click', function (e) {
   if (e.target.classList.contains('removeRow')) {
     e.target.closest('tr').remove();
+    renumberSupplierRows();
+    updateSupplierRowValues();
     updateOverallSupplierQty();
   }
   if (e.target.classList.contains('addSupplierBtn')) {
@@ -222,6 +257,7 @@ document.addEventListener('click', function (e) {
 
   const supplierName = document.getElementById('supplierName').value.trim();
   const supplierPhone = document.getElementById('supplierPhone').value.trim();
+  const supplierEmail = document.getElementById('supplierEmail').value.trim();
   const supplierAddress = document.getElementById('supplierAddress').value.trim();
   const supplierNameError = document.getElementById('supplierNameError');
   const supplierPhoneError = document.getElementById('supplierPhoneError');
@@ -247,6 +283,7 @@ document.addEventListener('click', function (e) {
     body: new URLSearchParams({
       supplier_name: supplierName,
       phone_number: supplierPhone,
+      email: supplierEmail,
       address: supplierAddress
     })
   })
@@ -274,6 +311,7 @@ document.addEventListener('click', function (e) {
 
       document.getElementById('supplierName').value = '';
       document.getElementById('supplierPhone').value = '';
+      document.getElementById('supplierEmail').value = '';
       document.getElementById('supplierAddress').value = '';
       activeSupplierRow = null;
     } else {
@@ -287,6 +325,15 @@ document.addEventListener('click', function (e) {
   });
 });
 
+function renumberSupplierRows() {
+  document.querySelectorAll('#supplierTable tbody tr').forEach((row, index) => {
+    const serialCell = row.cells[0];
+    if (serialCell) {
+      serialCell.textContent = index + 1;
+    }
+  });
+}
+
 const supplierPhoneInput = document.getElementById('supplierPhone');
 if (supplierPhoneInput) {
   supplierPhoneInput.addEventListener('input', function (e) {
@@ -296,19 +343,138 @@ if (supplierPhoneInput) {
 
 document.addEventListener('change', function (e) {
   const productSelect = e.target.closest('.product-select');
-  if (!productSelect) {
+  const supplierSelect = e.target.closest('.supplier-dropdown');
+  if (!productSelect && !supplierSelect) {
     return;
   }
+
+  const row = e.target.closest('tr');
+  
+  if (productSelect) {
+    const selectedOption = productSelect.options[productSelect.selectedIndex];
+    if (selectedOption && selectedOption.value) {
+      // 1. Autofill Quantity (remaining / max qty)
+      const maxQty = parseInt(selectedOption.dataset.maxQty || '0', 10);
+      
+      const usedByProduct = {};
+      document.querySelectorAll('#supplierTable tbody tr').forEach(r => {
+        const pSel = r.querySelector('.product-select');
+        const qIn = r.querySelector('.quantity-input');
+        if (pSel && pSel.value && qIn && r !== row) {
+          const qty = parseInt(qIn.value || '0', 10);
+          usedByProduct[pSel.value] = (usedByProduct[pSel.value] || 0) + qty;
+        }
+      });
+      const remaining = Math.max(0, maxQty - (usedByProduct[productSelect.value] || 0));
+      
+      const quantityInput = row.querySelector('.quantity-input');
+      if (quantityInput && !quantityInput.value) {
+        quantityInput.value = remaining;
+      }
+
+      // 2. Autofill Rate (first try RFQ, fallback to default rate)
+      updateRateFromRfq(row);
+      const rateInput = row.querySelector('.rate-input');
+      if (rateInput && (!rateInput.value || rateInput.value === '0.00' || rateInput.value === '0' || rateInput.value === '')) {
+        const defaultRate = selectedOption.dataset.rate || '0.00';
+        rateInput.value = Number(defaultRate).toFixed(2);
+      }
+
+      // 3. Autofill PO Number
+      const poNumInput = row.querySelector('input[name="po_number[]"]');
+      if (poNumInput && !poNumInput.value) {
+        poNumInput.value = '{{ dpr.po_number|default:"" }}';
+      }
+
+      // 4. Autofill PO Date
+      const poDateInput = row.querySelector('input[name="po_date[]"]');
+      if (poDateInput && !poDateInput.value) {
+        poDateInput.value = '{{ dpr.po_date|date:"Y-m-d" }}';
+      }
+
+      // 5. Autofill Validity (1 day before customer PO validity if exists)
+      const poValInput = row.querySelector('.po-validity-input');
+      if (poValInput && !poValInput.value) {
+        const customerPoValidity = '{{ dpr.po_validity|date:"Y-m-d" }}';
+        if (customerPoValidity) {
+          const date = new Date(customerPoValidity);
+          date.setDate(date.getDate() - 1);
+          const yyyy = date.getFullYear();
+          const mm = String(date.getMonth() + 1).padStart(2, '0');
+          const dd = String(date.getDate()).padStart(2, '0');
+          poValInput.value = `${yyyy}-${mm}-${dd}`;
+        }
+      }
+    }
+  } else {
+    updateRateFromRfq(row);
+  }
+
   updateQuantityLimits();
+  updateSupplierRowValues();
   updateOverallSupplierQty();
 });
 
 document.addEventListener('input', function (e) {
+  if (
+    e.target.classList.contains('quantity-input')
+    || e.target.classList.contains('rate-input')
+  ) {
+    updateSupplierRowValues();
+  }
+
   if (e.target.classList.contains('quantity-input')) {
     updateQuantityLimits();
     updateOverallSupplierQty();
   }
 });
+
+function updateRateFromRfq(row) {
+  if (!row) return;
+
+  const productSelect = row.querySelector('.product-select');
+  const supplierSelect = row.querySelector('.supplier-dropdown');
+  const rateInput = row.querySelector('.rate-input');
+  if (!productSelect || !supplierSelect || !rateInput) return;
+
+  const productId = String(productSelect.value);
+  if (!productId) return;
+
+  const supplierId = String(supplierSelect.value);
+
+  // First try: supplier-specific rate from RFQ supplier prices
+  if (supplierId) {
+    const productRates = rfqRateMap[productId] || {};
+    const rfqRate = productRates[supplierId];
+    if (rfqRate !== undefined && rfqRate !== null && rfqRate !== '') {
+      rateInput.value = Number(rfqRate).toFixed(2);
+      return;
+    }
+  }
+
+  // Second try: default rate from RFQ product
+  const defaultRate = productDefaultRateMap[productId];
+  if (defaultRate !== undefined && defaultRate !== null && defaultRate !== '') {
+    rateInput.value = Number(defaultRate).toFixed(2);
+  }
+}
+
+function updateSupplierRowValues() {
+  const rows = document.querySelectorAll('#supplierTable tbody tr');
+
+  rows.forEach(row => {
+    const qtyInput = row.querySelector('.quantity-input');
+    const rateInput = row.querySelector('.rate-input');
+    const valueInput = row.querySelector('.po-value-input');
+    if (!qtyInput || !rateInput || !valueInput) {
+      return;
+    }
+
+    const quantity = Number(qtyInput.value) || 0;
+    const rate = Number(rateInput.value) || 0;
+    valueInput.value = (quantity * rate).toFixed(2);
+  });
+}
 
 function updateQuantityLimits() {
   const rows = document.querySelectorAll('#supplierTable tbody tr');
@@ -330,8 +496,8 @@ function updateQuantityLimits() {
 
     const selectedOption = productSelect.options[productSelect.selectedIndex];
     const maxQty = selectedOption
-      ? parseInt(selectedOption.dataset.maxQty || selectedOption.getAttribute('data-max-qty') || '0', 10)
-      : 0;
+        ? parseInt(selectedOption.dataset.maxQty || selectedOption.getAttribute('data-max-qty') || '0', 10)
+        : 0;
     const currentQty = parseInt(quantityInput.value || '0', 10);
     const totalUsed = productSelect.value ? usedByProduct[productSelect.value] || 0 : 0;
     const remaining = Math.max(0, maxQty - (totalUsed - currentQty));
@@ -359,6 +525,8 @@ function updateOverallSupplierQty() {
 }
 
 document.getElementById('supplierOrderForm').addEventListener('submit', function (e) {
+  updateSupplierRowValues();
+
   const rows = document.querySelectorAll('#supplierTable tbody tr');
   for (const row of rows) {
     const productSelect = row.querySelector('.product-select');
@@ -399,8 +567,86 @@ document.getElementById('supplierOrderForm').addEventListener('submit', function
   }
 });
 
+document.querySelectorAll('#supplierTable tbody tr').forEach(updateRateFromRfq);
 updateQuantityLimits();
+updateSupplierRowValues();
 updateOverallSupplierQty();
+
+// Enable Send Mail button only after Generate PO has been clicked
+const generatePoBtn = document.getElementById('generatePoBtn');
+const sendMailBtn = document.getElementById('sendMailBtn');
+if (generatePoBtn && sendMailBtn) {
+  const hasOrders = {% if supplier_orders %}true{% else %}false{% endif %};
+  const hasEmails = {% if has_supplier_emails %}true{% else %}false{% endif %};
+  
+  function enableSendMailBtn() {
+    sendMailBtn.classList.remove('disabled');
+    sendMailBtn.style.pointerEvents = 'auto';
+    sendMailBtn.style.opacity = '1';
+  }
+
+  // Also handle visual states on page load if emails are missing
+  if (hasOrders && hasEmails) {
+    generatePoBtn.addEventListener('click', function() {
+      enableSendMailBtn();
+    });
+  }
+
+  sendMailBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    if (sendMailBtn.classList.contains('disabled')) return;
+    openSupplierPoEmailModal();
+  });
+}
+
+function openSupplierPoEmailModal() {
+  if (!poEmailData || poEmailData.length === 0) return;
+
+  const selectContainer = document.getElementById('poSelectGroupContainer');
+  const selectElement = document.getElementById('supplierPoSelect');
+  
+  if (poEmailData.length > 1) {
+    selectContainer.style.display = 'block';
+    selectElement.innerHTML = '';
+    poEmailData.forEach((po, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.textContent = `${po.supplier_name} (${po.po_number})`;
+      selectElement.appendChild(opt);
+    });
+
+    selectElement.onchange = function() {
+      populateEmailModalFields(poEmailData[selectElement.value]);
+    };
+    
+    populateEmailModalFields(poEmailData[0]);
+  } else {
+    selectContainer.style.display = 'none';
+    populateEmailModalFields(poEmailData[0]);
+  }
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierPoEmailModal')).show();
+}
+
+function populateEmailModalFields(po) {
+  document.getElementById('emailSupplierId').value = po.supplier_id;
+  document.getElementById('emailPoNumber').value = po.po_number;
+  document.getElementById('supplierEmailField').value = po.supplier_email || '';
+  document.getElementById('supplierEmailSubject').value = po.default_subject || '';
+  document.getElementById('supplierEmailBody').value = po.default_body || '';
+  
+  const note = document.getElementById('supplierAutoAttachmentNote');
+  note.textContent = `PO PDF for ${po.supplier_name} (${po.po_number}) will be attached automatically.`;
+}
+
+document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click', function() {
+  const supplierId = document.getElementById('emailSupplierId').value;
+  const poNumber = document.getElementById('emailPoNumber').value;
+  if (!supplierId || !poNumber) return;
+
+  const dprId = "{{ dpr.id }}";
+  window.open(`/dpr/${dprId}/generate-po/?supplier_id=${supplierId}&po_number=${poNumber}`, '_blank');
+});
 </script>
 
 <!-- SUPPLIER MODAL -->
@@ -427,6 +673,10 @@ updateOverallSupplierQty();
           </div>
         </div>
         <div class="mb-3">
+          <label>Email Address</label>
+          <input type="email" id="supplierEmail" class="form-control" placeholder="supplier@example.com">
+        </div>
+        <div class="mb-3">
           <label>Address</label>
           <textarea id="supplierAddress" class="form-control"></textarea>
         </div>
@@ -439,5 +689,61 @@ updateOverallSupplierQty();
   </div>
 </div>
 
-{% endblock %}
+<!-- SUPPLIER PO EMAIL MODAL -->
+<div class="modal fade" id="supplierPoEmailModal" tabindex="-1" aria-labelledby="supplierPoEmailModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form method="post" enctype="multipart/form-data" id="supplierPoEmailForm" action="{% url 'send_supplier_po_email' dpr.id %}">
+        {% csrf_token %}
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title" id="supplierPoEmailModalLabel"><i class="bi bi-envelope me-2"></i>Send Supplier PO Email</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12" id="poSelectGroupContainer" style="display:none;">
+              <label class="form-label fw-bold">Select PO to Send</label>
+              <select id="supplierPoSelect" class="form-select"></select>
+            </div>
+            
+            <input type="hidden" name="supplier_id" id="emailSupplierId">
+            <input type="hidden" name="po_number" id="emailPoNumber">
+            
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Supplier Email(s) *</label>
+              <input type="text" name="supplier_email" id="supplierEmailField" class="form-control" placeholder="supplier@example.com" required>
+              <div class="form-text">Default supplier email is filled automatically. Add more emails separated by comma or semicolon.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Subject *</label>
+              <input type="text" name="email_subject" id="supplierEmailSubject" class="form-control" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-bold">Email Body *</label>
+              <textarea name="email_body" id="supplierEmailBody" class="form-control" rows="8" required></textarea>
+            </div>
+            <div class="col-12">
+              <div class="alert alert-info py-2 mb-0" id="supplierAutoAttachmentNote"></div>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-bold">Attachment</label>
+              <input type="file" name="email_attachment" id="supplierEmailAttachment" class="form-control">
+              <div class="form-text">Use this if you want to attach any supporting file manually.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-outline-primary" id="previewSupplierAttachmentBtn">
+            <i class="bi bi-eye me-1"></i>Preview Attachment
+          </button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-send me-1"></i>Send Email
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
+{% endblock %}

@@ -38,6 +38,9 @@
                 <li class="nav-item">
                     <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'supplier_po_product_details' %}active{% endif %}" href="{% url 'supplier_po_product_details' %}">Supplier PO</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'rfq_details' %}active{% endif %}" href="{% url 'rfq_details' %}">RFQ</a>
+                </li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle dpr-nav-link {% if request.resolver_match.url_name == 'customer_details' or request.resolver_match.url_name == 'supplier_details' %}active{% endif %}"
                        href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -69,3 +72,4 @@
 {% block extra_js %}{% endblock %}
 </body>
 </html>
+

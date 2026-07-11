@@ -118,6 +118,7 @@ body.dpr-app {
 
 .dpr-kpi-icon.blue { background: #dbeafe; color: var(--dpr-blue); }
 .dpr-kpi-icon.red { background: #fee2e2; color: #dc2626; }
+.dpr-kpi-icon.green { background: #dcfce7; color: #16a34a; }
 .dpr-kpi-icon.teal { background: #ccfbf1; color: #0d9488; }
 .dpr-kpi-icon.amber { background: #fef3c7; color: #d97706; }
 .dpr-kpi-icon.purple { background: #e9d5ff; color: #7e22ce; }

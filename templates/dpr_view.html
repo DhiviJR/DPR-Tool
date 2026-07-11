@@ -28,14 +28,14 @@
             </div>
             <div class="col-lg-3">
                 <select id="dprCaseFilter" class="form-select">
-                    <option value="">All Cases</option>
-                    <option value="completed">Completed</option>
-                    <option value="qty_matched">Supplier Qty Matched</option>
-                    <option value="mail_alert">Mail Confirmation Alert</option>
-                    <option value="supplier_order_pending">Supplier Order Pending</option>
-                    <option value="due_soon">Due Soon</option>
-                    <option value="after_due">After Due</option>
-                    <option value="normal">Normal</option>
+                    <option value="" {% if not case_filter %}selected{% endif %}>All Cases</option>
+                    <option value="completed" {% if case_filter == 'completed' %}selected{% endif %}>Completed</option>
+                    <option value="qty_matched" {% if case_filter == 'qty_matched' %}selected{% endif %}>Supplier Qty Matched</option>
+                    <option value="mail_alert" {% if case_filter == 'mail_alert' %}selected{% endif %}>Mail Confirmation Alert</option>
+                    <option value="supplier_order_pending" {% if case_filter == 'supplier_order_pending' %}selected{% endif %}>Supplier Order Pending</option>
+                    <option value="due_soon" {% if case_filter == 'due_soon' %}selected{% endif %}>Due Soon</option>
+                    <option value="after_due" {% if case_filter == 'after_due' %}selected{% endif %}>After Due</option>
+                    <option value="normal" {% if case_filter == 'normal' %}selected{% endif %}>Normal</option>
                 </select>
             </div>
             <div class="col-lg-4 text-lg-end">
@@ -62,7 +62,7 @@
                 </thead>
                 <tbody>
                     {% for dpr in dprs %}
-                    <tr data-dpr-id="{{ dpr.id }}" data-filter-state="{{ dpr.filter_state }}" class="{{ dpr.row_class }}">
+                    <tr data-dpr-id="{{ dpr.id }}" data-filter-state="{{ dpr.filter_state }}" data-filter-states="{{ dpr.filter_states|join:' ' }}" class="{{ dpr.row_class }}">
                         <td data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
                         <td data-sort-value="{{ dpr.serial_number|default:''|lower }}">{{ dpr.serial_number }}</td>
                         <td data-sort-value="{{ dpr.customer.customer_name|default:''|lower }}">{{ dpr.customer.customer_name }}</td>
@@ -112,7 +112,7 @@
     </div>
 </div>
 
-<script src="{% static 'js/po-table-tools.js' %}?v=2"></script>
+<script src="{% static 'js/po-table-tools.js' %}?v=3"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     initPoTableTools({
@@ -121,7 +121,10 @@ document.addEventListener('DOMContentLoaded', function () {
         rowCountId: '#dprRowCount',
         filterSelectId: '#dprCaseFilter',
         filterAttribute: 'filterState',
-        rowSelector: 'tr[data-dpr-id]'
+        rowSelector: 'tr[data-dpr-id]',
+        filterMatcher: function (row, filterValue) {
+            return (row.dataset.filterStates || '').split(' ').includes(filterValue);
+        }
     });
 });
 </script>
@@ -156,24 +159,6 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>
 
 <script>
-function applyDprFilter() {
-    const filterValue = document.getElementById('dprCaseFilter').value;
-    const rows = document.querySelectorAll('tr[data-dpr-id]');
-    let visibleCount = 0;
-
-    rows.forEach(row => {
-        const shouldShow = !filterValue || row.dataset.filterState === filterValue;
-        row.style.display = shouldShow ? '' : 'none';
-        if (shouldShow) visibleCount += 1;
-    });
-
-    document.getElementById('dprRowCount').textContent =
-        `Showing ${visibleCount} of ${rows.length} records`;
-}
-
-document.getElementById('dprCaseFilter').addEventListener('change', applyDprFilter);
-applyDprFilter();
-
 document.addEventListener('click', function (e) {
     const row = e.target.closest('tr[data-dpr-id]');
     if (!row) return;
