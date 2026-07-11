@@ -438,24 +438,7 @@ function postSupplierInwardUpdate(row, buttonElement, receivedQuantity, okQuanti
             alert(data.message || 'Unable to update status');
             return;
         }
-        const status = data.inward_status || '';
-        refreshSupplierInwardRow(
-            row,
-            status,
-            data.quantity_received || 0,
-            data.quantity_not_ok || 0,
-            data.not_ok_reason || '',
-            data.quantity_ok || 0
-        );
-
-        ['supplierInwardModal', 'supplierRemainingInwardModal', 'supplierReworkModal'].forEach(id => {
-            const modalEl = document.getElementById(id);
-            if (modalEl) {
-                const inst = bootstrap.Modal.getInstance(modalEl);
-                if (inst) inst.hide();
-            }
-        });
-        pendingSupplierInward = null;
+        window.location.reload();
     });
 }
 
@@ -505,6 +488,10 @@ document.addEventListener('click', function (e) {
     };
 
     if (receivedQty > 0 && status !== 'closed' && status !== 'cancelled') {
+        const reworkBtn = document.getElementById('actionReworkBtn');
+        if (reworkBtn) {
+            reworkBtn.disabled = (notOkQty <= 0);
+        }
         new bootstrap.Modal(document.getElementById('supplierInwardActionModal')).show();
     } else {
         showFirstTimeInwardModal();
@@ -700,7 +687,7 @@ document.addEventListener('click', function (e) {
             alert(data.message || 'Unable to cancel order');
             return;
         }
-        refreshSupplierInwardRow(row, 'cancelled', 0, orderedQty, '');
+        window.location.reload();
     });
 });
 

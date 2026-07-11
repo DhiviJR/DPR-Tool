@@ -118,9 +118,116 @@ def _format_money(value):
 
 
 def _get_mes_quote_no(rfq):
-    year = timezone.localdate().year
+    year = rfq.mail_date.year if rfq.mail_date else timezone.localdate().year
     quote_seq = RFQ.objects.filter(id__lte=rfq.id).count()
-    return f"MES_{str(year)[-2:]}-{str(year + 1)[-2:]}_Q{quote_seq:04d}"
+    return f"MES_Q{quote_seq:04d}/{str(year)[-2:]}-{str(year + 1)[-2:]}"
+
+
+def _get_mes_enquiry_no(rfq):
+    if not rfq.rfq_no:
+        return ""
+    parts = rfq.rfq_no.split('-')
+    if len(parts) == 3 and parts[0] == 'RFQ':
+        try:
+            year = int(parts[1])
+            seq = parts[2]
+            return f"MES_RFQ{seq}/{str(year)[-2:]}-{str(year + 1)[-2:]}"
+        except ValueError:
+            pass
+    return rfq.rfq_no
+
+
+def _get_hsn_code(product):
+    # Try looking up by product_type first
+    prod_type = (product.product_type or '').lower().strip()
+    
+    type_hsn_map = {
+        'apg steel': '90173029',
+        'arg steel': '90173029',
+        'apg carbide': '90173029',
+        'arg carbide': '90173029',
+        'sapg': '90173029',
+        'sarg': '90173029',
+        'multi-gauge': '90318000',
+        'unit std air': '90173029',
+        'unit spc air': '90173029',
+        'unit std lvdt': '90318000',
+        'unit spc lvdt': '90318000',
+        'amc': '998719',
+        'service': '998349',
+        'spares': '90179000',
+        'tpg': '90173021',
+        'trg': '90173022',
+        'stpg': '90173029',
+        'strg': '90173029',
+        'ppg': '90173021',
+        'prg': '90173022',
+        'sppg': '90173029',
+        'sprg': '90173029',
+    }
+    
+    if prod_type in type_hsn_map:
+        return type_hsn_map[prod_type]
+
+    # Fallback to name-based classification if product_type is not set
+    name = (product.product_name or '').lower()
+    if 'calibration' in name:
+        return '998349'
+    if 'jobwork' in name or 'labour charges' in name or 'service category' in name:
+        return '998898'
+    if 'plug gauge' in name:
+        if 'special' in name or 'spl' in name or 'plain' not in name:
+            if 'special' in name or 'spl' in name:
+                return '90173029'
+        return '90173021'
+    if 'ring gauge' in name:
+        if 'special' in name or 'spl' in name or 'plain' not in name:
+            if 'special' in name or 'spl' in name:
+                return '90173029'
+        return '90173022'
+    if 'slip gauge' in name:
+        return '90173023'
+    if 'snap gauge' in name:
+        return '90173029'
+    if 'measuring pin' in name:
+        return '90173029'
+    if 'dial snap' in name:
+        return '90173029'
+    if 'shallow gauge' in name:
+        return '90173029'
+    if 'three wire' in name:
+        return '90173029'
+    if 'height piece' in name:
+        return '90173029'
+    if 'width gauge' in name:
+        return '90173029'
+    if 'od setting' in name:
+        return '90173029'
+    if 'sine bar' in name:
+        return '90178090'
+    if 'sine centre' in name or 'sine center' in name:
+        return '90178090'
+    if 'air gauge unit' in name:
+        return '90173029'
+    if 'air plug' in name:
+        return '90173029'
+    if 'air ring' in name:
+        return '90173029'
+    if 'comparator stand' in name:
+        return '90178090'
+    if 'spl.gauge' in name or 'spl gauge' in name or 'special gauge' in name:
+        return '90173029'
+    if 'parts & accessories' in name or 'part & accessory' in name or 'accessory' in name:
+        return '90179000'
+    if 'scrap' in name:
+        return '72044100'
+    if 'other tech' in name or 'scientific' in name:
+        return '998349'
+    if 'service' in name:
+        return '998349'
+    if 'gauge' in name:
+        return '90173029'
+    return '90318000'
 
 
 
@@ -245,6 +352,8 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         Table,
         TableStyle,
     )
+    from reportlab.pdfgen import canvas
+    from datetime import timedelta
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -252,8 +361,8 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         pagesize=A4,
         rightMargin=14 * mm,
         leftMargin=14 * mm,
-        topMargin=10 * mm,
-        bottomMargin=12 * mm,
+        topMargin=46 * mm,  # Increased top margin to clear canvas headers
+        bottomMargin=15 * mm,
     )
     styles = getSampleStyleSheet()
     normal = ParagraphStyle(
@@ -270,13 +379,29 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         fontSize=7.5,
         leading=9,
     )
-    header_title = ParagraphStyle(
-        'MESHeaderTitle',
+    title_style = ParagraphStyle(
+        'MESTitle',
         parent=normal,
         fontName='Helvetica-Bold',
-        fontSize=13,
-        leading=15,
+        fontSize=12,
+        leading=14,
         alignment=TA_CENTER,
+    )
+    investment_title_style = ParagraphStyle(
+        'MESInvestmentTitle',
+        parent=normal,
+        fontName='Helvetica-Bold',
+        fontSize=11,
+        leading=13,
+        alignment=TA_CENTER,
+    )
+    terms_title_style = ParagraphStyle(
+        'MESTermsTitle',
+        parent=normal,
+        fontName='Helvetica-Bold',
+        fontSize=11,
+        leading=13,
+        alignment=TA_LEFT,
     )
     centered = ParagraphStyle(
         'MESCentered',
@@ -289,111 +414,159 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         alignment=TA_RIGHT,
     )
 
+    quote_no = quote_no or _get_mes_quote_no(rfq)
+    enquiry_no = _get_mes_enquiry_no(rfq)
+    quote_date = timezone.localdate().strftime('%d-%m-%Y')
+
+    class NumberedCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.pages = []
+
+        def showPage(self):
+            self.pages.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            page_count = len(self.pages)
+            for page in self.pages:
+                self.__dict__.update(page)
+                
+                # Draw Header
+                self.saveState()
+                # Draw Logo Box
+                self.setFillColor(colors.black)
+                self.rect(14 * mm, self._pagesize[1] - 32 * mm, 20 * mm, 20 * mm, fill=True, stroke=False)
+                
+                # Draw Logo Text "MES"
+                self.setFillColor(colors.white)
+                self.setFont("Helvetica-Bold", 24)
+                self.drawCentredString(14 * mm + 10 * mm, self._pagesize[1] - 32 * mm + 6 * mm, "MES")
+                
+                # Draw Company Info
+                self.setFillColor(colors.black)
+                self.setFont("Helvetica-Bold", 13)
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 15 * mm, "METROLOGY ENGINEERING SOLUTIONS")
+                
+                self.setFont("Helvetica", 8)
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 19 * mm, "L-732/1156, 1st Floor, Rayakottai Hudco,42nd Cross,")
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 22 * mm, "Phase 10, Hosur, Krishnagiri, Tamil Nadu, India-635109")
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 25 * mm, "Phone : +91-965-577-8807 / +91-965-577-8871")
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 28 * mm, "Email-ID : info@mesinstruments.co.in | Web : www.mesinstruments.co.in")
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 31 * mm, "GST : 33ABKFM1033E1ZS | PAN : ABKFM1033E")
+                
+                # Draw thick black line under header
+                self.setLineWidth(1)
+                self.line(14 * mm, self._pagesize[1] - 34 * mm, self._pagesize[0] - 14 * mm, self._pagesize[1] - 34 * mm)
+                
+                # Draw Quote No and Date under line
+                self.setFillColor(colors.black)
+                self.setFont("Helvetica", 9)
+                self.drawString(14 * mm, self._pagesize[1] - 39 * mm, f"Quote No : {quote_no}")
+                self.drawRightString(self._pagesize[0] - 14 * mm, self._pagesize[1] - 39 * mm, f"Date : {quote_date}")
+                
+                # Draw a thin separator line under Quote No and Date
+                self.setLineWidth(0.5)
+                self.line(14 * mm, self._pagesize[1] - 41 * mm, self._pagesize[0] - 14 * mm, self._pagesize[1] - 41 * mm)
+                self.restoreState()
+
+                # Draw footer page number (Page X of Y)
+                self.saveState()
+                self.setFont("Helvetica", 9)
+                text = f"Page {self._pageNumber} of {page_count}"
+                self.drawRightString(self._pagesize[0] - 14 * mm, 12 * mm, text)
+                self.restoreState()
+                
+                super().showPage()
+            super().save()
+
     story = []
     def pdf_text(value):
         return xml_escape(str(value or ''))
 
-    story.append(Paragraph('METROLOGY ENGINEERING SOLUTIONS', header_title))
-    story.append(Paragraph(
-        'No. 684/9, Sri Sai Jayalakshmi Complex, Maruthi, Nagar, 2nd Cross,<br/>'
-        'Dharga Opposite to Sathiya Mess, Hosur, Krishnagiri, Tamil Nadu - 635109',
-        centered
-    ))
-    story.append(Paragraph(
-        'Phone: +91-965-577-8807 / +91-965-577-8871',
-        centered
-    ))
-    story.append(Paragraph(
-        'Email-ID: info@mesinstruments.co.in | Web: www.mesinstruments.co.in',
-        centered
-    ))
-    story.append(Paragraph(
-        'GST: 33ABKFM1033E1ZS | PAN: ABKFM1033E',
-        centered
-    ))
-    story.append(Spacer(1, 8))
-
-    quote_no = quote_no or _get_mes_quote_no(rfq)
-    quote_date = timezone.localdate().strftime('%d-%m-%Y')
-    enquiry_date = rfq.mail_date.strftime('%d-%m-%Y') if rfq.mail_date else '-'
     customer = rfq.customer
     customer_address = customer.address or ''
     customer_phone = customer.phone_number or '-'
 
-    story.append(Table(
-        [[
-            Paragraph(f'<b>Quote No:</b> {quote_no}', normal),
-            Paragraph(f'<b>Date:</b> {quote_date}', right),
-        ]],
-        colWidths=[90 * mm, 76 * mm],
-        style=TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LINEABOVE', (0, 0), (-1, 0), 0.5, colors.black),
-        ])
-    ))
-    story.append(Paragraph('<b>Quotation (Confidential)</b>', centered))
+    story.append(Paragraph('<b><u>Quotation (Confidential)</u></b>', title_style))
     story.append(Spacer(1, 4))
-    story.append(Paragraph(f'<b>Quote No:</b> {quote_no}', normal))
-    story.append(Paragraph(f'<b>Enquiry No:</b> {enquiry_date}', normal))
+    story.append(Paragraph(f'Quote No : {quote_no}', normal))
+    story.append(Paragraph(f'Enquiry No : {enquiry_no}', normal))
     story.append(Spacer(1, 4))
     story.append(Paragraph('<b>To:</b>', normal))
     story.append(Paragraph(f'M/s. {pdf_text(customer.customer_name)}', normal))
     if customer_address:
         story.append(Paragraph(pdf_text(customer_address).replace('\n', '<br/>'), normal))
     if customer.region:
-        story.append(Paragraph(pdf_text(customer.region), normal))
-    story.append(Paragraph(f'<b>Phone:</b> {pdf_text(customer_phone)}', normal))
-    story.append(Spacer(1, 5))
+        if customer.region.lower() not in customer_address.lower():
+            story.append(Paragraph(pdf_text(customer.region), normal))
+            
+    # Check for GSTIN in address lines
+    gstin_found = False
+    for line in customer_address.split('\n'):
+        if 'gst' in line.lower():
+            gstin_found = True
+            break
+    if not gstin_found:
+        story.append(Paragraph('GSTIN : -', normal))
+        
+    story.append(Paragraph('Kind Attension : -', normal))
+    story.append(Paragraph(f'Phone :{pdf_text(customer_phone)}', normal))
+    if customer.email:
+        story.append(Paragraph(f'Email-ID :{pdf_text(customer.email)}', normal))
+
+    story.append(Spacer(1, 10))
     story.append(Paragraph('Dear Sir,', normal))
     story.append(Paragraph(
-        'As per your enquiry, we are glad to submit our best offer. Assuring of our best and prompt services at all times.',
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;As per your enquiry, we are glad to submit our best offer. Assuring of our best and prompt services at all times.',
         normal
     ))
+    story.append(Spacer(1, 10))
+    story.append(Paragraph('<b><u>Your Investment</u></b>', investment_title_style))
     story.append(Spacer(1, 6))
-    story.append(Paragraph('<b>Your Investment</b>', centered))
-    story.append(Spacer(1, 4))
 
     table_data = [[
-        Paragraph('<b>SI.<br/>NO</b>', centered),
-        Paragraph('<b>Part code</b>', centered),
+        Paragraph('<b>S.No</b>', centered),
+        Paragraph('<b>Part No</b>', centered),
         Paragraph('<b>Description</b>', centered),
         Paragraph('<b>HSN/SAC</b>', centered),
-        Paragraph('<b>QTY</b>', centered),
+        Paragraph('<b>Quantity</b>', centered),
         Paragraph('<b>Unit</b>', centered),
-        Paragraph('<b>Rate<br/>( INR )</b>', centered),
-        Paragraph('<b>Total<br/>( INR )</b>', centered),
+        Paragraph('<b>Rate</b>', centered),
+        Paragraph('<b>Total(Rs.)</b>', centered),
     ]]
 
     subtotal = Decimal('0.00')
     for index, product in enumerate(products, start=1):
         line_total = Decimal(product.value or 0).quantize(Decimal('0.01'))
         subtotal += line_total
-        description_lines = [pdf_text(product.product_name)]
-        if product.product_type:
-            description_lines.append(f'Product Type: {pdf_text(product.product_type)}')
+        description_lines = [f'<b>{pdf_text(product.product_name)}</b>']
         selected_supplier_name = getattr(product, 'selected_supplier_name', '')
         if selected_supplier_name:
             description_lines.append(f'Supplier: {pdf_text(selected_supplier_name)}')
         if product.remarks:
-            description_lines.append(pdf_text(product.remarks))
+            description_lines.append(pdf_text(product.remarks).replace('\n', '<br/>'))
+            
+        hsn_code = _get_hsn_code(product)
+        
         table_data.append([
             Paragraph(str(index), centered),
-            Paragraph(pdf_text(product.product_type or '-'), centered),
+            Paragraph(pdf_text(product.product_type or 'P0011'), centered),
             Paragraph('<br/>'.join(description_lines), small),
-            Paragraph('-', centered),
+            Paragraph(hsn_code, centered),
             Paragraph(str(product.quantity), centered),
-            Paragraph('Nos', centered),
+            Paragraph('Set', centered),
             Paragraph(_format_money(product.rate_per_unit), right),
             Paragraph(_format_money(line_total), right),
         ])
 
     product_table = Table(
         table_data,
-        colWidths=[11 * mm, 22 * mm, 58 * mm, 20 * mm, 12 * mm, 14 * mm, 23 * mm, 24 * mm],
+        colWidths=[11 * mm, 18 * mm, 72 * mm, 20 * mm, 14 * mm, 12 * mm, 17 * mm, 18 * mm],
         repeatRows=1,
         style=TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#a7d3ef')),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('ALIGN', (6, 1), (7, -1), 'RIGHT'),
@@ -418,33 +591,35 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         hAlign='RIGHT',
         style=TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('BACKGROUND', (0, -1), (-1, -1), colors.whitesmoke),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#a7d3ef')),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ])
     )
     story.append(summary)
-    story.append(Spacer(1, 8))
-    story.append(Paragraph('<b>Our Terms & Conditions</b>', centered))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph('<b><u>Our Terms & Conditions</u></b>', terms_title_style))
+    story.append(Spacer(1, 4))
+    
+    # Calculate quotation validity date (60 days from today)
+    valid_till = (timezone.localdate() + timedelta(days=60)).strftime('%d/%m/%Y')
+    
     terms = [
-        'Goods & Service Tax (GST): 18% Extra as Applicable',
-        'Delivery: 4 to 5 Weeks',
-        'Packing & Forwarding: 2%',
-        'Freight: NA',
-        'Dispatch Mode: By courier',
-        'Installation: NA',
-        'Payment Terms: 30 Days',
-        'Warranty: NA',
-        'Offer Validity: 60 Days.',
-        'Inspection: Customer inspection, should be done within 15 days from the date of delivery.',
-        'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
-        'Force Majeure: The company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
-        'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
-        'Jurisdiction: All disputes are subject to the jurisdiction of Hosur / Tamil Nadu courts only.',
+        'Delivery : 3 Weeks',
+        'Payment : 30 Days Against Invoice',
+        'Goods & Service Tax(GST) : 18% Extra as Applicable',
+        'Dispatch Mode : By Courier',
+        'Packing & Forwarding : 2%',
+        'Installation Charge : -',
+        'Discount : -',
+        f'Quotation Validity : This offer is Valid till {valid_till}',
+        'Purchase Order : Purchase Order must be send to info@mesinstruments.co.in',
+        'Bank Details :<br/>Our Bank : Indian Bank, &nbsp;&nbsp;&nbsp;&nbsp; Branch : Bangalore Road,<br/>Acount Number: 6706325980 &nbsp;&nbsp;&nbsp;&nbsp; IFSC Code: IDIB000B142',
     ]
     for index, term in enumerate(terms, start=1):
-        story.append(Paragraph(f'({index}). {term}', small))
+        story.append(Paragraph(f'{index}. {term}', small))
 
-    doc.build(story)
+    doc.build(story, canvasmaker=NumberedCanvas)
     buffer.seek(0)
     return buffer
 
@@ -1475,6 +1650,7 @@ def customer_order_edit(request, dpr_id):
         product_types = request.POST.getlist('product_type[]')
         quantities = request.POST.getlist('quantity[]')
         rates = request.POST.getlist('rate_per_unit[]')
+        mes_rates = request.POST.getlist('mes_rate_per_unit[]')
         remarks_list = request.POST.getlist('remarks[]')
 
         for i, product_name in enumerate(product_names):
@@ -1489,6 +1665,15 @@ def customer_order_edit(request, dpr_id):
             except ValueError as exc:
                 messages.error(request, str(exc))
                 return redirect('customer_order_edit', dpr_id=dpr.id)
+
+            mes_rate_val = mes_rates[i] if i < len(mes_rates) else '0'
+            try:
+                mes_rate_per_unit = Decimal(mes_rate_val or '0')
+                mes_value = (Decimal(quantity) * mes_rate_per_unit).quantize(Decimal('0.01'))
+            except Exception:
+                mes_rate_per_unit = Decimal('0.00')
+                mes_value = Decimal('0.00')
+
             remarks = remarks_list[i] if i < len(remarks_list) else None
             attachment = request.FILES.get(f'product_attachment_{i}')
             existing_attachment = request.POST.get(f'existing_attachment_{i}', '')
@@ -1501,7 +1686,9 @@ def customer_order_edit(request, dpr_id):
                 product_type=product_types[i] if i < len(product_types) else None,
                 quantity_ordered=quantity,
                 rate_per_unit=rate_per_unit,
+                mes_rate_per_unit=mes_rate_per_unit,
                 value=value,
+                mes_value=mes_value,
                 remarks=remarks,
                 attachment=attachment
             )
@@ -2414,6 +2601,7 @@ def rfq_quotation_download(request, rfq_id):
         rfq.quotation_prepared = True
         rfq.save(update_fields=['quotation_prepared'])
     response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
+    response.set_cookie('rfq_quotation_downloaded', 'true', path='/')
     return response
 
 
@@ -2601,6 +2789,10 @@ def customer_order(request):
             'rate_per_unit[]'
         )
 
+        mes_rates = request.POST.getlist(
+            'mes_rate_per_unit[]'
+        )
+
         remarks_list = request.POST.getlist(
             'remarks[]'
         )
@@ -2622,6 +2814,14 @@ def customer_order(request):
                 messages.error(request, str(exc))
                 return redirect('customer_order')
 
+            mes_rate_val = mes_rates[i] if i < len(mes_rates) else '0'
+            try:
+                mes_rate_per_unit = Decimal(mes_rate_val or '0')
+                mes_value = (Decimal(quantity) * mes_rate_per_unit).quantize(Decimal('0.01'))
+            except Exception:
+                mes_rate_per_unit = Decimal('0.00')
+                mes_value = Decimal('0.00')
+
             remarks = remarks_list[i]
 
             attachment = request.FILES.get(f'product_attachment_{i}')
@@ -2636,8 +2836,10 @@ def customer_order(request):
                 quantity_ordered=quantity,
 
                 rate_per_unit=rate_per_unit,
+                mes_rate_per_unit=mes_rate_per_unit,
 
                 value=value,
+                mes_value=mes_value,
 
                 remarks=remarks,
 

@@ -366,7 +366,9 @@
                         <th>Product Type</th>
                         <th>Quantity Ordered</th>
                         <th>Rate Per Unit</th>
-                        <th>Value</th>
+                        <th>MES Rate per unit</th>
+                        <th>Supplier value</th>
+                        <th>MES value</th>
                         <th>Remarks</th>
                         <th>Attachment</th>
                         <th>Action</th>
@@ -429,9 +431,24 @@
                             <td>
                                 <input type="number"
                                        step="0.01"
+                                       class="form-control mes-rate"
+                                       name="mes_rate_per_unit[]"
+                                       value="{{ p.mes_rate_per_unit }}">
+                            </td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
                                        class="form-control value"
                                        name="value[]"
                                        value="{{ p.value }}"
+                                       readonly>
+                            </td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
+                                       class="form-control mes-value"
+                                       name="mes_value[]"
+                                       value="{{ p.mes_value }}"
                                        readonly>
                             </td>
                             <td>
@@ -510,8 +527,21 @@
                             <td>
                                 <input type="number"
                                        step="0.01"
+                                       class="form-control mes-rate"
+                                       name="mes_rate_per_unit[]">
+                            </td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
                                        class="form-control value"
                                        name="value[]"
+                                       readonly>
+                            </td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
+                                       class="form-control mes-value"
+                                       name="mes_value[]"
                                        readonly>
                             </td>
                             <td>
@@ -626,9 +656,11 @@ const productTypesList = [
 function generateProductRow(index, p = {}) {
     const name = p.product_name || '';
     const type = p.product_type || '';
-    const qty = p.quantity || '';
+    const qty = p.quantity || p.quantity_ordered || '';
     const rate = p.rate_per_unit || '';
+    const mesRate = p.mes_rate_per_unit || p.rate_per_unit || '';
     const val = p.value || '';
+    const mesVal = p.mes_value || p.value || '';
     const remarks = p.remarks || '';
     
     let typeOptions = '<option value="">Select Type</option>';
@@ -655,7 +687,13 @@ function generateProductRow(index, p = {}) {
                 <input type="number" step="0.01" class="form-control rate" name="rate_per_unit[]" value="${rate}">
             </td>
             <td>
+                <input type="number" step="0.01" class="form-control mes-rate" name="mes_rate_per_unit[]" value="${mesRate}">
+            </td>
+            <td>
                 <input type="number" step="0.01" class="form-control value" name="value[]" value="${val}" readonly>
+            </td>
+            <td>
+                <input type="number" step="0.01" class="form-control mes-value" name="mes_value[]" value="${mesVal}" readonly>
             </td>
             <td>
                 <input type="text" class="form-control" name="remarks[]" value="${remarks}">
@@ -941,6 +979,7 @@ document.addEventListener('input', function (e) {
     if (
         !e.target.classList.contains('qty')
         && !e.target.classList.contains('rate')
+        && !e.target.classList.contains('mes-rate')
     ) {
         return;
     }
@@ -957,16 +996,21 @@ function calculateTotals() {
     document.querySelectorAll('#productTable tbody tr').forEach(row => {
         const qtyInput = row.querySelector('.qty');
         const rateInput = row.querySelector('.rate');
+        const mesRateInput = row.querySelector('.mes-rate');
         const valueInput = row.querySelector('.value');
-        if (!qtyInput || !rateInput || !valueInput) {
+        const mesValueInput = row.querySelector('.mes-value');
+        if (!qtyInput || !rateInput || !valueInput || !mesRateInput || !mesValueInput) {
             return;
         }
 
         const qty = Number(qtyInput.value) || 0;
         const rate = Number(rateInput.value) || 0;
+        const mesRate = Number(mesRateInput.value) || 0;
         const lineValue = qty * rate;
+        const lineMesValue = qty * mesRate;
 
         valueInput.value = lineValue.toFixed(2);
+        mesValueInput.value = lineMesValue.toFixed(2);
         totalQty += qty;
         totalValue += lineValue;
 

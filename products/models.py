@@ -48,8 +48,9 @@ class CustomerProduct(models.Model):
     quantity_ordered = models.IntegerField(default=0)
 
     rate_per_unit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
+    mes_rate_per_unit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     value = models.DecimalField(max_digits=12, decimal_places=2)
+    mes_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     remarks = models.TextField(blank=True, null=True)
 

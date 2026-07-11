@@ -796,7 +796,35 @@ document.addEventListener('input', function (e) {
     const quantity = parseFloat(row?.children[2]?.querySelector('input')?.value || 0) || 0;
     const rate = parseFloat(e.target.value || 0) || 0;
     const valueInput = row?.querySelector('.prepare-quote-mes-value');
-    if (valueInput) valueInput.value = (quantity * rate).toFixed(2);
+});
+
+document.addEventListener('submit', function (e) {
+    const form = e.target.closest('#prepareQuotationForm');
+    if (!form) return;
+    
+    document.cookie = 'rfq_quotation_downloaded=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Downloading...';
+    
+    const checkTimer = setInterval(function() {
+        if (document.cookie.indexOf('rfq_quotation_downloaded=true') !== -1) {
+            clearInterval(checkTimer);
+            document.cookie = 'rfq_quotation_downloaded=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            
+            const modalEl = document.getElementById('prepareQuotationModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) {
+                modal.hide();
+            }
+            
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+            window.location.reload();
+        }
+    }, 100);
 });
 
 
