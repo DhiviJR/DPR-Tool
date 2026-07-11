@@ -200,29 +200,6 @@
 
                 </div>
 
-                <!-- Quotation Attachment -->
-
-                <div class="col-md-4 mb-3">
-
-                    <label class="form-label">
-                        Quotation Attachment {% if not dpr or not dpr.quotation_attachment %}*{% endif %}
-                    </label>
-
-                    <input type="file"
-                           class="form-control"
-                           name="quotation_attachment"
-                           {% if not dpr or not dpr.quotation_attachment %}required{% endif %}>
-                    <input type="hidden"
-                           name="existing_quotation_attachment"
-                           value="{% if dpr and dpr.quotation_attachment %}{{ dpr.quotation_attachment.name }}{% endif %}">
-                    {% if dpr and dpr.quotation_attachment %}
-                    <small class="text-muted d-block mt-1">
-                        Current: <a href="{{ dpr.quotation_attachment.url }}" target="_blank">{{ dpr.quotation_attachment.name|slice:'-40:' }}</a>
-                    </small>
-                    {% endif %}
-
-                </div>
-
                 <!-- Order Confirmation -->
 
                 <div class="col-md-4 mb-3">
