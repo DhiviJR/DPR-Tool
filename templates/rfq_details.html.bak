@@ -225,66 +225,6 @@
         </div>
     </div>
 </div>
-<style>
-    .rfq-status-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        margin-bottom: 1.25rem;
-        padding-left: 0;
-        list-style: none;
-    }
-    .rfq-status-tabs .nav-link {
-        font-weight: 500;
-        border-radius: 8px;
-        padding: 0.6rem 1.2rem;
-        color: #495057;
-        background-color: #f8f9fa;
-        border: 1px solid #e9ecef;
-        transition: all 0.2s ease-in-out;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .rfq-status-tabs .nav-link.active {
-        background-color: #0d6efd;
-        color: #fff;
-        border-color: #0d6efd;
-        box-shadow: 0 4px 6px rgba(13, 110, 253, 0.15);
-    }
-    .rfq-status-tabs .nav-link:not(.active):hover {
-        background-color: #e9ecef;
-        color: #0d6efd;
-        border-color: #dee2e6;
-    }
-    .rfq-status-tabs .badge {
-        font-size: 0.8rem;
-    }
-</style>
-
-<ul class="rfq-status-tabs">
-    <li>
-        <a class="nav-link {% if not status_filter or status_filter == 'all' %}active{% endif %}" href="?status=all">
-            All RFQs <span class="badge {% if not status_filter or status_filter == 'all' %}bg-light text-dark{% else %}bg-secondary text-white{% endif %}">{{ tab_counts.all }}</span>
-        </a>
-    </li>
-    <li>
-        <a class="nav-link {% if status_filter == 'pending' %}active{% endif %}" href="?status=pending">
-            Order Pending <span class="badge {% if status_filter == 'pending' %}bg-light text-dark{% else %}bg-secondary text-white{% endif %}">{{ tab_counts.pending }}</span>
-        </a>
-    </li>
-    <li>
-        <a class="nav-link {% if status_filter == 'confirmed' %}active{% endif %}" href="?status=confirmed">
-            Order Confirmed <span class="badge {% if status_filter == 'confirmed' %}bg-light text-dark{% else %}bg-secondary text-white{% endif %}">{{ tab_counts.confirmed }}</span>
-        </a>
-    </li>
-    <li>
-        <a class="nav-link {% if status_filter == 'overdue' %}active{% endif %}" href="?status=overdue">
-            Overdue <span class="badge {% if status_filter == 'overdue' %}bg-light text-dark{% else %}bg-secondary text-white{% endif %}">{{ tab_counts.overdue }}</span>
-        </a>
-    </li>
-</ul>
 
 <div class="dpr-card dpr-table-card">
     <div class="dpr-table-toolbar">
@@ -343,13 +283,14 @@
                         <td data-sort-value="{% for product in rfq.products.all %}{{ product.product_name|lower }} {% endfor %}">
                             {% for product in rfq.products.all %}
                             <div class="form-check small mb-1">
-                                <!-- Quotation Product Checkbox: Disabled if price is not finalized. -->
+                                <!-- Quotation Product Checkbox: Disabled if price is not finalized. Hidden if quotation already sent. -->
+                                {% if not product.quotation_email_sent %}
                                 <input class="form-check-input rfq-quotation-product"
                                        type="checkbox"
                                        value="{{ product.id }}"
-                                       data-prepared="{{ product.quotation_prepared|yesno:'true,false' }}"
                                        id="rfq-product-{{ product.id }}"
                                        {% if not product.price_known or product.value == 0 %}disabled{% endif %}>
+                                {% endif %}
                                 <label class="form-check-label" for="rfq-product-{{ product.id }}">
                                     <span class="fw-semibold">{{ forloop.counter }}. {{ product.product_name }}</span>
                                     <span class="text-muted">
@@ -372,11 +313,6 @@
                                     <i class="bi bi-check-circle"></i> Quotation Sent
                                 </div>
                                 {% endif %}
-                                {% if product.price_known and product.value > 0 and product.quotation_prepared and not product.quotation_email_sent %}
-                                <div class="text-primary small ms-4 mt-1 rfq-product-prepared-status">
-                                    <i class="bi bi-file-earmark-check"></i> Quotation Prepared
-                                </div>
-                                {% endif %}
                                 <!-- Guidance text for disabled products with unknown prices -->
                                 {% if not product.price_known or product.value == 0 %}
                                 <div class="text-danger small ms-4 mt-1">
@@ -388,12 +324,14 @@
                                     <span class="fw-semibold">Supplier Prices:</span>
                                     {% for supplier_price in product.supplier_prices.all %}
                                     <div class="form-check ms-2">
+                                        {% if not product.quotation_email_sent %}
                                         <input class="form-check-input rfq-quotation-supplier-price"
                                                type="radio"
                                                name="rfq-supplier-price-product-{{ product.id }}"
                                                value="{{ supplier_price.id }}"
                                                data-product-id="{{ product.id }}"
                                                id="rfq-supplier-price-{{ supplier_price.id }}">
+                                        {% endif %}
                                         <label class="form-check-label" for="rfq-supplier-price-{{ supplier_price.id }}">
                                             {{ supplier_price.supplier.supplier_name }} - Price: {{ supplier_price.price }}, Value: {{ supplier_price.value }}
                                         </label>
@@ -415,9 +353,9 @@
                         <td data-sort-value="{{ rfq.remarks|default:''|lower }}">
                             {{ rfq.remarks|default:'-' }}
                         </td>
-                        <td data-sort-value="{% if rfq.quotation_prepared %}attached{% else %}none{% endif %}">
-                            {% if rfq.quotation_prepared %}
-                            <a href="{% url 'rfq_quotation_download' rfq.id %}" class="btn btn-outline-secondary btn-sm" target="_blank">
+                        <td data-sort-value="{% if rfq.attachment %}attached{% else %}none{% endif %}">
+                            {% if rfq.attachment %}
+                            <a href="{{ rfq.attachment.url }}" class="btn btn-outline-secondary btn-sm" target="_blank">
                                 <i class="bi bi-paperclip me-1"></i>View
                             </a>
                             {% else %}
@@ -440,15 +378,14 @@
                         <td data-sort-value="prepare quotation send email" class="text-nowrap">
                             <div class="d-flex flex-wrap gap-2">
                                 <button type="button"
-                                        class="btn btn-outline-success btn-sm rfq-prepare-quotation-btn"
+                                        class="btn btn-outline-success btn-sm rfq-prepare-quotation-btn d-none"
                                         data-rfq-id="{{ rfq.id }}"
                                         disabled>
                                     <i class="bi bi-file-earmark-pdf me-1"></i>Prepare Quotation
                                 </button>
                                 <button type="button"
                                         class="btn btn-outline-primary btn-sm rfq-send-quotation-email-btn"
-                                        data-rfq-id="{{ rfq.id }}"
-                                        disabled>
+                                        data-rfq-id="{{ rfq.id }}">
                                     <i class="bi bi-send me-1"></i>Send Email
                                 </button>
                             </div>
@@ -467,53 +404,6 @@
         <span class="legend-item"><span class="legend-swatch table-success"></span>Quotation Sent</span>
         <span class="legend-item"><span class="legend-swatch table-danger"></span>Price Pending / Overdue (>3 Days)</span>
         <span class="legend-item"><span class="legend-swatch bg-white border"></span>Quotation Pending</span>
-    </div>
-</div>
-
-<div class="modal fade" id="prepareQuotationModal" tabindex="-1" aria-labelledby="prepareQuotationModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <form method="post" action="" id="prepareQuotationForm">
-                {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title" id="prepareQuotationModalLabel">Prepare Quotation</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-striped align-middle" id="prepareQuotationTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width: 60px;">S.No</th>
-                                    <th>Products</th>
-                                    <th style="width: 100px;">Quantity</th>
-                                    <th style="width: 130px;">Rate per unit</th>
-                                    <th style="width: 150px;">MES Rate per unit</th>
-                                    <th style="width: 130px;">Supplier value</th>
-                                    <th style="width: 150px;">MES value</th>
-                                    <th style="width: 60px;">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Rows will be added dynamically by JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="prepareQuotationAddRowBtn">
-                        <i class="bi bi-plus-lg me-1"></i>Add Product Row
-                    </button>
-                    <datalist id="rfqProductsDatalist">
-                        <!-- Populated dynamically based on RFQ products -->
-                    </datalist>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success" id="prepareQuotationSubmitBtn">
-                        Submit
-                    </button>
-                </div>
-            </form>
-        </div>
     </div>
 </div>
 
@@ -569,325 +459,9 @@
 </div>
 
 {{ rfq_payloads|json_script:"rfq-data" }}
-
-
 <script src="{% static 'js/po-table-tools.js' %}?v=3"></script>
 <script>
 const rfqData = JSON.parse(document.getElementById('rfq-data').textContent);
-function buildQuotationEmailBody(rfq, selectedItems) {
-    const selectedSet = new Set(selectedItems.productIds.map(value => String(value)));
-    const selectedProducts = (rfq.products || []).filter(product => selectedSet.has(String(product.id)));
-    const lines = selectedProducts.map((product, index) => {
-        let rate = parseFloat(product.rate_per_unit) || 0;
-        let value = parseFloat(product.value) || 0;
-        const supplierPriceId = selectedItems.supplierPriceIds.find(priceId =>
-            (product.supplier_prices || []).some(price => String(price.id) === String(priceId))
-        );
-        if (supplierPriceId) {
-            const supplierPrice = (product.supplier_prices || []).find(price => String(price.id) === String(supplierPriceId));
-            if (supplierPrice) {
-                rate = parseFloat(supplierPrice.price) || rate;
-                value = parseFloat(supplierPrice.value) || value;
-            }
-        }
-        return `${index + 1}. ${product.product_name || '-'} | Type: ${product.product_type || '-'} | Qty: ${product.quantity || '-'} | Rate: ${rate.toFixed(2)} | Value: ${value.toFixed(2)}`;
-    });
-
-    return [
-        `Dear ${rfq.customer_name || 'Customer'},`,
-        '',
-        'Please find attached our quotation for your RFQ.',
-        '',
-        `RFQ No: ${rfq.rfq_no || '-'}`,
-        'Products:',
-        lines.join('\n') || '-',
-        '',
-        'Regards,',
-        'Metrology Engineering Solutions'
-    ].join('\n');
-}
-
-function openQuotationEmailModal(button) {
-    const row = button.closest('tr[data-rfq-id]');
-    const rfqId = Number(button.dataset.rfqId);
-    const rfq = rfqData.find(item => item.id === rfqId);
-    if (!row || !rfq) return;
-
-    const selectedItems = getSelectedQuotationItems(row);
-    const validationMessage = validateSelectedQuotationItems(rfq, selectedItems);
-    if (validationMessage) {
-        showQuotationSelectionWarning(row, 'Cannot Send Email', validationMessage, 'alert-danger');
-        return;
-    }
-
-    const selectedProductIds = new Set(selectedItems.productIds.map(String));
-    const notPrepared = Array.from(selectedProductIds).some(productId => {
-        const checkbox = row.querySelector(`.rfq-quotation-product[value="${productId}"]`);
-        return !checkbox || checkbox.dataset.prepared !== 'true';
-    });
-    if (notPrepared) {
-        showQuotationSelectionWarning(row, 'Cannot Send Email', 'Prepare quotation before sending email.', 'alert-danger');
-        return;
-    }
-
-    row.querySelector('.rfq-quotation-selection-warning')?.remove();
-    const form = document.getElementById('quotationEmailForm');
-    form.reset();
-    document.getElementById('quotationEmailRfqId').value = rfq.id;
-    document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
-    document.getElementById('quotationEmailSubject').value = `Quotation for ${rfq.rfq_no || 'RFQ'}`;
-    document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, selectedItems);
-
-    const productInputs = document.getElementById('quotationEmailProductInputs');
-    productInputs.innerHTML = '';
-    selectedItems.productIds.forEach(productId => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'quotation_product_ids';
-        input.value = productId;
-        productInputs.appendChild(input);
-    });
-    selectedItems.supplierPriceIds.forEach(priceId => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'quotation_supplier_price_ids';
-        input.value = priceId;
-        productInputs.appendChild(input);
-    });
-
-    const selectedCount = selectedItems.productIds.length;
-    const note = document.getElementById('quotationAutoAttachmentNote');
-    note.textContent = `Latest prepared quotation/revision for ${selectedCount} selected product(s) will be attached automatically.`;
-
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('quotationEmailModal')).show();
-}
-
-document.addEventListener('click', function (e) {
-    const sendButton = e.target.closest('.rfq-send-quotation-email-btn');
-    if (!sendButton) return;
-    openQuotationEmailModal(sendButton);
-});
-
-document.getElementById('previewQuotationAttachmentBtn')?.addEventListener('click', function () {
-    const rfqId = document.getElementById('quotationEmailRfqId').value;
-    const productInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input'));
-    if (!rfqId || !productInputs.length) return;
-
-    const form = document.createElement('form');
-    form.method = 'post';
-    form.action = `/rfq/${rfqId}/quotation/download/`;
-    form.target = '_blank';
-
-    const csrf = document.querySelector('#quotationEmailForm input[name="csrfmiddlewaretoken"]')?.value || '';
-    const csrfInput = document.createElement('input');
-    csrfInput.type = 'hidden';
-    csrfInput.name = 'csrfmiddlewaretoken';
-    csrfInput.value = csrf;
-    form.appendChild(csrfInput);
-
-    const previewInput = document.createElement('input');
-    previewInput.type = 'hidden';
-    previewInput.name = 'preview';
-    previewInput.value = '1';
-    form.appendChild(previewInput);
-
-    productInputs.forEach(source => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = source.name === 'quotation_product_ids' ? 'product_ids' : 'supplier_price_ids';
-        input.value = source.value;
-        form.appendChild(input);
-    });
-
-    document.body.appendChild(form);
-    form.submit();
-    form.remove();
-});
-
-function getSelectedQuotationItems(row) {
-    const selectedProductInputs = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
-    const selectedSupplierPriceInputs = Array.from(row.querySelectorAll('.rfq-quotation-supplier-price:checked'));
-    const selectedProductSet = new Set(selectedProductInputs.map(input => String(input.value)));
-    selectedSupplierPriceInputs.forEach(input => selectedProductSet.add(String(input.dataset.productId)));
-
-    return {
-        productIds: Array.from(selectedProductSet),
-        supplierPriceIds: selectedSupplierPriceInputs.map(input => String(input.value)),
-    };
-}
-
-function validateSelectedQuotationItems(rfq, selectedItems) {
-    if (!selectedItems.productIds.length) {
-        return 'Select at least one product or supplier price.';
-    }
-
-    const selectedProductSet = new Set(selectedItems.productIds.map(String));
-    const selectedSupplierPriceSet = new Set(selectedItems.supplierPriceIds.map(String));
-    const selectedProducts = (rfq.products || []).filter(product => selectedProductSet.has(String(product.id)));
-
-    const hasUnknownPrice = selectedProducts.some(product =>
-        !product.price_known || product.value == 0 || parseFloat(product.value) === 0
-    );
-    if (hasUnknownPrice) {
-        return 'Quotation cannot be prepared because one or more selected products do not have a finalized price.';
-    }
-
-    const missingSupplierSelection = selectedProducts.some(product => {
-        const supplierPrices = product.supplier_prices || [];
-        if (!supplierPrices.length) return false;
-        return !supplierPrices.some(price => selectedSupplierPriceSet.has(String(price.id)));
-    });
-    if (missingSupplierSelection) {
-        return 'Select a supplier price for each selected product that has supplier prices.';
-    }
-
-    return '';
-}
-
-function showQuotationSelectionWarning(row, title, message, className = 'alert-warning') {
-    const actionCell = row.querySelector('td:last-child');
-    if (!actionCell) {
-        alert(message);
-        return;
-    }
-    actionCell.querySelector('.rfq-quotation-selection-warning')?.remove();
-    const warning = document.createElement('div');
-    warning.className = `alert ${className} py-2 px-3 mt-2 mb-0 small rfq-quotation-selection-warning`;
-    warning.innerHTML = `<strong>${title}</strong><br>${message}`;
-    actionCell.appendChild(warning);
-}
-
-function addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId = '') {
-    const tbody = document.querySelector('#prepareQuotationTable tbody');
-    const row = document.createElement('tr');
-    const index = tbody.rows.length + 1;
-    const quantity = parseFloat(product.quantity) || 0;
-    const mesValue = quantity * (parseFloat(rate) || 0);
-    row.innerHTML = `
-        <td class="text-center prepare-quote-serial">${index}</td>
-        <td>
-            <input type="hidden" name="product_ids" value="${product.id}">
-            ${supplierPriceId ? `<input type="hidden" name="supplier_price_ids" value="${supplierPriceId}">` : ''}
-            <input type="text" class="form-control" value="${escapeHtml(product.product_name || '')}" readonly>
-        </td>
-        <td><input type="number" class="form-control prepare-quote-qty" value="${quantity}" readonly></td>
-        <td><input type="number" step="0.01" class="form-control" value="${rate || 0}" readonly></td>
-        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-rate" name="mes_rates" value="${rate || 0}"></td>
-        <td><input type="number" step="0.01" class="form-control" value="${supplierValue || mesValue}" readonly></td>
-        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-value" value="${mesValue.toFixed(2)}" readonly></td>
-        <td><button type="button" class="btn btn-outline-danger btn-sm prepare-quote-remove-row"><i class="bi bi-trash"></i></button></td>
-    `;
-    tbody.appendChild(row);
-}
-
-document.addEventListener('click', function (e) {
-    const prepareButton = e.target.closest('.rfq-prepare-quotation-btn');
-    if (!prepareButton) return;
-
-    const row = prepareButton.closest('tr[data-rfq-id]');
-    const rfqId = Number(prepareButton.dataset.rfqId);
-    const rfq = rfqData.find(item => item.id === rfqId);
-    if (!row || !rfq) return;
-
-    const selectedItems = getSelectedQuotationItems(row);
-    const validationMessage = validateSelectedQuotationItems(rfq, selectedItems);
-    if (validationMessage) {
-        showQuotationSelectionWarning(row, 'Cannot Prepare Quotation', validationMessage);
-        return;
-    }
-
-    const selectedCheckboxes = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
-    const isRevision = selectedCheckboxes.length > 0 && selectedCheckboxes.every(cb => cb.dataset.prepared === 'true');
-    if (isRevision && !confirm('Prepare revised quotation for the selected product(s)?')) {
-        return;
-    }
-
-    row.querySelector('.rfq-quotation-selection-warning')?.remove();
-    const form = document.getElementById('prepareQuotationForm');
-    form.action = `/rfq/${rfqId}/quotation/download/`;
-
-    const tbody = document.querySelector('#prepareQuotationTable tbody');
-    tbody.innerHTML = '';
-    const datalist = document.getElementById('rfqProductsDatalist');
-    if (datalist) {
-        datalist.innerHTML = '';
-        (rfq.products || []).forEach(product => {
-            const option = document.createElement('option');
-            option.value = product.product_name || '';
-            datalist.appendChild(option);
-        });
-    }
-
-    selectedItems.productIds.forEach(productId => {
-        const product = (rfq.products || []).find(item => String(item.id) === String(productId));
-        if (!product) return;
-        let rate = parseFloat(product.rate_per_unit) || 0;
-        let supplierValue = parseFloat(product.value) || 0;
-        let supplierPriceId = '';
-        const checkedSupplierPrice = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${product.id}"]:checked`);
-        if (checkedSupplierPrice) {
-            const supplierPrice = (product.supplier_prices || []).find(price => String(price.id) === String(checkedSupplierPrice.value));
-            if (supplierPrice) {
-                rate = parseFloat(supplierPrice.price) || rate;
-                supplierValue = parseFloat(supplierPrice.value) || supplierValue;
-                supplierPriceId = String(supplierPrice.id);
-            }
-        }
-        addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId);
-    });
-
-    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal'));
-    modal.show();
-});
-
-document.addEventListener('click', function (e) {
-    const removeButton = e.target.closest('.prepare-quote-remove-row');
-    if (!removeButton) return;
-    removeButton.closest('tr')?.remove();
-    document.querySelectorAll('#prepareQuotationTable tbody tr').forEach((row, index) => {
-        const serial = row.querySelector('.prepare-quote-serial');
-        if (serial) serial.textContent = index + 1;
-    });
-});
-
-document.addEventListener('input', function (e) {
-    if (!e.target.classList.contains('prepare-quote-mes-rate')) return;
-    const row = e.target.closest('tr');
-    const quantity = parseFloat(row?.querySelector('.prepare-quote-qty')?.value || 0) || 0;
-    const rate = parseFloat(e.target.value || 0) || 0;
-    const valueInput = row?.querySelector('.prepare-quote-mes-value');
-    if (valueInput) valueInput.value = (quantity * rate).toFixed(2);
-});
-
-document.addEventListener('submit', function (e) {
-    const form = e.target.closest('#prepareQuotationForm');
-    if (!form) return;
-    
-    document.cookie = 'rfq_quotation_downloaded=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const originalText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Downloading...';
-    
-    const checkTimer = setInterval(function() {
-        if (document.cookie.indexOf('rfq_quotation_downloaded=true') !== -1) {
-            clearInterval(checkTimer);
-            document.cookie = 'rfq_quotation_downloaded=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-            
-            const modalEl = document.getElementById('prepareQuotationModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) {
-                modal.hide();
-            }
-            
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-            window.location.reload();
-        }
-    }, 100);
-});
-
 
 document.addEventListener('DOMContentLoaded', function () {
     initPoTableTools({
@@ -1126,7 +700,7 @@ function syncRfqPriceMode(row) {
         supplierPriceDetails.classList.remove('d-none');
     }
     if (addSupplierPriceButton) {
-        addSupplierPriceButton.disabled = action === 'add' && !priceKnown;
+        addSupplierPriceButton.disabled = false;
     }
     row.querySelectorAll('.rfq-supplier-price-supplier, .rfq-supplier-price-input').forEach(input => {
         input.disabled = false;
@@ -1242,28 +816,10 @@ function populateRfqForm(rfq) {
 
 document.getElementById('openAddRfqModal').addEventListener('click', resetRfqForm);
 
-document.addEventListener('click', function (e) {
-    const editButton = e.target.closest('.rfq-edit-btn');
-    if (!editButton) return;
-    const rfqId = Number(editButton.dataset.rfqId);
-    const rfq = rfqData.find(item => item.id === rfqId);
-    if (!rfq) return;
-    populateRfqForm(rfq);
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('addRfqModal')).show();
-});
-
 document.getElementById('addRfqProductRow').addEventListener('click', function () {
     document.querySelector('#rfqProductTable tbody').appendChild(buildRfqProductRow());
     renumberRfqProductRows();
     updateSupplierEmailVisibility();
-    refreshSupplierEmailBody();
-});
-
-document.addEventListener('change', function (e) {
-    if (!e.target.classList.contains('rfq-price-known')) return;
-    const row = e.target.closest('tr');
-    if (!row) return;
-    syncRfqPriceMode(row);
     refreshSupplierEmailBody();
 });
 
@@ -1337,6 +893,282 @@ document.getElementById('addRfqForm').addEventListener('input', function (e) {
 });
 
 document.addEventListener('change', function (e) {
+    if (!e.target.classList.contains('rfq-price-known')) return;
+    syncRfqPriceMode(e.target.closest('tr'));
+    refreshSupplierEmailBody();
+});
+
+document.getElementById('addRfqForm').addEventListener('change', function (e) {
+    if (!e.target.matches('[name="product_type[]"], [name="price_known[]"], #rfqCustomer')) return;
+    refreshSupplierEmailBody();
+});
+
+document.addEventListener('change', function (e) {
+    if (!e.target.classList.contains('rfq-supplier') &&
+        !e.target.classList.contains('rfq-supplier-price-supplier')) return;
+    calculateRfqProductValues();
+    syncSupplierEmailToAddress();
+});
+
+document.getElementById('addRfqForm').addEventListener('submit', function () {
+    renumberRfqProductRows();
+    calculateRfqProductValues();
+    document.querySelectorAll('#rfqProductTable .rfq-rate').forEach(input => {
+        input.disabled = false;
+    });
+});
+
+document.addEventListener('click', function (e) {
+    const editButton = e.target.closest('.rfq-edit-btn');
+    if (!editButton) return;
+
+    const rfqId = Number(editButton.dataset.rfqId);
+    const rfq = rfqData.find(item => item.id === rfqId);
+    if (!rfq) return;
+    populateRfqForm(rfq);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('addRfqModal')).show();
+});
+
+function getSelectedQuotationItems(row) {
+    const selectedProductIds = Array.from(
+        row.querySelectorAll('.rfq-quotation-product:checked')
+    ).map(input => input.value);
+    const selectedSupplierPriceInputs = Array.from(
+        row.querySelectorAll('.rfq-quotation-supplier-price:checked')
+    );
+    const selectedSupplierPriceIds = selectedSupplierPriceInputs.map(input => input.value);
+    const selectedProductSet = new Set(selectedProductIds.map(String));
+    selectedSupplierPriceInputs.forEach(input => selectedProductSet.add(String(input.dataset.productId)));
+
+    return {
+        productIds: Array.from(selectedProductSet),
+        supplierPriceIds: selectedSupplierPriceIds,
+    };
+}
+
+function validateSelectedQuotationItems(rfq, selectedItems) {
+    if (!selectedItems.productIds.length) {
+        return 'Select at least one product or supplier price.';
+    }
+
+    const selectedProductSet = new Set(selectedItems.productIds.map(String));
+    const selectedSupplierPriceSet = new Set(selectedItems.supplierPriceIds.map(String));
+    const selectedProducts = (rfq.products || []).filter(product => selectedProductSet.has(String(product.id)));
+    const hasUnknownPrice = selectedProducts.some(product =>
+        !product.price_known || product.value == 0 || parseFloat(product.value) === 0
+    );
+    if (hasUnknownPrice) {
+        return 'Quotation cannot be prepared because one or more selected products do not have a finalized price.';
+    }
+
+    const missingSupplierSelection = selectedProducts.some(product => {
+        const supplierPrices = product.supplier_prices || [];
+        if (!supplierPrices.length) return false;
+        return !supplierPrices.some(price => selectedSupplierPriceSet.has(String(price.id)));
+    });
+    if (missingSupplierSelection) {
+        return 'Select a supplier price for each selected product that has supplier prices.';
+    }
+
+    return '';
+}
+
+function showQuotationSelectionWarning(row, title, message, className = 'alert-warning') {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert ${className} alert-dismissible fade show`;
+    alertDiv.role = 'alert';
+    alertDiv.innerHTML = `
+        <strong>${title}</strong><br>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    row.closest('.dpr-card').insertAdjacentElement('beforebegin', alertDiv);
+}
+
+document.addEventListener('click', function (e) {
+    const prepareButton = e.target.closest('.rfq-prepare-quotation-btn');
+    if (!prepareButton) return;
+
+    const row = prepareButton.closest('tr[data-rfq-id]');
+    const rfqId = Number(prepareButton.dataset.rfqId);
+    const rfq = rfqData.find(item => item.id === rfqId);
+    if (!rfq) return;
+
+    const selectedItems = getSelectedQuotationItems(row);
+    const validationMessage = validateSelectedQuotationItems(rfq, selectedItems);
+    if (validationMessage) {
+        showQuotationSelectionWarning(row, 'Cannot Prepare Quotation', validationMessage);
+        return;
+    }
+
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/rfq/${prepareButton.dataset.rfqId}/quotation/download/`;
+    form.style.display = 'none';
+
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrfmiddlewaretoken';
+    csrfInput.value = '{{ csrf_token }}';
+    form.appendChild(csrfInput);
+
+    selectedItems.productIds.forEach(productId => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'product_ids';
+        input.value = productId;
+        form.appendChild(input);
+    });
+
+    selectedItems.supplierPriceIds.forEach(supplierPriceId => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'supplier_price_ids';
+        input.value = supplierPriceId;
+        form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+});
+
+function buildQuotationEmailBody(rfq, selectedProductIds, selectedSupplierPriceIds = []) {
+    const selectedSet = new Set(selectedProductIds.map(value => String(value)));
+    const selectedSupplierPriceSet = new Set(selectedSupplierPriceIds.map(value => String(value)));
+    const selectedProducts = (rfq.products || []).filter(product => selectedSet.has(String(product.id)));
+    const productLines = [];
+
+    selectedProducts.forEach(product => {
+        const selectedPrices = (product.supplier_prices || []).filter(price =>
+            selectedSupplierPriceSet.has(String(price.id))
+        );
+        if (selectedPrices.length) {
+            selectedPrices.forEach(price => {
+                productLines.push(`${productLines.length + 1}. ${product.product_name || '-'} | Supplier: ${price.supplier_name || '-'} | Type: ${product.product_type || '-'} | Qty: ${product.quantity || '-'} | Rate: ${price.price || '0.00'} | Value: ${price.value || '0.00'}`);
+            });
+        } else {
+            productLines.push(`${productLines.length + 1}. ${product.product_name || '-'} | Type: ${product.product_type || '-'} | Qty: ${product.quantity || '-'} | Value: ${product.value || '0.00'}`);
+        }
+    });
+
+    return [
+        `Dear ${rfq.customer_name || 'Customer'},`,
+        '',
+        'Please find attached our quotation for your RFQ.',
+        '',
+        `RFQ No: ${rfq.rfq_no || '-'}`,
+        'Products:',
+        productLines.join('\\n') || '-',
+        '',
+        'Regards,',
+        'Metrology Engineering Solutions'
+    ].join('\\n');
+}
+
+function previewQuotationAttachment() {
+    const rfqId = document.getElementById('quotationEmailRfqId').value;
+    if (!rfqId) return;
+
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/rfq/${rfqId}/quotation/download/`;
+    form.target = '_blank';
+    form.style.display = 'none';
+
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrfmiddlewaretoken';
+    csrfInput.value = '{{ csrf_token }}';
+    form.appendChild(csrfInput);
+
+    const previewInput = document.createElement('input');
+    previewInput.type = 'hidden';
+    previewInput.name = 'preview';
+    previewInput.value = '1';
+    form.appendChild(previewInput);
+
+    document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_product_ids"]').forEach(input => {
+        const productInput = document.createElement('input');
+        productInput.type = 'hidden';
+        productInput.name = 'product_ids';
+        productInput.value = input.value;
+        form.appendChild(productInput);
+    });
+
+    document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_supplier_price_ids"]').forEach(input => {
+        const supplierPriceInput = document.createElement('input');
+        supplierPriceInput.type = 'hidden';
+        supplierPriceInput.name = 'supplier_price_ids';
+        supplierPriceInput.value = input.value;
+        form.appendChild(supplierPriceInput);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+}
+
+function openQuotationEmailModal(button) {
+    const rfqId = Number(button.dataset.rfqId);
+    const rfq = rfqData.find(item => item.id === rfqId);
+    if (!rfq) return;
+
+    const row = button.closest('tr[data-rfq-id]');
+    const selectedItems = getSelectedQuotationItems(row);
+    const validationMessage = validateSelectedQuotationItems(rfq, selectedItems);
+    if (validationMessage) {
+        showQuotationSelectionWarning(row, 'Cannot Send Email', validationMessage, 'alert-danger');
+        return;
+    }
+
+    const formElement = document.getElementById('quotationEmailForm');
+    formElement.reset();
+
+    const productInputs = document.getElementById('quotationEmailProductInputs');
+    productInputs.innerHTML = '';
+    selectedItems.productIds.forEach(productId => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'quotation_product_ids';
+        input.value = productId;
+        productInputs.appendChild(input);
+    });
+
+    selectedItems.supplierPriceIds.forEach(supplierPriceId => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'quotation_supplier_price_ids';
+        input.value = supplierPriceId;
+        productInputs.appendChild(input);
+    });
+
+    document.getElementById('quotationEmailRfqId').value = rfq.id;
+    document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
+    document.getElementById('quotationEmailSubject').value = `Quotation for ${rfq.rfq_no || 'RFQ'}`;
+    document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, selectedItems.productIds, selectedItems.supplierPriceIds);
+
+    const attachmentCount = selectedItems.supplierPriceIds.length || selectedItems.productIds.length;
+    const note = document.getElementById('quotationAutoAttachmentNote');
+    note.textContent = `Quotation PDF for ${attachmentCount} selected item(s) will be attached automatically.`;
+    note.className = 'alert alert-info py-2 mb-0';
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('quotationEmailModal')).show();
+}
+
+document.addEventListener('click', function (e) {
+    const previewAttachmentButton = e.target.closest('#previewQuotationAttachmentBtn');
+    if (previewAttachmentButton) {
+        previewQuotationAttachment();
+        return;
+    }
+
+    const sendQuotationButton = e.target.closest('.rfq-send-quotation-email-btn');
+    if (!sendQuotationButton) return;
+    openQuotationEmailModal(sendQuotationButton);
+});
+
+document.addEventListener('change', function (e) {
     if (!e.target.classList.contains('rfq-quotation-product') &&
         !e.target.classList.contains('rfq-quotation-supplier-price')) return;
 
@@ -1344,28 +1176,10 @@ document.addEventListener('change', function (e) {
     if (!row) return;
 
     const prepareButton = row.querySelector('.rfq-prepare-quotation-btn');
-    if (prepareButton) {
-        const checkedProducts = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
-        const hasSelection = checkedProducts.length > 0;
-        const allAlreadyPrepared = hasSelection && checkedProducts.every(cb => cb.dataset.prepared === 'true');
-        prepareButton.disabled = !hasSelection;
-        prepareButton.innerHTML = allAlreadyPrepared
-            ? '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Revised Quotation'
-            : '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Quotation';
-    }
+    if (!prepareButton) return;
 
-    const sendEmailBtn = row.querySelector('.rfq-send-quotation-email-btn');
-    if (sendEmailBtn) {
-        const selected = getSelectedQuotationItems(row);
-        let allPrepared = selected.productIds.length > 0;
-        selected.productIds.forEach(pid => {
-            const cb = row.querySelector(`.rfq-quotation-product[value="${pid}"]`);
-            if (!cb || cb.dataset.prepared !== 'true') {
-                allPrepared = false;
-            }
-        });
-        sendEmailBtn.disabled = !allPrepared;
-    }
+    const hasSelection = row.querySelectorAll('.rfq-quotation-product:checked, .rfq-quotation-supplier-price:checked').length > 0;
+    prepareButton.disabled = !hasSelection;
 });
 </script>
 {% endblock %}

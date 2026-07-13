@@ -1,0 +1,470 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h1 class="dpr-page-title mb-1">Supplier PO Product Details</h1>
+        <p class="dpr-page-subtitle mb-0">Monitor supplier orders, receipts, and validity</p>
+    </div>
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+</div>
+
+<div class="dpr-card dpr-table-card">
+    <div class="dpr-table-toolbar">
+        <div class="row g-2 align-items-center">
+            <div class="col-lg-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="search" id="supplierPoSearch" class="form-control"
+                           placeholder="Search DPR, product, supplier, dates, quantities…" autocomplete="off">
+                </div>
+            </div>
+            <div class="col-lg-3">
+                <select id="supplierPoCaseFilter" class="form-select">
+                    <option value="">All Cases</option>
+                    <option value="closed">Closed</option>
+                    <option value="partially_closed">Partially Closed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="due_soon">Due Soon</option>
+                    <option value="expired">Expired</option>
+                    <option value="pending">Pending</option>
+                    <option value="rework_products">Rework Products</option>
+                </select>
+            </div>
+            <div class="col-lg-4 text-lg-end">
+                <span id="supplierPoRowCount" class="text-muted small"></span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="supplierPoTable" class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-col="0" data-sort-type="number">S.No <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="1" data-sort-type="text">DPR Serial No <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="2" data-sort-type="text">Supplier Name <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="3" data-sort-type="text">PO Number <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="4" data-sort-type="text">Product Name <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="5" data-sort-type="date">PO Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="6" data-sort-type="number">Qty Ordered <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="7" data-sort-type="number">Quantity Received <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="8" data-sort-type="date">PO Validity <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="10" data-sort-type="date">Expected Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="11" data-sort-type="text">Inward <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in supplier_products %}
+                    <tr data-supplier-product-id="{{ row.id }}" data-validity-state="{{ row.validity_state }}" data-filter-state="{{ row.filter_state }}" data-rework-state="{% if row.quantity_not_ok > 0 %}rework_products{% endif %}" class="{{ row.row_class }}">
+                        <td data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
+                        <td data-sort-value="{{ row.customer_product.dpr.serial_number|default:''|lower }}">{{ row.customer_product.dpr.serial_number }}</td>
+                        <td data-sort-value="{{ row.supplier.supplier_name|default:''|lower }}">{{ row.supplier.supplier_name }}</td>
+                        <td data-sort-value="{{ row.po_number|default:''|lower }}">{{ row.po_number|default:'-' }}</td>
+                        <td data-sort-value="{{ row.customer_product.product_name|default:''|lower }}">{{ row.customer_product.product_name }}</td>
+                        <td data-sort-value="{{ row.po_date|date:'Y-m-d'|default:'' }}">{{ row.po_date|date:'Y-m-d'|default:'-' }}</td>
+                        <td data-sort-value="{{ row.quantity }}">{{ row.quantity }}</td>
+                        <td class="quantity-received-cell" data-sort-value="{{ row.quantity_received }}">{{ row.quantity_received }}</td>
+                        <td data-sort-value="{{ row.po_validity|date:'Y-m-d'|default:'' }}">{{ row.po_validity|date:'Y-m-d'|default:'-' }}</td>
+                        <td data-sort-value="{{ row.po_value|default:0 }}">{{ row.po_value }}</td>
+                        <td data-sort-value="{{ row.expected_date|date:'Y-m-d'|default:'' }}">
+                            <input type="date" class="form-control form-control-sm expected-date-input" value="{{ row.expected_date|date:'Y-m-d' }}">
+                        </td>
+                        <td data-sort-value="{% if row.status == 'delivered' %}closed{% elif row.status == 'partially_delivered' %}partially closed{% elif row.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button"
+                                    class="btn btn-sm btn-outline-primary supplier-inward-btn"
+                                    data-ordered-qty="{{ row.quantity }}"
+                                    data-received-qty="{{ row.quantity_received }}"
+                                    data-ok-qty="{{ row.quantity_ok }}"
+                                    data-not-ok-qty="{{ row.quantity_not_ok }}"
+                                    data-not-ok-reason="{{ row.not_ok_reason|default:'' }}">
+                                    {% if row.status == 'delivered' %}Closed{% elif row.status == 'cancelled' %}Cancelled{% elif row.quantity_not_ok > 0 %}Rework{% elif row.status == 'partially_delivered' %}Partially Closed{% else %}Inward{% endif %}
+                                </button>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger supplier-cancel-order-btn"
+                                        {% if row.status == 'cancelled' %}disabled{% endif %}>
+                                    Cancel Order
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="12" class="text-center">No supplier product records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="dpr-table-legend">
+        <span class="legend-item"><span class="legend-swatch table-success"></span>Closed</span>
+        <span class="legend-item"><span class="legend-swatch table-secondary"></span>Cancelled</span>
+        <span class="legend-item"><span class="legend-swatch table-warning"></span>Due Soon</span>
+        <span class="legend-item"><span class="legend-swatch table-danger"></span>Expired</span>
+    </div>
+</div>
+
+<div class="modal fade" id="supplierInwardModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Supplier Inward</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Ordered Quantity</label>
+                    <input type="number" id="supplierInwardOrderedQty" class="form-control" readonly>
+                </div>
+                <div class="mb-3">
+                    <label for="supplierInwardReceivedQty" class="form-label">Received Quantity</label>
+                    <input type="number" min="0" step="1" required id="supplierInwardReceivedQty" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label for="supplierInwardOkQty" class="form-label">OK Quantity</label>
+                    <input type="number" min="0" step="1" required id="supplierInwardOkQty" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label for="supplierInwardNotOkQty" class="form-label">NOT OK Quantity</label>
+                    <input type="number" min="0" step="1" required id="supplierInwardNotOkQty" class="form-control">
+                </div>
+                <div class="mb-3" id="supplierInwardReasonGroup" style="display:none;">
+                    <label for="supplierInwardNotOkReason" class="form-label">Reason</label>
+                    <textarea id="supplierInwardNotOkReason" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="text-danger small mb-2" id="supplierInwardValidationError" style="display:none;"></div>
+                <div class="form-text" id="supplierInwardHint"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveSupplierInwardBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/po-table-tools.js' %}?v=3"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    initPoTableTools({
+        tableId: '#supplierPoTable',
+        searchInputId: '#supplierPoSearch',
+        rowCountId: '#supplierPoRowCount',
+        filterSelectId: '#supplierPoCaseFilter',
+        filterAttribute: 'filterState',
+        rowSelector: 'tr[data-supplier-product-id]',
+        filterMatcher: function (row, filterValue) {
+            if (filterValue === 'rework_products') {
+                return row.dataset.reworkState === 'rework_products';
+            }
+            return row.dataset.filterState === filterValue;
+        }
+    });
+});
+
+let pendingSupplierInward = null;
+
+function applySupplierRowColor(row, status) {
+    row.classList.remove('table-success', 'table-danger', 'table-warning', 'table-secondary');
+    if (status === 'delivered') row.classList.add('table-success');
+    else if (status === 'cancelled') row.classList.add('table-secondary');
+    else if (row.dataset.validityState === 'expired') row.classList.add('table-danger');
+    else if (row.dataset.validityState === 'due_soon') row.classList.add('table-warning');
+}
+
+function updateSupplierRowFilterState(row, status) {
+    if (status === 'delivered') row.dataset.filterState = 'closed';
+    else if (status === 'cancelled') row.dataset.filterState = 'cancelled';
+    else if (row.dataset.validityState === 'expired') row.dataset.filterState = 'expired';
+    else if (row.dataset.validityState === 'due_soon') row.dataset.filterState = 'due_soon';
+    else if (status === 'partially_delivered') row.dataset.filterState = 'partially_closed';
+    else row.dataset.filterState = 'pending';
+}
+
+function getSupplierInwardLabel(status, notOkQty = 0) {
+    if (status === 'delivered') return 'Closed';
+    if (status === 'cancelled') return 'Cancelled';
+    if (parseInt(notOkQty || '0', 10) > 0) return 'Rework';
+    if (status === 'partially_delivered') return 'Partially Closed';
+    return 'Inward';
+}
+
+function getSupplierInwardSortLabel(status) {
+    if (status === 'delivered') return 'closed';
+    if (status === 'partially_delivered') return 'partially closed';
+    if (status === 'cancelled') return 'cancelled';
+    return 'pending';
+}
+
+function toggleSupplierInwardReason() {
+    const notOkQty = parseInt(document.getElementById('supplierInwardNotOkQty').value || '0', 10);
+    document.getElementById('supplierInwardReasonGroup').style.display = notOkQty > 0 ? '' : 'none';
+}
+
+function getSupplierInwardValues() {
+    const receivedValue = document.getElementById('supplierInwardReceivedQty').value.trim();
+    const okValue = document.getElementById('supplierInwardOkQty').value.trim();
+    const notOkValue = document.getElementById('supplierInwardNotOkQty').value.trim();
+    const reason = document.getElementById('supplierInwardNotOkReason').value.trim();
+
+    return {
+        receivedValue: receivedValue,
+        okValue: okValue,
+        notOkValue: notOkValue,
+        receivedQuantity: parseInt(receivedValue || '0', 10),
+        okQuantity: parseInt(okValue || '0', 10),
+        notOkQuantity: parseInt(notOkValue || '0', 10),
+        reason: reason
+    };
+}
+
+function validateSupplierInwardLive() {
+    if (!pendingSupplierInward) return false;
+
+    const receivedInput = document.getElementById('supplierInwardReceivedQty');
+    const okInput = document.getElementById('supplierInwardOkQty');
+    const notOkInput = document.getElementById('supplierInwardNotOkQty');
+    const reasonInput = document.getElementById('supplierInwardNotOkReason');
+    const errorEl = document.getElementById('supplierInwardValidationError');
+    const saveBtn = document.getElementById('saveSupplierInwardBtn');
+    const values = getSupplierInwardValues();
+
+    [receivedInput, okInput, notOkInput, reasonInput].forEach(input => {
+        input.classList.remove('is-invalid');
+        input.setCustomValidity('');
+        input.removeAttribute('aria-invalid');
+    });
+
+    let message = '';
+    let invalidInputs = [];
+
+    if (!values.receivedValue || !values.okValue || !values.notOkValue) {
+        message = 'Received, OK and NOT OK quantities are required.';
+        invalidInputs = [
+            ...(!values.receivedValue ? [receivedInput] : []),
+            ...(!values.okValue ? [okInput] : []),
+            ...(!values.notOkValue ? [notOkInput] : [])
+        ];
+    } else if (
+        Number.isNaN(values.receivedQuantity)
+        || Number.isNaN(values.okQuantity)
+        || Number.isNaN(values.notOkQuantity)
+    ) {
+        message = 'Received, OK and NOT OK quantities must be numbers.';
+        invalidInputs = [receivedInput, okInput, notOkInput];
+    } else if (
+        values.receivedQuantity < 0
+        || values.okQuantity < 0
+        || values.notOkQuantity < 0
+    ) {
+        message = 'Received, OK and NOT OK quantities cannot be negative.';
+        invalidInputs = [receivedInput, okInput, notOkInput];
+    } else if (values.receivedQuantity > pendingSupplierInward.orderedQty) {
+        message = `Received quantity cannot be greater than ordered quantity (${pendingSupplierInward.orderedQty}).`;
+        invalidInputs = [receivedInput];
+    } else if (values.okQuantity + values.notOkQuantity > values.receivedQuantity) {
+        message = `OK quantity plus NOT OK quantity cannot exceed received quantity (${values.receivedQuantity}).`;
+        invalidInputs = [okInput, notOkInput];
+    } else if (values.notOkQuantity > 0 && !values.reason) {
+        message = 'Reason is required when NOT OK quantity is greater than 0.';
+        invalidInputs = [reasonInput];
+    }
+
+    if (message) {
+        invalidInputs.forEach(input => {
+            input.classList.add('is-invalid');
+            input.setCustomValidity(message);
+            input.setAttribute('aria-invalid', 'true');
+        });
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+        saveBtn.disabled = true;
+        return false;
+    }
+
+    errorEl.textContent = '';
+    errorEl.style.display = 'none';
+    saveBtn.disabled = false;
+    return true;
+}
+
+function refreshSupplierInwardRow(row, status, receivedQty, notOkQty, notOkReason, okQty = null) {
+    const qtyReceivedCell = row.querySelector('.quantity-received-cell');
+    const inwardButton = row.querySelector('.supplier-inward-btn');
+    const cancelButton = row.querySelector('.supplier-cancel-order-btn');
+
+    updateSupplierRowFilterState(row, status);
+    row.dataset.reworkState = parseInt(notOkQty || '0', 10) > 0 ? 'rework_products' : '';
+    applySupplierRowColor(row, status);
+    document.getElementById('supplierPoCaseFilter').dispatchEvent(new Event('change'));
+
+    qtyReceivedCell.textContent = receivedQty;
+    qtyReceivedCell.setAttribute('data-sort-value', receivedQty);
+
+    inwardButton.textContent = getSupplierInwardLabel(status, notOkQty);
+    inwardButton.dataset.receivedQty = receivedQty;
+    inwardButton.dataset.okQty = okQty === null ? Math.max(receivedQty - notOkQty, 0) : okQty;
+    inwardButton.dataset.notOkQty = notOkQty;
+    inwardButton.dataset.notOkReason = notOkReason;
+
+    if (cancelButton) {
+        cancelButton.disabled = status === 'cancelled';
+    }
+
+    const inwardCell = row.cells[11];
+    if (inwardCell) {
+        inwardCell.setAttribute('data-sort-value', getSupplierInwardSortLabel(status));
+    }
+}
+
+function postSupplierInwardUpdate(row, buttonElement, receivedQuantity, okQuantity, notOkQuantity, notOkReason) {
+    const supplierProductId = row.getAttribute('data-supplier-product-id');
+
+    fetch(`/supplier-product/${supplierProductId}/status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+            quantity_received: receivedQuantity,
+            ok_quantity: okQuantity,
+            not_ok_quantity: notOkQuantity,
+            not_ok_reason: notOkReason
+        })
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'ok') {
+            alert(data.message || 'Unable to update status');
+            return;
+        }
+        const status = data.inward_status || '';
+        refreshSupplierInwardRow(
+            row,
+            status,
+            data.quantity_received || 0,
+            data.quantity_not_ok || 0,
+            data.not_ok_reason || '',
+            data.quantity_ok || 0
+        );
+
+        const modalEl = document.getElementById('supplierInwardModal');
+        bootstrap.Modal.getInstance(modalEl).hide();
+        pendingSupplierInward = null;
+    });
+}
+
+document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('supplier-inward-btn')) return;
+    const row = e.target.closest('tr[data-supplier-product-id]');
+    const orderedQty = parseInt(e.target.dataset.orderedQty || row.children[6].textContent || '0', 10);
+
+    pendingSupplierInward = {
+        row: row,
+        buttonElement: e.target,
+        orderedQty: orderedQty
+    };
+
+    document.getElementById('supplierInwardOrderedQty').value = orderedQty;
+    const receivedInput = document.getElementById('supplierInwardReceivedQty');
+    const okInput = document.getElementById('supplierInwardOkQty');
+    const notOkInput = document.getElementById('supplierInwardNotOkQty');
+    receivedInput.max = orderedQty;
+    okInput.max = orderedQty;
+    notOkInput.max = orderedQty;
+    receivedInput.value = e.target.dataset.receivedQty || e.target.dataset.okQty || '0';
+    okInput.value = e.target.dataset.okQty || '0';
+    notOkInput.value = e.target.dataset.notOkQty || '0';
+    document.getElementById('supplierInwardNotOkReason').value = e.target.dataset.notOkReason || '';
+    document.getElementById('supplierInwardHint').textContent =
+        `Received quantity cannot exceed ${orderedQty}. OK quantity plus NOT OK quantity cannot exceed received quantity.`;
+    toggleSupplierInwardReason();
+    validateSupplierInwardLive();
+    new bootstrap.Modal(document.getElementById('supplierInwardModal')).show();
+});
+
+document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('supplier-cancel-order-btn')) return;
+    const row = e.target.closest('tr[data-supplier-product-id]');
+    const supplierProductId = row.getAttribute('data-supplier-product-id');
+    const orderedQty = parseInt(row.children[6].textContent || '0', 10);
+
+    if (!confirm('Are you sure you want to cancel this supplier order?')) {
+        return;
+    }
+
+    fetch(`/supplier-product/${supplierProductId}/status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({status: 'cancelled'})
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'ok') {
+            alert(data.message || 'Unable to cancel order');
+            return;
+        }
+        refreshSupplierInwardRow(row, 'cancelled', 0, orderedQty, '');
+    });
+});
+
+document.addEventListener('change', function (e) {
+    if (!e.target.classList.contains('expected-date-input')) return;
+    const row = e.target.closest('tr[data-supplier-product-id]');
+    const supplierProductId = row.getAttribute('data-supplier-product-id');
+    const expectedDate = e.target.value;
+
+    fetch(`/supplier-product/${supplierProductId}/expected-date/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({expected_date: expectedDate})
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'ok') {
+            alert(data.message || 'Unable to save expected date');
+        } else {
+            const dateCell = e.target.closest('td');
+            if (dateCell) dateCell.setAttribute('data-sort-value', expectedDate);
+        }
+    });
+});
+
+[
+    'supplierInwardReceivedQty',
+    'supplierInwardOkQty',
+    'supplierInwardNotOkQty',
+    'supplierInwardNotOkReason'
+].forEach(id => {
+    ['input', 'change'].forEach(eventName => {
+        document.getElementById(id).addEventListener(eventName, function () {
+            toggleSupplierInwardReason();
+            validateSupplierInwardLive();
+        });
+    });
+});
+
+document.getElementById('saveSupplierInwardBtn').addEventListener('click', function () {
+    if (!pendingSupplierInward) return;
+
+    if (!validateSupplierInwardLive()) {
+        return;
+    }
+    const values = getSupplierInwardValues();
+
+    postSupplierInwardUpdate(
+        pendingSupplierInward.row,
+        pendingSupplierInward.buttonElement,
+        values.receivedQuantity,
+        values.okQuantity,
+        values.notOkQuantity,
+        values.reason
+    );
+});
+</script>
+{% endblock %}

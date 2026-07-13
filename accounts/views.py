@@ -254,6 +254,23 @@ def _serialize_quotation_products(products):
     return serialized
 
 
+def _deserialize_quotation_products(products_snapshot):
+    deserialized = []
+    for item in products_snapshot:
+        deserialized.append(SimpleNamespace(
+            id=item.get('product_id'),
+            product_name=item.get('product_name'),
+            product_type=item.get('product_type'),
+            price_known=True,
+            quantity=item.get('quantity'),
+            rate_per_unit=Decimal(item.get('rate_per_unit', 0)),
+            value=Decimal(item.get('value', 0)),
+            remarks=item.get('remarks'),
+            selected_supplier_name=item.get('selected_supplier_name', ''),
+        ))
+    return deserialized
+
+
 def _product_snapshot_ids(snapshot):
     return {
         str(product.get('product_id'))
@@ -285,7 +302,7 @@ def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False):
     )
     return quotation
 
-def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids):
+def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes_rates=None):
     selected_product_ids = {
         int(product_id)
         for product_id in product_ids
@@ -296,6 +313,15 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids):
         for price_id in supplier_price_ids
         if str(price_id).isdigit()
     ]
+
+    mes_rates_by_product = {}
+    if mes_rates and product_ids:
+        for pid, rate in zip(product_ids, mes_rates):
+            if pid and rate:
+                try:
+                    mes_rates_by_product[int(pid)] = Decimal(str(rate))
+                except (ValueError, TypeError, InvalidOperation):
+                    pass
 
     supplier_prices = list(
         RFQSupplierPrice.objects.select_related('product', 'supplier').filter(
@@ -317,9 +343,12 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids):
 
     quotation_products = []
     for product in products:
+        custom_mes_rate = mes_rates_by_product.get(product.id)
         selected_prices = supplier_prices_by_product.get(product.id, [])
         if selected_prices:
             for supplier_price in selected_prices:
+                rate = custom_mes_rate if custom_mes_rate is not None else supplier_price.price
+                value = Decimal(product.quantity * rate)
                 quotation_products.append(SimpleNamespace(
                     id=product.id,
                     product_name=product.product_name,
@@ -327,14 +356,26 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids):
                     price_known=True,
                     quotation_email_sent=product.quotation_email_sent,
                     quantity=product.quantity,
-                    rate_per_unit=supplier_price.price,
-                    value=supplier_price.value,
+                    rate_per_unit=rate,
+                    value=value,
                     remarks=product.remarks,
                     selected_supplier_name=supplier_price.supplier.supplier_name,
                 ))
         else:
-            product.selected_supplier_name = ''
-            quotation_products.append(product)
+            rate = custom_mes_rate if custom_mes_rate is not None else product.rate_per_unit
+            value = Decimal(product.quantity * rate) if custom_mes_rate is not None else product.value
+            quotation_products.append(SimpleNamespace(
+                id=product.id,
+                product_name=product.product_name,
+                product_type=product.product_type,
+                price_known=product.price_known,
+                quotation_email_sent=product.quotation_email_sent,
+                quantity=product.quantity,
+                rate_per_unit=rate,
+                value=value,
+                remarks=product.remarks,
+                selected_supplier_name='',
+            ))
 
     return quotation_products, [product.id for product in products]
 
@@ -1976,6 +2017,7 @@ def customer_details(request):
         email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
+        gstin = request.POST.get('gstin', '').strip()
 
 
         if action in ('add', 'edit'):
@@ -2003,7 +2045,8 @@ def customer_details(request):
                 region=region,
                 email=email or None,
                 phone_number=phone_number or None,
-                address=address or None
+                address=address or None,
+                gstin=gstin or None
             )
             messages.success(request, 'Customer added successfully.')
         elif action == 'edit':
@@ -2016,7 +2059,8 @@ def customer_details(request):
             customer.email = email or None
             customer.phone_number = phone_number or None
             customer.address = address or None
-            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address'])
+            customer.gstin = gstin or None
+            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address', 'gstin'])
             messages.success(request, 'Customer updated successfully.')
         elif action == 'delete':
             try:
@@ -2424,7 +2468,9 @@ def rfq_details(request):
                             quotation_product_ids_to_mark,
                             email_sent=None
                         )
-                    if quotation_record is None:
+                    if quotation_record is not None:
+                        quotation_products = _deserialize_quotation_products(quotation_record.products_snapshot)
+                    else:
                         quotation_record = _create_rfq_quotation_record(
                             rfq,
                             quotation_products,
@@ -2475,15 +2521,53 @@ def rfq_details(request):
 
         return redirect('rfq_details')
 
-    status_filter = request.GET.get('status')
-    if status_filter == 'pending':
-        rfqs = list(RFQ.objects.filter(quotation_email_sent=False).select_related('customer').prefetch_related('products__suppliers', 'products__supplier_prices__supplier').all())
-    else:
-        rfqs = list(RFQ.objects.select_related('customer').prefetch_related('products__suppliers', 'products__supplier_prices__supplier').all())
+    status_filter = request.GET.get('status', 'all')
+    all_rfqs = list(RFQ.objects.select_related('customer').prefetch_related('products__suppliers', 'products__supplier_prices__supplier', 'quotations').all())
+    
+    confirmed_dprs = list(DPR.objects.exclude(po_attachment='').exclude(po_attachment__isnull=True).values_list('quotation_number', flat=True))
+    confirmed_quote_set = set()
+    for dpr_quote_str in confirmed_dprs:
+        if dpr_quote_str:
+            for part in dpr_quote_str.split(','):
+                confirmed_quote_set.add(part.strip())
+
     today = timezone.localdate()
-    for rfq in rfqs:
+    pending_rfqs = []
+    confirmed_rfqs = []
+    overdue_rfqs = []
+
+    for rfq in all_rfqs:
         rfq.row_class = _get_rfq_row_alert_class(rfq)
         rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
+
+        rfq_quote_nos = list(rfq.quotations.values_list('quotation_number', flat=True))
+        is_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
+
+        if is_confirmed:
+            rfq.order_status = 'confirmed'
+            confirmed_rfqs.append(rfq)
+        elif rfq.row_class == 'table-danger':
+            rfq.order_status = 'overdue'
+            overdue_rfqs.append(rfq)
+        else:
+            rfq.order_status = 'pending'
+            pending_rfqs.append(rfq)
+
+    if status_filter == 'pending':
+        rfqs_to_display = pending_rfqs
+    elif status_filter == 'confirmed':
+        rfqs_to_display = confirmed_rfqs
+    elif status_filter == 'overdue':
+        rfqs_to_display = overdue_rfqs
+    else:
+        rfqs_to_display = all_rfqs
+
+    tab_counts = {
+        'all': len(all_rfqs),
+        'pending': len(pending_rfqs),
+        'confirmed': len(confirmed_rfqs),
+        'overdue': len(overdue_rfqs),
+    }
 
     # Sort RFQs: red (table-danger) -> white ('') -> green (table-success)
     class_order = {
@@ -2491,10 +2575,10 @@ def rfq_details(request):
         '': 1,
         'table-success': 2
     }
-    rfqs.sort(key=lambda r: class_order.get(r.row_class, 1))
+    rfqs_to_display.sort(key=lambda r: class_order.get(r.row_class, 1))
 
     rfq_payloads = []
-    for rfq in rfqs:
+    for rfq in rfqs_to_display:
         row_class = rfq.row_class
         rfq_payloads.append({
             'id': rfq.id,
@@ -2537,7 +2621,7 @@ def rfq_details(request):
     customers = Customer.objects.order_by('customer_name')
     suppliers = Supplier.objects.order_by('supplier_name')
     return render(request, 'rfq_details.html', {
-        'rfqs': rfqs,
+        'rfqs': rfqs_to_display,
         'customers': customers,
         'suppliers': suppliers,
         'product_type_choices': CustomerProduct.PRODUCT_TYPE_CHOICES,
@@ -2545,21 +2629,37 @@ def rfq_details(request):
         'default_supplier_email_subject': _get_default_supplier_email_subject(),
         'default_supplier_email_body': _get_default_supplier_email_body(),
         'status_filter': status_filter,
+        'tab_counts': tab_counts,
     })
 
 
 @login_required
 def rfq_quotation_download(request, rfq_id):
-    if request.method != 'POST':
-        raise Http404
     try:
         rfq = RFQ.objects.select_related('customer').get(pk=rfq_id)
     except RFQ.DoesNotExist:
         raise Http404
 
+    if request.method == 'GET':
+        latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-revision_number', '-created_at').first()
+        if latest_quotation:
+            products = _deserialize_quotation_products(latest_quotation.products_snapshot)
+            quote_no = latest_quotation.quotation_number
+        else:
+            products = list(rfq.products.all())
+            quote_no = _get_mes_quote_no(rfq)
+        pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+        filename = f"{quote_no.replace('/', '_')}.pdf"
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
+
     product_ids = request.POST.getlist('product_ids')
     supplier_price_ids = request.POST.getlist('supplier_price_ids')
-    products, quotation_product_ids_to_mark = _build_selected_quotation_products(rfq, product_ids, supplier_price_ids)
+    mes_rates = request.POST.getlist('mes_rates')
+    products, quotation_product_ids_to_mark = _build_selected_quotation_products(
+        rfq, product_ids, supplier_price_ids, mes_rates=mes_rates
+    )
     if not products:
         messages.error(request, 'Select at least one product to prepare quotation.')
         return redirect('rfq_details')
@@ -2612,9 +2712,9 @@ def supplier_details(request):
         supplier_id = request.POST.get('supplier_id')
         supplier_name = request.POST.get('supplier_name', '').strip()
         email = request.POST.get('email', '').strip()
-        email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
+        gstin = request.POST.get('gstin', '').strip()
 
 
         if action in ('add', 'edit'):
@@ -2631,7 +2731,8 @@ def supplier_details(request):
                 supplier_name=supplier_name,
                 email=email or None,
                 phone_number=phone_number or None,
-                address=address or None
+                address=address or None,
+                gstin=gstin or None
             )
             messages.success(request, 'Supplier added successfully.')
         elif action == 'edit':
@@ -2643,7 +2744,8 @@ def supplier_details(request):
             supplier.email = email or None
             supplier.phone_number = phone_number or None
             supplier.address = address or None
-            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'address'])
+            supplier.gstin = gstin or None
+            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'address', 'gstin'])
             messages.success(request, 'Supplier updated successfully.')
         elif action == 'delete':
             try:
@@ -3071,6 +3173,614 @@ def get_customer_quotations(request):
             })
 
     return JsonResponse({'status': 'success', 'quotations': quotations})
+
+
+def _get_uom(product_name):
+    return "NOS"
+
+
+def _get_hsn(product_name):
+    name = (product_name or "").lower()
+    if "plug" in name:
+        return "90173021"
+    elif "snap" in name:
+        return "90173029"
+    elif "ring" in name:
+        return "90173022"
+    elif "gauge" in name:
+        return "90173029"
+    else:
+        return "90173000"
+
+
+def _number_to_words(num):
+    if num is None:
+        return ""
+    under_20 = [
+        'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+        'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
+    ]
+    tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+    
+    def convert_below_thousand(n):
+        if n < 20:
+            return under_20[n]
+        elif n < 100:
+            return tens[n // 10] + ('' if n % 10 == 0 else ' ' + under_20[n % 10])
+        else:
+            remainder = n % 100
+            return under_20[n // 100] + ' Hundred' + ('' if remainder == 0 else ' ' + convert_below_thousand(remainder))
+
+    def convert(n):
+        if n == 0:
+            return 'Zero'
+        parts = []
+        if n >= 10000000:
+            parts.append(convert_below_thousand(n // 10000000) + ' Crore')
+            n %= 10000000
+        if n >= 100000:
+            parts.append(convert_below_thousand(n // 100000) + ' Lakh')
+            n %= 100000
+        if n >= 1000:
+            parts.append(convert_below_thousand(n // 1000) + ' Thousand')
+            n %= 1000
+        if n > 0:
+            parts.append(convert_below_thousand(n))
+        return ' '.join(parts)
+
+    try:
+        val_dec = Decimal(str(num)).quantize(Decimal('0.01'))
+        integer_part = int(val_dec)
+        decimal_part = int((val_dec - integer_part) * 100)
+    except Exception:
+        integer_part = int(num)
+        decimal_part = 0
+
+    if integer_part == 0:
+        words = "Zero Rupees"
+    else:
+        words = convert(integer_part) + " Rupees"
+        
+    if decimal_part > 0:
+        words += " and " + convert(decimal_part) + " Paise"
+        
+    words += " Only."
+    return words
+
+
+def _build_single_po_pdf_buffer(dpr, supplier, items):
+    from xml.sax.saxutils import escape as xml_escape
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+    
+    normal_style = ParagraphStyle(
+        'MESNormal',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8.5,
+        leading=11,
+        alignment=TA_LEFT,
+    )
+    
+    bold_style = ParagraphStyle(
+        'MESBold',
+        parent=normal_style,
+        fontName='Helvetica-Bold',
+    )
+    
+    center_style = ParagraphStyle(
+        'MESCenter',
+        parent=normal_style,
+        alignment=TA_CENTER,
+    )
+
+    center_bold_style = ParagraphStyle(
+        'MESCenterBold',
+        parent=normal_style,
+        fontName='Helvetica-Bold',
+        alignment=TA_CENTER,
+    )
+
+    right_style = ParagraphStyle(
+        'MESRight',
+        parent=normal_style,
+        alignment=TA_RIGHT,
+    )
+    
+    right_bold_style = ParagraphStyle(
+        'MESRightBold',
+        parent=normal_style,
+        fontName='Helvetica-Bold',
+        alignment=TA_RIGHT,
+    )
+
+    def pdf_text(value):
+        return xml_escape(str(value or ''))
+
+    story = []
+
+    # 1. Header Table
+    logo_data = [[Paragraph('<b><font size="24" color="white">MES</font></b>', ParagraphStyle('LogoText', alignment=TA_CENTER, leading=26))]]
+    logo_table = Table(logo_data, colWidths=[28 * mm], rowHeights=[20 * mm])
+    logo_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    company_details = Paragraph(
+        '<b><font size="11">METROLOGY ENGINEERING SOLUTIONS</font></b><br/>'
+        'NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br/>'
+        '2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri, Tamilnadu-635109.<br/>'
+        'Phone : +91-965-577-8807 / +91-965-577-8871<br/>'
+        'Email : info@mesinstruments.co.in | Web : www.mesinstruments.co.in',
+        center_style
+    )
+
+    header_table = Table([[logo_table, company_details]], colWidths=[32 * mm, 148 * mm])
+    header_table.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('LINEBEFORE', (1, 0), (1, -1), 1, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 2 * mm))
+
+    # 2. PURCHASE ORDER bar
+    po_title_table = Table([[Paragraph('<b>PURCHASE ORDER</b>', center_bold_style)]], colWidths=[180 * mm])
+    po_title_table.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    story.append(po_title_table)
+    story.append(Spacer(1, 2 * mm))
+
+    # 3. BUYER / VENDOR / META Table
+    supplier_gst_no = ""
+    addr = supplier.address or ""
+    gst_match = re.search(r'GST(?:IN)?\s*[:\-]?\s*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1})', addr, re.IGNORECASE)
+    if gst_match:
+        supplier_gst_no = gst_match.group(1)
+    else:
+        gst_match_alt = re.search(r'\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}\b', addr)
+        if gst_match_alt:
+            supplier_gst_no = gst_match_alt.group(0)
+
+    buyer_para = Paragraph(
+        '<b>Metrology Engineering Solutions</b>,<br/>'
+        'NO.684/9, Sri Sai Jayalakshmi Complex,<br/>'
+        'Maruthi Nagar , 2nd Cross,Dharga,<br/>'
+        'Opposite to Sathya mess,Hosur,Krishnagiri,<br/>'
+        'Tamilnadu-635109.<br/>'
+        'cell : +91 9655778807<br/>'
+        'Email: info@mesinstruments.co.in<br/>'
+        'GST NO : 33ABKFM1033E1ZS',
+        normal_style
+    )
+
+    clean_addr = pdf_text(addr).replace('\n', '<br/>')
+    vendor_para = Paragraph(
+        f'<b>{pdf_text(supplier.supplier_name)}</b>,<br/>'
+        f'{clean_addr}<br/>'
+        f'cell : {pdf_text(supplier.phone_number or "-")}<br/>'
+        f'GST NO : {pdf_text(supplier_gst_no or "-")}<br/>'
+        f'EMAIL ID: {pdf_text(supplier.email or "-")}',
+        normal_style
+    )
+
+    po_number = items[0].po_number if items else '-'
+    po_date_val = items[0].po_date.strftime('%d/%m/%Y') if items and items[0].po_date else '-'
+    
+    due_date_str = "-"
+    if items[0].expected_date:
+        due_date_str = items[0].expected_date.strftime('%d/%m/%Y')
+    elif items[0].po_validity:
+        due_date_str = items[0].po_validity.strftime('%d/%m/%Y')
+    else:
+        due_date_str = "1 Week"
+
+    meta_para = Paragraph(
+        f'Date :{po_date_val}<br/>'
+        f'PO No: {po_number}<br/>'
+        f'Due Date : {due_date_str}<br/>'
+        f'Ref Quote no : -<br/>'
+        f'Quote Dated on : -<br/>'
+        f'Payment terms : 60 Days',
+        normal_style
+    )
+
+    buyer_vendor_data = [
+        [Paragraph('<b>BUYER :</b>', bold_style), Paragraph('<b>VENDOR DETAIL :</b>', bold_style), ''],
+        [buyer_para, vendor_para, meta_para]
+    ]
+    
+    buyer_vendor_table = Table(buyer_vendor_data, colWidths=[60 * mm, 60 * mm, 60 * mm])
+    buyer_vendor_table.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('SPAN', (1, 0), (2, 0)),
+        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+        ('LINEBEFORE', (1, 0), (1, -1), 1, colors.black),
+        ('LINEBEFORE', (2, 1), (2, 1), 1, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(buyer_vendor_table)
+    story.append(Spacer(1, 2 * mm))
+
+    # 4. PURCHASE ORDER PRODUCTS bar
+    po_prod_title_table = Table([[Paragraph('<b>PURCHASE ORDER PRODUCTS</b>', center_bold_style)]], colWidths=[180 * mm])
+    po_prod_title_table.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    story.append(po_prod_title_table)
+    story.append(Spacer(1, 2 * mm))
+
+    # 5. Products Table
+    prod_header = [
+        Paragraph('<b>SL/NO</b>', center_bold_style),
+        Paragraph('<b>ITEM DISCRIPTION</b>', center_bold_style),
+        Paragraph('<b>HSN / SAC</b>', center_bold_style),
+        Paragraph('<b>QTY</b>', center_bold_style),
+        Paragraph('<b>UOM</b>', center_bold_style),
+        Paragraph('<b>RATE</b>', center_bold_style),
+        Paragraph('<b>DISC %</b>', center_bold_style),
+        Paragraph('<b>TOTAL</b>', center_bold_style),
+    ]
+    prod_data = [prod_header]
+    
+    basic_total = Decimal('0.00')
+    for i, sp in enumerate(items):
+        qty = sp.quantity or 0
+        rate = sp.rate_per_unit or Decimal('0.00')
+        line_total = sp.po_value or (qty * rate)
+        basic_total += line_total
+        
+        desc_lines = [f'<b>{pdf_text(sp.customer_product.product_name.upper())}</b>']
+        if sp.customer_product.remarks:
+            clean_remarks = pdf_text(sp.customer_product.remarks).replace('\n', '<br/>')
+            desc_lines.append(clean_remarks)
+            
+        desc_para = Paragraph('<br/>'.join(desc_lines), normal_style)
+        hsn = _get_hsn(sp.customer_product.product_name)
+        uom = _get_uom(sp.customer_product.product_name)
+        
+        prod_data.append([
+            Paragraph(str(i + 1), center_style),
+            desc_para,
+            Paragraph(hsn, center_style),
+            Paragraph(str(qty), center_style),
+            Paragraph(uom, center_style),
+            Paragraph(f'{rate:,.2f}', right_style),
+            Paragraph('NILL', center_style),
+            Paragraph(f'{line_total:,.2f}', right_style),
+        ])
+
+    prod_table = Table(prod_data, colWidths=[12 * mm, 68 * mm, 22 * mm, 12 * mm, 12 * mm, 20 * mm, 14 * mm, 20 * mm])
+    prod_table.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    story.append(prod_table)
+    story.append(Spacer(1, 2 * mm))
+
+    # 6. Remarks and Totals Table
+    gst_value = (basic_total * Decimal('0.18')).quantize(Decimal('0.01'))
+    grand_total_raw = basic_total + gst_value
+    grand_total = Decimal(int(grand_total_raw + Decimal('0.50')))
+    round_off = grand_total - grand_total_raw
+    
+    if abs(round_off) < Decimal('0.01'):
+        round_off = Decimal('0.00')
+
+    remarks_data = [
+        [Paragraph('<b>REMARKS :</b>', bold_style), Paragraph('TOTAL', center_bold_style), Paragraph(f'{basic_total:,.2f}', right_bold_style)],
+        ['', Paragraph('GST  18 %', center_bold_style), Paragraph(f'{gst_value:,.2f}', right_bold_style)],
+        ['', Paragraph('ROUND OFF', center_bold_style), Paragraph(f'{round_off:,.2f}', right_bold_style)],
+        ['', Paragraph('GRAND TOTAL', center_bold_style), Paragraph(f'{grand_total:,.2f}', right_bold_style)]
+    ]
+    
+    remarks_table = Table(remarks_data, colWidths=[124 * mm, 32 * mm, 24 * mm])
+    remarks_table.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('SPAN', (0, 0), (0, 3)),
+        ('LINEBEFORE', (1, 0), (1, -1), 1, colors.black),
+        ('LINEBEFORE', (2, 0), (2, -1), 1, colors.black),
+        ('LINEBELOW', (1, 0), (-1, 0), 1, colors.black),
+        ('LINEBELOW', (1, 1), (-1, 1), 1, colors.black),
+        ('LINEBELOW', (1, 2), (-1, 2), 1, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    story.append(remarks_table)
+    story.append(Spacer(1, 2 * mm))
+
+    # 7. Amount in Words Table
+    words_text = _number_to_words(grand_total)
+    words_table = Table([[Paragraph(f'Amount in words : <b>{words_text}</b>', normal_style)]], colWidths=[180 * mm])
+    words_table.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(words_table)
+    story.append(Spacer(1, 2 * mm))
+
+    # 8. Invoice / Delivery Address Table
+    invoice_addr = Paragraph(
+        '<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>'
+        'NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br/>'
+        '2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri,<br/>'
+        'Tamilnadu-635109.     Phone : +91-965-577-8807',
+        normal_style
+    )
+    delivery_addr = Paragraph(
+        '<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>'
+        '14/65, 6th Street, Kamaraj Nagar, Korratur,<br/>'
+        'Chennai, Tamil Nadu, India-600 080<br/>'
+        'Phone : +91-965-577-8807',
+        normal_style
+    )
+    
+    addr_data = [
+        [Paragraph('<b>INVOICE ADDRESS :</b>', bold_style), Paragraph('<b>DELIVERY ADDRESS :</b>', bold_style)],
+        [invoice_addr, delivery_addr]
+    ]
+    addr_table = Table(addr_data, colWidths=[90 * mm, 90 * mm])
+    addr_table.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+        ('LINEBEFORE', (1, 0), (1, -1), 1, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(addr_table)
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+@login_required
+def generate_supplier_po(request, dpr_id):
+    """Generate a PDF Purchase Order for all supplier products linked to a DPR."""
+    from zipfile import ZipFile, ZIP_DEFLATED
+    try:
+        dpr = DPR.objects.get(pk=dpr_id)
+    except DPR.DoesNotExist:
+        raise Http404
+
+    from products.models import SupplierProduct
+    supplier_products = SupplierProduct.objects.filter(
+        customer_product__dpr=dpr
+    ).select_related('customer_product', 'supplier')
+
+    if not supplier_products.exists():
+        messages.error(request, 'No supplier orders found for this DPR to generate a PO.')
+        return redirect('dpr_supplier', dpr_id=dpr_id)
+
+    # Check for single PO preview filters
+    preview_supplier_id = request.POST.get('supplier_id') or request.GET.get('supplier_id')
+    preview_po_number = request.POST.get('po_number') or request.GET.get('po_number')
+    if preview_supplier_id and preview_po_number:
+        try:
+            supplier = Supplier.objects.get(pk=preview_supplier_id)
+        except Supplier.DoesNotExist:
+            raise Http404
+        items = list(supplier_products.filter(supplier=supplier, po_number=preview_po_number))
+        if items:
+            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+            safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', preview_po_number)
+            filename = f"{safe_po_num}.pdf"
+            response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            return response
+
+    # Group supplier products by (supplier, po_number)
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for sp in supplier_products:
+        po_key = (sp.supplier, sp.po_number or 'PO')
+        groups[po_key].append(sp)
+
+    if len(groups) == 1:
+        # Only one PO, return it directly as a PDF
+        (supplier, po_number), items = list(groups.items())[0]
+        pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+        
+        safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
+        filename = f"{safe_po_num}.pdf"
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
+    else:
+        # Multiple POs, package into a ZIP
+        archive = BytesIO()
+        with ZipFile(archive, 'w', ZIP_DEFLATED) as zip_file:
+            for (supplier, po_number), items in groups.items():
+                pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+                safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
+                safe_supplier_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', supplier.supplier_name)
+                filename = f"PO_{safe_supplier_name}_{safe_po_num}.pdf"
+                zip_file.writestr(filename, pdf_buffer.getvalue())
+        
+        archive.seek(0)
+        response = HttpResponse(archive.getvalue(), content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="{dpr.serial_number}_POs.zip"'
+        return response
+
+
+@login_required
+def send_supplier_po_email(request, dpr_id):
+    """Generate and send PO PDF as email attachment to each supplier of a DPR."""
+    try:
+        dpr = DPR.objects.get(pk=dpr_id)
+    except DPR.DoesNotExist:
+        raise Http404
+
+    from products.models import SupplierProduct
+    supplier_products = SupplierProduct.objects.filter(
+        customer_product__dpr=dpr
+    ).select_related('customer_product', 'supplier')
+
+    if not supplier_products.exists():
+        messages.error(request, 'No supplier orders found for this DPR to send a PO email.')
+        return redirect('dpr_supplier', dpr_id=dpr_id)
+
+    if request.method == 'POST':
+        supplier_id = request.POST.get('supplier_id')
+        po_number = request.POST.get('po_number')
+        supplier_email = request.POST.get('supplier_email', '').strip()
+        email_subject = request.POST.get('email_subject', '').strip()
+        email_body = request.POST.get('email_body', '').strip()
+        email_attachment = request.FILES.get('email_attachment')
+
+        supplier_emails = [
+            email.strip()
+            for email in re.split(r'[;,]', supplier_email)
+            if email.strip()
+        ]
+        if not supplier_emails:
+            messages.error(request, 'Supplier email is required.')
+            return redirect('dpr_supplier', dpr_id=dpr_id)
+        for email_address in supplier_emails:
+            try:
+                validate_email(email_address)
+            except ValidationError:
+                messages.error(request, f'Enter a valid supplier email address: {email_address}')
+                return redirect('dpr_supplier', dpr_id=dpr_id)
+        if not email_subject or not email_body:
+            messages.error(request, 'Email subject and body are required.')
+            return redirect('dpr_supplier', dpr_id=dpr_id)
+
+        try:
+            supplier = Supplier.objects.get(pk=supplier_id)
+        except Supplier.DoesNotExist:
+            messages.error(request, 'Selected supplier does not exist.')
+            return redirect('dpr_supplier', dpr_id=dpr_id)
+
+        items = list(supplier_products.filter(supplier=supplier, po_number=po_number))
+        if not items:
+            messages.error(request, 'No PO products found for the selected supplier and PO number.')
+            return redirect('dpr_supplier', dpr_id=dpr_id)
+
+        try:
+            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+            email = EmailMessage(
+                subject=email_subject,
+                body=email_body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=supplier_emails,
+            )
+            safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
+            filename = f"{safe_po_num}.pdf"
+            email.attach(filename, pdf_buffer.getvalue(), 'application/pdf')
+
+            if email_attachment:
+                email.attach(
+                    email_attachment.name,
+                    email_attachment.read(),
+                    getattr(email_attachment, 'content_type', None) or 'application/octet-stream'
+                )
+
+            email.send(fail_silently=False)
+            messages.success(request, f"PO email sent successfully to: {supplier.supplier_name} ({', '.join(supplier_emails)})")
+        except Exception as exc:
+            messages.error(request, f"Failed to send email for {supplier.supplier_name}: {exc}")
+
+        return redirect('dpr_supplier', dpr_id=dpr_id)
+
+    # Group supplier products by (supplier, po_number)
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for sp in supplier_products:
+        po_key = (sp.supplier, sp.po_number or 'PO')
+        groups[po_key].append(sp)
+
+    sent_emails = []
+    missing_emails = []
+    failed_emails = []
+
+    for (supplier, po_number), items in groups.items():
+        if not supplier.email:
+            missing_emails.append(supplier.supplier_name)
+            continue
+
+        try:
+            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+            
+            subject = f"Purchase Order {po_number} - Metrology Engineering Solutions"
+            body = (
+                f"Dear {supplier.supplier_name},\n\n"
+                f"Please find attached the Purchase Order ({po_number}) for {dpr.serial_number}.\n\n"
+                f"Regards,\n"
+                f"Metrology Engineering Solutions"
+            )
+            
+            email = EmailMessage(
+                subject=subject,
+                body=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[supplier.email],
+            )
+            
+            safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
+            filename = f"{safe_po_num}.pdf"
+            email.attach(filename, pdf_buffer.getvalue(), 'application/pdf')
+            email.send(fail_silently=False)
+            
+            sent_emails.append(f"{supplier.supplier_name} ({supplier.email})")
+        except Exception as exc:
+            failed_emails.append(f"{supplier.supplier_name} (Error: {exc})")
+
+    # Status alerts
+    if sent_emails:
+        messages.success(request, f"PO email sent successfully to: {', '.join(sent_emails)}")
+    if missing_emails:
+        messages.warning(request, f"Could not send email for: {', '.join(missing_emails)} (Missing Email ID).")
+    if failed_emails:
+        messages.error(request, f"Failed to send email for: {', '.join(failed_emails)}")
+
+    return redirect('dpr_supplier', dpr_id=dpr_id)
 
 
 
