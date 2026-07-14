@@ -981,6 +981,45 @@ def dashboard(request):
         0
     )
 
+    # RFQ metrics calculations
+    all_rfqs = list(RFQ.objects.prefetch_related('products', 'quotations').all())
+    confirmed_dprs = list(DPR.objects.exclude(po_attachment='').exclude(po_attachment__isnull=True).values_list('quotation_number', flat=True))
+    confirmed_quote_set = set()
+    for dpr_quote_str in confirmed_dprs:
+        if dpr_quote_str:
+            for part in dpr_quote_str.split(','):
+                confirmed_quote_set.add(part.strip())
+
+    rfq_confirmed_count = 0
+    rfq_quotation_sent_count = 0
+    rfq_price_pending_count = 0
+    rfq_overdue_count = 0
+    rfq_quotation_pending_count = 0
+
+    for rfq in all_rfqs:
+        rfq_quote_nos = list(rfq.quotations.values_list('quotation_number', flat=True))
+        is_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
+        if is_confirmed:
+            rfq_confirmed_count += 1
+        
+        if rfq.quotation_email_sent:
+            rfq_quotation_sent_count += 1
+        else:
+            rfq_quotation_pending_count += 1
+            is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
+            if is_overdue and not is_confirmed:
+                rfq_overdue_count += 1
+        
+        products = list(rfq.products.all())
+        if products and any(not p.price_known or p.value == 0 for p in products):
+            rfq_price_pending_count += 1
+
+    rfq_confirmed_pct = _pct(rfq_confirmed_count, total_rfq_count)
+    rfq_quotation_sent_pct = _pct(rfq_quotation_sent_count, total_rfq_count)
+    rfq_price_pending_pct = _pct(rfq_price_pending_count, total_rfq_count)
+    rfq_overdue_pct = _pct(rfq_overdue_count, total_rfq_count)
+    rfq_quotation_pending_pct = _pct(rfq_quotation_pending_count, total_rfq_count)
+
     rfq_quotation_not_sent_count = RFQ.objects.filter(quotation_email_sent=False).count()
 
     return render(request, 'dashboard.html', {
@@ -1008,6 +1047,16 @@ def dashboard(request):
         'overall_delivery_pct': overall_delivery_pct,
         'supplier_order_pending_difference': supplier_order_pending_difference,
         'rfq_quotation_not_sent_count': rfq_quotation_not_sent_count,
+        'rfq_confirmed_count': rfq_confirmed_count,
+        'rfq_quotation_sent_count': rfq_quotation_sent_count,
+        'rfq_price_pending_count': rfq_price_pending_count,
+        'rfq_overdue_count': rfq_overdue_count,
+        'rfq_quotation_pending_count': rfq_quotation_pending_count,
+        'rfq_confirmed_pct': rfq_confirmed_pct,
+        'rfq_quotation_sent_pct': rfq_quotation_sent_pct,
+        'rfq_price_pending_pct': rfq_price_pending_pct,
+        'rfq_overdue_pct': rfq_overdue_pct,
+        'rfq_quotation_pending_pct': rfq_quotation_pending_pct,
     })
 
 

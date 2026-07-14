@@ -235,6 +235,13 @@ body.dpr-app {
 .dpr-progress-fill.bar-3 { background: linear-gradient(90deg, #0369a1, #38bdf8); }
 .dpr-progress-fill.bar-4 { background: linear-gradient(90deg, #ea580c, #fb923c); }
 
+.dpr-progress-fill.rfq-bar-1 { background: linear-gradient(90deg, #374151, #4b5563); }
+.dpr-progress-fill.rfq-bar-2 { background: linear-gradient(90deg, #15803d, #22c55e); }
+.dpr-progress-fill.rfq-bar-3 { background: linear-gradient(90deg, #0f766e, #14b8a6); }
+.dpr-progress-fill.rfq-bar-4 { background: linear-gradient(90deg, #b45309, #f59e0b); }
+.dpr-progress-fill.rfq-bar-5 { background: linear-gradient(90deg, #be123c, #f43f5e); }
+.dpr-progress-fill.rfq-bar-6 { background: linear-gradient(90deg, #4338ca, #6366f1); }
+
 .dpr-mini-stat {
     text-align: center;
     padding: 0.75rem;

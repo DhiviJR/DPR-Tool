@@ -176,7 +176,7 @@
             </div>
             <div class="dpr-gauge-target">Overall delivery rate</div>
         </div>
-        <div class="col-lg-6 px-lg-4 py-3 border-start border-end">
+        <div class="col-lg-3 px-lg-3 py-3 border-start">
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
                     <span><i class="bi bi-journal-text me-1"></i> Total DPRs</span>
@@ -189,7 +189,7 @@
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
                     <span><i class="bi bi-envelope me-1"></i> Mail confirmation</span>
-                    <span>{{ mail_confirmation_pct }}%</span>
+                    <span>{{ pending_mail_confirmation_count }} ({{ mail_confirmation_pct }}%)</span>
                 </div>
                 <div class="dpr-progress-track">
                     <div class="dpr-progress-fill bar-2" style="width: {{ mail_confirmation_pct }}%;"></div>
@@ -198,7 +198,7 @@
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
                     <span><i class="bi bi-bag-check me-1"></i> Customer delivered</span>
-                    <span>{{ customer_delivery_pct }}%</span>
+                    <span>{{ customer_delivered_count }} ({{ customer_delivery_pct }}%)</span>
                 </div>
                 <div class="dpr-progress-track">
                     <div class="dpr-progress-fill bar-3" style="width: {{ customer_delivery_pct }}%;"></div>
@@ -207,10 +207,48 @@
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
                     <span><i class="bi bi-box-seam me-1"></i> Supplier delivered</span>
-                    <span>{{ supplier_delivery_pct }}%</span>
+                    <span>{{ supplier_delivered_count }} ({{ supplier_delivery_pct }}%)</span>
                 </div>
                 <div class="dpr-progress-track">
                     <div class="dpr-progress-fill bar-4" style="width: {{ supplier_delivery_pct }}%;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 px-lg-3 py-3 border-start border-end">
+            <div class="dpr-progress-row">
+                <div class="dpr-progress-label">
+                    <span><i class="bi bi-envelope-paper me-1"></i> Total RFQ</span>
+                    <span>{{ total_rfq_count }}</span>
+                </div>
+                <div class="dpr-progress-track">
+                    <div class="dpr-progress-fill bar-1" style="width: {% if total_rfq_count %}100{% else %}0{% endif %}%;"></div>
+                </div>
+            </div>
+            <div class="dpr-progress-row">
+                <div class="dpr-progress-label">
+                    <span><i class="bi bi-file-earmark-check me-1"></i> Order Confirmed</span>
+                    <span>{{ rfq_confirmed_count }} ({{ rfq_confirmed_pct }}%)</span>
+                </div>
+                <div class="dpr-progress-track">
+                    <div class="dpr-progress-fill bar-2" style="width: {{ rfq_confirmed_pct }}%;"></div>
+                </div>
+            </div>
+            <div class="dpr-progress-row">
+                <div class="dpr-progress-label">
+                    <span><i class="bi bi-envelope-check me-1"></i> Quotation Sent</span>
+                    <span>{{ rfq_quotation_sent_count }} ({{ rfq_quotation_sent_pct }}%)</span>
+                </div>
+                <div class="dpr-progress-track">
+                    <div class="dpr-progress-fill bar-3" style="width: {{ rfq_quotation_sent_pct }}%;"></div>
+                </div>
+            </div>
+            <div class="dpr-progress-row">
+                <div class="dpr-progress-label">
+                    <span><i class="bi bi-hourglass-split me-1"></i> Quotation Pending</span>
+                    <span>{{ rfq_quotation_pending_count }} ({{ rfq_quotation_pending_pct }}%)</span>
+                </div>
+                <div class="dpr-progress-track">
+                    <div class="dpr-progress-fill bar-4" style="width: {{ rfq_quotation_pending_pct }}%;"></div>
                 </div>
             </div>
         </div>
