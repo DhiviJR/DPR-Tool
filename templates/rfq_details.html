@@ -594,16 +594,17 @@ function buildQuotationEmailBody(rfq, selectedItems) {
     });
 
     return [
-        `Dear ${rfq.customer_name || 'Customer'},`,
+        'Dear Sir/Madam,',
         '',
-        'Please find attached our quotation for your RFQ.',
+        'Greetings from Metrology Engineering Solutions.',
         '',
-        `RFQ No: ${rfq.rfq_no || '-'}`,
-        'Products:',
-        lines.join('\n') || '-',
+        'Thank you for giving us the opportunity to submit our quotation. Please find the attached quotation for your kind reference.',
         '',
-        'Regards,',
-        'Metrology Engineering Solutions'
+        'We hope our proposal meets your requirements. If you need any clarification, technical discussion, or customization, please feel free to contact us. We will be happy to assist you.',
+        '',
+        'We look forward to your valuable order and the opportunity to serve your organization.',
+        '',
+        'Thank you for your time and consideration.'
     ].join('\n');
 }
 

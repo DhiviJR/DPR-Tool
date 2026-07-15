@@ -475,14 +475,19 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
                 
                 # Draw Header
                 self.saveState()
-                # Draw Logo Box
-                self.setFillColor(colors.black)
-                self.rect(14 * mm, self._pagesize[1] - 32 * mm, 20 * mm, 20 * mm, fill=True, stroke=False)
-                
-                # Draw Logo Text "MES"
-                self.setFillColor(colors.white)
-                self.setFont("Helvetica-Bold", 24)
-                self.drawCentredString(14 * mm + 10 * mm, self._pagesize[1] - 32 * mm + 6 * mm, "MES")
+                # Draw Logo Box / Image
+                import os
+                logo_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'mes_logo.jpg')
+                if os.path.exists(logo_path):
+                    self.drawImage(logo_path, 14 * mm, self._pagesize[1] - 32 * mm, width=29 * mm, height=20 * mm)
+                else:
+                    self.setFillColor(colors.black)
+                    self.rect(14 * mm, self._pagesize[1] - 32 * mm, 20 * mm, 20 * mm, fill=True, stroke=False)
+                    
+                    # Draw Logo Text "MES"
+                    self.setFillColor(colors.white)
+                    self.setFont("Helvetica-Bold", 24)
+                    self.drawCentredString(14 * mm + 10 * mm, self._pagesize[1] - 32 * mm + 6 * mm, "MES")
                 
                 # Draw Company Info
                 self.setFillColor(colors.black)
@@ -568,7 +573,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
 
     table_data = [[
         Paragraph('<b>S.No</b>', centered),
-        Paragraph('<b>Part No</b>', centered),
+        Paragraph('<b>Product</b>', centered),
         Paragraph('<b>Description</b>', centered),
         Paragraph('<b>HSN/SAC</b>', centered),
         Paragraph('<b>Quantity</b>', centered),
@@ -582,9 +587,6 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         line_total = Decimal(product.value or 0).quantize(Decimal('0.01'))
         subtotal += line_total
         description_lines = [f'<b>{pdf_text(product.product_name)}</b>']
-        selected_supplier_name = getattr(product, 'selected_supplier_name', '')
-        if selected_supplier_name:
-            description_lines.append(f'Supplier: {pdf_text(selected_supplier_name)}')
         if product.remarks:
             description_lines.append(pdf_text(product.remarks).replace('\n', '<br/>'))
             
@@ -603,7 +605,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
 
     product_table = Table(
         table_data,
-        colWidths=[11 * mm, 18 * mm, 72 * mm, 20 * mm, 14 * mm, 12 * mm, 17 * mm, 18 * mm],
+        colWidths=[11 * mm, 18 * mm, 67 * mm, 16 * mm, 18 * mm, 10 * mm, 18 * mm, 24 * mm],
         repeatRows=1,
         style=TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
@@ -612,32 +614,13 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('ALIGN', (6, 1), (7, -1), 'RIGHT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
         ])
     )
     story.append(product_table)
     story.append(Spacer(1, 8))
 
-    packing = (subtotal * Decimal('0.02')).quantize(Decimal('0.01'))
-    taxable = subtotal + packing
-    gst = (taxable * Decimal('0.18')).quantize(Decimal('0.01'))
-    grand_total = taxable + gst
-    summary = Table(
-        [
-            [Paragraph('Basic Total', normal), Paragraph(_format_money(subtotal), right)],
-            [Paragraph('Packing & Forwarding @ 2%', normal), Paragraph(_format_money(packing), right)],
-            [Paragraph('GST @ 18%', normal), Paragraph(_format_money(gst), right)],
-            [Paragraph('<b>Grand Total</b>', normal), Paragraph(f'<b>{_format_money(grand_total)}</b>', right)],
-        ],
-        colWidths=[55 * mm, 35 * mm],
-        hAlign='RIGHT',
-        style=TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#a7d3ef')),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ])
-    )
-    story.append(summary)
-    story.append(Spacer(1, 10))
 
     story.append(Paragraph('<b><u>Our Terms & Conditions</u></b>', terms_title_style))
     story.append(Spacer(1, 4))
@@ -671,14 +654,11 @@ def _get_default_supplier_email_subject():
 
 def _get_default_supplier_email_body():
     return (
-        'Dear {supplier_name},\n\n'
-        'Please share your price for the following RFQ products.\n'
-        'RFQ No: {rfq_no}\n'
-        'Customer: {customer_name}\n'
-        'Enquiry Details: {enquiry_details}\n\n'
-        'Products:\n{products}\n\n'
-        'Regards,\n'
-        'Metrology Engineering Solutions'
+        'Dear Sir/Madam,\n\n'
+        'Greetings from Metrology Engineering Solutions.\n\n'
+        'We are interested in procuring the following / Attached items and request you to kindly provide your best quotation.\n\n\n'
+        '“ Product details “\n\n'
+        'We look forward to your prompt response.'
     )
 
 
