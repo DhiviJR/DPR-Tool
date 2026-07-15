@@ -250,6 +250,7 @@ def _serialize_quotation_products(products):
             'value': str(product.value),
             'remarks': product.remarks or '',
             'selected_supplier_name': getattr(product, 'selected_supplier_name', ''),
+            'delivery_weeks': getattr(product, 'delivery_weeks', '') or '',
         })
     return serialized
 
@@ -267,6 +268,7 @@ def _deserialize_quotation_products(products_snapshot):
             value=Decimal(item.get('value', 0)),
             remarks=item.get('remarks'),
             selected_supplier_name=item.get('selected_supplier_name', ''),
+            delivery_weeks=item.get('delivery_weeks', ''),
         ))
     return deserialized
 
@@ -302,7 +304,7 @@ def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False):
     )
     return quotation
 
-def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes_rates=None):
+def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes_rates=None, delivery_weeks=None):
     selected_product_ids = {
         int(product_id)
         for product_id in product_ids
@@ -360,6 +362,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                     value=value,
                     remarks=product.remarks,
                     selected_supplier_name=supplier_price.supplier.supplier_name,
+                    delivery_weeks=delivery_weeks,
                 ))
         else:
             rate = custom_mes_rate if custom_mes_rate is not None else product.rate_per_unit
@@ -375,6 +378,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                 value=value,
                 remarks=product.remarks,
                 selected_supplier_name='',
+                delivery_weeks=delivery_weeks,
             ))
 
     return quotation_products, [product.id for product in products]
@@ -628,8 +632,45 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
     # Calculate quotation validity date (60 days from today)
     valid_till = (timezone.localdate() + timedelta(days=60)).strftime('%d/%m/%Y')
     
+    has_sapg = False
+    has_carbide = False
+    has_steel = False
+    has_tpg_spares = False
+    has_amc_service = False
+    delivery_weeks = None
+
+    for p in products:
+        pt = (getattr(p, 'product_type', '') or '').strip().lower()
+        if pt in ('sapg', 'sarg', 'multi-gauge', 'multi gauge'):
+            has_sapg = True
+            p_weeks = getattr(p, 'delivery_weeks', None)
+            if p_weeks:
+                delivery_weeks = p_weeks
+        elif pt in ('apg carbide', 'arg carbide') or 'carbide' in pt:
+            has_carbide = True
+        elif pt in ('apg steel', 'arg steel') or 'steel' in pt:
+            has_steel = True
+        elif any(x in pt for x in ('tpg', 'trg', 'ppg', 'prg', 'spares')):
+            has_tpg_spares = True
+        elif any(x in pt for x in ('amc', 'service')):
+            has_amc_service = True
+
+    if has_sapg:
+        weeks_val = str(delivery_weeks or '3').strip()
+        delivery_str = f'Delivery : {weeks_val} Weeks'
+    elif has_carbide:
+        delivery_str = 'Delivery : 4 to 5 weeks'
+    elif has_steel:
+        delivery_str = 'Delivery : 3 to 4 weeks'
+    elif has_tpg_spares:
+        delivery_str = 'Delivery : 2 weeks'
+    elif has_amc_service:
+        delivery_str = 'Delivery : 1 to 2 weeks'
+    else:
+        delivery_str = 'Delivery : 3 Weeks'
+
     terms = [
-        'Delivery : 3 Weeks',
+        delivery_str,
         'Payment : 30 Days Against Invoice',
         'Goods & Service Tax(GST) : 18% Extra as Applicable',
         'Dispatch Mode : By Courier',
@@ -2686,8 +2727,9 @@ def rfq_quotation_download(request, rfq_id):
     product_ids = request.POST.getlist('product_ids')
     supplier_price_ids = request.POST.getlist('supplier_price_ids')
     mes_rates = request.POST.getlist('mes_rates')
+    delivery_weeks = request.POST.get('delivery_weeks')
     products, quotation_product_ids_to_mark = _build_selected_quotation_products(
-        rfq, product_ids, supplier_price_ids, mes_rates=mes_rates
+        rfq, product_ids, supplier_price_ids, mes_rates=mes_rates, delivery_weeks=delivery_weeks
     )
     if not products:
         messages.error(request, 'Select at least one product to prepare quotation.')
