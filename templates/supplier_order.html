@@ -35,7 +35,6 @@
               <th>PO Number</th>
               <th>PO Date</th>
               <th>Validity</th>
-              <th>PO Attachment</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -79,12 +78,6 @@
                 <td><input type="date" name="po_date[]" class="form-control" value="{{ sp.po_date|date:'Y-m-d' }}" required></td>
                 <td><input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" required></td>
                 <td>
-                  <input type="file" name="po_attachment_{{ forloop.counter0 }}" class="form-control" style="min-width: 200px;">
-                  {% if sp.po_attachment %}
-                  <small class="text-muted d-block mt-1">Current: {{ sp.po_attachment.name }}</small>
-                  {% endif %}
-                </td>
-                <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
                 </td>
               </tr>
@@ -126,7 +119,6 @@
                 <td><input type="text" name="po_number[]" class="form-control" required></td>
                 <td><input type="date" name="po_date[]" class="form-control" required></td>
                 <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
-                <td><input type="file" name="po_attachment_0" class="form-control" style="min-width: 200px;" required></td>
                 <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
                 </td>
@@ -147,14 +139,14 @@
       <div>
         <button type="submit" class="btn btn-success">{% if is_edit %}Update{% else %}Submit{% endif %}</button>
         <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary">Cancel</a>
-        <a id="generatePoBtn"
-           href="{% if supplier_orders %}{% url 'generate_supplier_po' dpr.id %}{% else %}javascript:void(0){% endif %}"
-           target="_blank"
-           class="btn btn-primary ms-2 {% if not supplier_orders %}disabled{% endif %}"
-           {% if not supplier_orders %}style="pointer-events: none; opacity: 0.65;"{% endif %}
-           title="Download Purchase Order PDF">
+        <button type="submit"
+                name="action"
+                value="generate_po"
+                class="btn btn-primary ms-2"
+                id="generatePoBtn"
+                title="Download Purchase Order PDF">
           <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
-        </a>
+        </button>
         <a id="sendMailBtn"
            href="javascript:void(0)"
            class="btn btn-info ms-2 disabled"
@@ -226,7 +218,6 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
     <td><input type="text" name="po_number[]" class="form-control" required></td>
     <td><input type="date" name="po_date[]" class="form-control" required></td>
     <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
-    <td><input type="file" name="po_attachment_${rowIndex}" class="form-control" style="min-width: 200px;" required></td>
     <td>
       <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
     </td>
@@ -367,17 +358,21 @@ document.addEventListener('change', function (e) {
       });
       const remaining = Math.max(0, maxQty - (usedByProduct[productSelect.value] || 0));
       
-      const quantityInput = row.querySelector('.quantity-input');
-      if (quantityInput && !quantityInput.value) {
+       const quantityInput = row.querySelector('.quantity-input');
+      if (quantityInput) {
         quantityInput.value = remaining;
       }
 
       // 2. Autofill Rate (first try RFQ, fallback to default rate)
-      updateRateFromRfq(row);
-      const rateInput = row.querySelector('.rate-input');
-      if (rateInput && (!rateInput.value || rateInput.value === '0.00' || rateInput.value === '0' || rateInput.value === '')) {
-        const defaultRate = selectedOption.dataset.rate || '0.00';
-        rateInput.value = Number(defaultRate).toFixed(2);
+      const supplierSelect = row.querySelector('.supplier-dropdown');
+      const supplierId = supplierSelect ? supplierSelect.value : '';
+      if (supplierId) {
+        updateRateFromRfq(row);
+      } else {
+        const rateInput = row.querySelector('.rate-input');
+        if (rateInput) {
+          rateInput.value = '';
+        }
       }
 
       // 3. Autofill PO Number
@@ -441,21 +436,19 @@ function updateRateFromRfq(row) {
   if (!productId) return;
 
   const supplierId = String(supplierSelect.value);
-
-  // First try: supplier-specific rate from RFQ supplier prices
-  if (supplierId) {
-    const productRates = rfqRateMap[productId] || {};
-    const rfqRate = productRates[supplierId];
-    if (rfqRate !== undefined && rfqRate !== null && rfqRate !== '') {
-      rateInput.value = Number(rfqRate).toFixed(2);
-      return;
-    }
+  if (!supplierId) {
+    rateInput.value = '';
+    return;
   }
 
-  // Second try: default rate from RFQ product
-  const defaultRate = productDefaultRateMap[productId];
-  if (defaultRate !== undefined && defaultRate !== null && defaultRate !== '') {
-    rateInput.value = Number(defaultRate).toFixed(2);
+  // First try: supplier-specific rate from RFQ supplier prices
+  const productRates = rfqRateMap[productId] || {};
+  const rfqRate = productRates[supplierId];
+  if (rfqRate !== undefined && rfqRate !== null && rfqRate !== '') {
+    rateInput.value = Number(rfqRate).toFixed(2);
+  } else {
+    // If supplier is selected but has no price in RFQ, clear it so they can type it
+    rateInput.value = '';
   }
 }
 
@@ -578,6 +571,7 @@ const sendMailBtn = document.getElementById('sendMailBtn');
 if (generatePoBtn && sendMailBtn) {
   const hasOrders = {% if supplier_orders %}true{% else %}false{% endif %};
   const hasEmails = {% if has_supplier_emails %}true{% else %}false{% endif %};
+  const form = document.getElementById('supplierOrderForm');
   
   function enableSendMailBtn() {
     sendMailBtn.classList.remove('disabled');
@@ -587,8 +581,26 @@ if (generatePoBtn && sendMailBtn) {
 
   // Also handle visual states on page load if emails are missing
   if (hasOrders && hasEmails) {
-    generatePoBtn.addEventListener('click', function() {
+    enableSendMailBtn();
+  }
+
+  generatePoBtn.addEventListener('click', function() {
+    if (form) {
+      form.target = '_blank';
+    }
+    if (hasEmails) {
       enableSendMailBtn();
+    }
+    // Reload the main tab to show success message and load po_data_list
+    setTimeout(function() {
+      window.location.href = window.location.pathname + '?po_generated=1';
+    }, 1000);
+  });
+
+  const normalSubmitBtn = form ? form.querySelector('button[type="submit"]:not(#generatePoBtn)') : null;
+  if (normalSubmitBtn) {
+    normalSubmitBtn.addEventListener('click', function() {
+      form.target = '_self';
     });
   }
 

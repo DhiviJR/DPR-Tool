@@ -448,7 +448,7 @@
                                 <button type="button"
                                         class="btn btn-outline-primary btn-sm rfq-send-quotation-email-btn"
                                         data-rfq-id="{{ rfq.id }}"
-                                        disabled>
+                                        {% if not rfq.quotation_prepared %}disabled{% endif %}>
                                     <i class="bi bi-send me-1"></i>Send Email
                                 </button>
                             </div>
@@ -504,11 +504,20 @@
                         <button type="button" class="btn btn-outline-primary btn-sm" id="prepareQuotationAddRowBtn">
                             <i class="bi bi-plus-lg me-1"></i>Add Product Row
                         </button>
-                        <div class="d-flex align-items-center d-none" id="deliveryTimeFieldContainer">
-                            <label for="deliveryWeeksInput" class="form-label mb-0 me-2 fw-bold">Delivery time :</label>
-                            <div class="input-group input-group-sm" style="width: 130px;">
-                                <input type="number" class="form-control" name="delivery_weeks" id="deliveryWeeksInput" min="1" value="3" required>
-                                <span class="input-group-text">Weeks</span>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="d-flex align-items-center d-none" id="installationChargeFieldContainer">
+                                <label for="installationChargeInput" class="form-label mb-0 me-2 fw-bold">Installation Charge :</label>
+                                <div class="input-group input-group-sm" style="width: 130px;">
+                                    <input type="number" class="form-control" name="installation_charge" id="installationChargeInput" min="0" placeholder="e.g. 5000">
+                                    <span class="input-group-text">Rs.</span>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center d-none" id="deliveryTimeFieldContainer">
+                                <label for="deliveryWeeksInput" class="form-label mb-0 me-2 fw-bold">Delivery time :</label>
+                                <div class="input-group input-group-sm" style="width: 130px;">
+                                    <input type="number" class="form-control" name="delivery_weeks" id="deliveryWeeksInput" min="1" value="3" required>
+                                    <span class="input-group-text">Weeks</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -629,7 +638,25 @@ function openQuotationEmailModal(button) {
     const rfq = rfqData.find(item => item.id === rfqId);
     if (!row || !rfq) return;
 
-    const selectedItems = getSelectedQuotationItems(row);
+    let selectedItems = getSelectedQuotationItems(row);
+    if (selectedItems.productIds.length === 0) {
+        // Automatically check all prepared products and their supplier prices
+        row.querySelectorAll('.rfq-quotation-product[data-prepared="true"]').forEach(cb => {
+            cb.checked = true;
+            const productId = cb.value;
+            const radios = row.querySelectorAll(`.rfq-quotation-supplier-price[data-product-id="${productId}"]`);
+            if (radios.length === 1) {
+                radios[0].checked = true;
+            } else if (radios.length > 1) {
+                const checkedRadio = Array.from(radios).find(r => r.checked);
+                if (!checkedRadio) {
+                    radios[0].checked = true;
+                }
+            }
+        });
+        selectedItems = getSelectedQuotationItems(row);
+    }
+
     const validationMessage = validateSelectedQuotationItems(rfq, selectedItems);
     if (validationMessage) {
         showQuotationSelectionWarning(row, 'Cannot Send Email', validationMessage, 'alert-danger');
@@ -855,6 +882,7 @@ document.addEventListener('click', function (e) {
     });
 
     checkDeliveryWeeksVisibility();
+    checkInstallationChargeVisibility();
     checkProfitWarning();
 
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal'));
@@ -876,6 +904,28 @@ function checkDeliveryWeeksVisibility() {
     const container = document.getElementById('deliveryTimeFieldContainer');
     if (container) {
         container.classList.toggle('d-none', !showDeliveryWeeks);
+    }
+}
+
+function checkInstallationChargeVisibility() {
+    const rows = document.querySelectorAll('#prepareQuotationTable tbody tr');
+    let showInstallationCharge = false;
+    rows.forEach(row => {
+        const typeInput = row.querySelector('.prepare-quote-product-type');
+        if (typeInput) {
+            const val = typeInput.value.trim().toLowerCase();
+            if (val === 'unit std air' || val === 'unit spc air' || val === 'multi-gauge' || val === 'multi gauge') {
+                showInstallationCharge = true;
+            }
+        }
+    });
+    const container = document.getElementById('installationChargeFieldContainer');
+    if (container) {
+        container.classList.toggle('d-none', !showInstallationCharge);
+        const input = container.querySelector('input');
+        if (!showInstallationCharge && input) {
+            input.value = '';
+        }
     }
 }
 
@@ -903,6 +953,7 @@ document.addEventListener('click', function (e) {
         if (serial) serial.textContent = index + 1;
     });
     checkDeliveryWeeksVisibility();
+    checkInstallationChargeVisibility();
     checkProfitWarning();
 });
 
@@ -1456,7 +1507,8 @@ document.addEventListener('change', function (e) {
                 allPrepared = false;
             }
         });
-        sendEmailBtn.disabled = !allPrepared;
+        const hasAnyPrepared = row.querySelectorAll('.rfq-quotation-product[data-prepared="true"]').length > 0;
+        sendEmailBtn.disabled = !(allPrepared || (selected.productIds.length === 0 && hasAnyPrepared));
     }
 });
 </script>

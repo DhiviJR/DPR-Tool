@@ -251,6 +251,7 @@ def _serialize_quotation_products(products):
             'remarks': product.remarks or '',
             'selected_supplier_name': getattr(product, 'selected_supplier_name', ''),
             'delivery_weeks': getattr(product, 'delivery_weeks', '') or '',
+            'installation_charge': getattr(product, 'installation_charge', '') or '',
         })
     return serialized
 
@@ -269,6 +270,7 @@ def _deserialize_quotation_products(products_snapshot):
             remarks=item.get('remarks'),
             selected_supplier_name=item.get('selected_supplier_name', ''),
             delivery_weeks=item.get('delivery_weeks', ''),
+            installation_charge=item.get('installation_charge', ''),
         ))
     return deserialized
 
@@ -304,7 +306,7 @@ def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False):
     )
     return quotation
 
-def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes_rates=None, delivery_weeks=None):
+def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes_rates=None, delivery_weeks=None, installation_charge=None):
     selected_product_ids = {
         int(product_id)
         for product_id in product_ids
@@ -363,6 +365,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                     remarks=product.remarks,
                     selected_supplier_name=supplier_price.supplier.supplier_name,
                     delivery_weeks=delivery_weeks,
+                    installation_charge=installation_charge,
                 ))
         else:
             rate = custom_mes_rate if custom_mes_rate is not None else product.rate_per_unit
@@ -379,6 +382,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                 remarks=product.remarks,
                 selected_supplier_name='',
                 delivery_weeks=delivery_weeks,
+                installation_charge=installation_charge,
             ))
 
     return quotation_products, [product.id for product in products]
@@ -669,17 +673,40 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
     else:
         delivery_str = 'Delivery : 3 Weeks'
 
+    has_air_or_multi = False
+    for p in products:
+        pt = (getattr(p, 'product_type', '') or '').strip().lower()
+        if pt in ('unit std air', 'unit spc air', 'multi-gauge', 'multi gauge'):
+            has_air_or_multi = True
+            break
+
+    installation_charge_val = None
+    for p in products:
+        val = getattr(p, 'installation_charge', None)
+        if val:
+            installation_charge_val = str(val).strip()
+            break
+
+    if has_air_or_multi and installation_charge_val:
+        installation_str = f'Installation Charge : Rs. {installation_charge_val}'
+    else:
+        installation_str = 'Installation Charge : Nil'
+
     terms = [
         delivery_str,
-        'Payment : 30 Days Against Invoice',
+        f"Payment : {customer.payment_terms} Week{'s' if str(customer.payment_terms) != '1' else ''}" if customer.payment_terms else 'Payment : 30 Days Against Invoice',
         'Goods & Service Tax(GST) : 18% Extra as Applicable',
-        'Dispatch Mode : By Courier',
+        'Dispatch Mode : NIL' if has_amc_service else 'Dispatch Mode : By Courier',
         'Packing & Forwarding : 2%',
-        'Installation Charge : -',
-        'Discount : -',
+        installation_str,
+        'Discount : Negotiable',
         f'Quotation Validity : This offer is Valid till {valid_till}',
         'Purchase Order : Purchase Order must be send to info@mesinstruments.co.in',
         'Bank Details :<br/>Our Bank : Indian Bank, &nbsp;&nbsp;&nbsp;&nbsp; Branch : Bangalore Road,<br/>Acount Number: 6706325980 &nbsp;&nbsp;&nbsp;&nbsp; IFSC Code: IDIB000B142',
+        'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
+        'Force Majeure: The Company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
+        'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
+        'Jurisdiction: All disputes arising out of or in connection with this Quotation shall be settled by arbitration in Chennai, India. in accordance with the Indian Arbitration & Conciliation Act rules. The decision shall be final and binding on both parties.',
     ]
     for index, term in enumerate(terms, start=1):
         story.append(Paragraph(f'{index}. {term}', small))
@@ -1834,6 +1861,7 @@ def dpr_supplier(request, dpr_id):
     except DPR.DoesNotExist:
         raise Http404
 
+    from collections import defaultdict
     from products.models import SupplierProduct
 
     products = CustomerProduct.objects.filter(dpr=dpr)
@@ -1847,24 +1875,25 @@ def dpr_supplier(request, dpr_id):
     ).select_related('customer_product', 'supplier')
 
     customer_products = list(products)
-    product_lookup = {
-        (
-            (product.product_name or '').strip().lower(),
-            product.product_type or ''
-        ): product.id
-        for product in customer_products
-    }
+    product_lookup = {}
+    for product in customer_products:
+        name_key = (product.product_name or '').strip().lower()
+        type_key = (product.product_type or '').strip().lower()
+        product_lookup[(name_key, type_key)] = product.id
+        if name_key not in product_lookup:
+            product_lookup[name_key] = product.id
+
     rfq_rate_map = {}
     product_default_rate_map = {}
     rfq_supplier_prices = RFQSupplierPrice.objects.filter(
         product__rfq__customer=dpr.customer
     ).select_related('product', 'supplier').order_by('product__rfq__created_at')
     for supplier_price in rfq_supplier_prices:
-        product_key = (
-            (supplier_price.product.product_name or '').strip().lower(),
-            supplier_price.product.product_type or ''
-        )
-        customer_product_id = product_lookup.get(product_key)
+        name_key = (supplier_price.product.product_name or '').strip().lower()
+        type_key = (supplier_price.product.product_type or '').strip().lower()
+        customer_product_id = product_lookup.get((name_key, type_key))
+        if not customer_product_id:
+            customer_product_id = product_lookup.get(name_key)
         if not customer_product_id:
             continue
         rfq_rate_map.setdefault(str(customer_product_id), {})[
@@ -1881,11 +1910,11 @@ def dpr_supplier(request, dpr_id):
         rate_per_unit__gt=0
     ).order_by('rfq__created_at')
     for rfq_product in rfq_products_known:
-        product_key = (
-            (rfq_product.product_name or '').strip().lower(),
-            rfq_product.product_type or ''
-        )
-        customer_product_id = product_lookup.get(product_key)
+        name_key = (rfq_product.product_name or '').strip().lower()
+        type_key = (rfq_product.product_type or '').strip().lower()
+        customer_product_id = product_lookup.get((name_key, type_key))
+        if not customer_product_id:
+            customer_product_id = product_lookup.get(name_key)
         if not customer_product_id:
             continue
         # Known-price products override the supplier-price default
@@ -1901,6 +1930,10 @@ def dpr_supplier(request, dpr_id):
         total_supplier_quantity == total_customer_quantity
         and total_customer_quantity > 0
     )
+
+    if request.method == 'GET' and request.GET.get('po_generated') == '1':
+        from django.contrib import messages
+        messages.success(request, 'Supplier orders updated and PO generated successfully.')
 
     if request.method == 'POST':
         product_ids = request.POST.getlist('product[]')
@@ -1937,17 +1970,9 @@ def dpr_supplier(request, dpr_id):
                 if i < len(supplier_product_ids)
                 else ''
             )
-            row_attachment = request.FILES.get(f'po_attachment_{i}')
 
             if any(v in ('', None) for v in required_values):
                 messages.error(request, f"All fields are mandatory in row {i + 1}.")
-                return redirect('dpr_supplier', dpr_id=dpr.id)
-
-            if not row_attachment and not existing_attachments.get(existing_id):
-                messages.error(
-                    request,
-                    f"PO attachment is required in row {i + 1}."
-                )
                 return redirect('dpr_supplier', dpr_id=dpr.id)
 
             customer_product = CustomerProduct.objects.get(pk=product_ids[i])
@@ -2030,11 +2055,47 @@ def dpr_supplier(request, dpr_id):
 
         _sync_dpr_supplier_qty_ordered(dpr)
 
+        if request.POST.get('action') == 'generate_po':
+            return generate_supplier_po(request, dpr.id)
+
         messages.success(
             request,
             'Supplier orders updated successfully' if is_edit else 'Supplier orders saved successfully'
         )
         return redirect('dpr_view')
+
+    missing_email_suppliers = []
+    has_supplier_emails = True
+    for sp in supplier_orders:
+        supplier = sp.supplier
+        if not supplier.email or not supplier.email.strip():
+            if supplier.supplier_name not in missing_email_suppliers:
+                missing_email_suppliers.append(supplier.supplier_name)
+    if missing_email_suppliers:
+        has_supplier_emails = False
+
+    groups = defaultdict(list)
+    for sp in supplier_orders:
+        po_key = (sp.supplier, sp.po_number or 'PO')
+        groups[po_key].append(sp)
+
+    po_data_list = []
+    for (supplier, po_number), items in groups.items():
+        po_data_list.append({
+            'supplier_id': supplier.id,
+            'po_number': po_number,
+            'supplier_name': supplier.supplier_name,
+            'supplier_email': supplier.email or '',
+            'default_subject': f"Purchase Order - {po_number} from Metrology Engineering Solutions",
+            'default_body': (
+                f"Dear Sir/Madam,\n\n"
+                f"Greetings from Metrology Engineering Solutions.\n\n"
+                f"Please find the attached Purchase Order ({po_number}) for your reference.\n\n"
+                f"Kindly acknowledge the receipt of this email and confirm the delivery date.\n\n"
+                f"Thank you,\n"
+                f"Metrology Engineering Solutions"
+            )
+        })
 
     context = {
         'dpr': dpr,
@@ -2047,6 +2108,9 @@ def dpr_supplier(request, dpr_id):
         'is_fully_allocated': is_edit,
         'rfq_rate_map': rfq_rate_map,
         'product_default_rate_map': product_default_rate_map,
+        'has_supplier_emails': has_supplier_emails,
+        'missing_email_suppliers': missing_email_suppliers,
+        'po_data_list': po_data_list,
     }
     return render(request, 'supplier_order.html', context)
 
@@ -2088,6 +2152,7 @@ def customer_details(request):
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip()
+        payment_terms = request.POST.get('payment_terms', '').strip()
 
 
         if action in ('add', 'edit'):
@@ -2116,7 +2181,8 @@ def customer_details(request):
                 email=email or None,
                 phone_number=phone_number or None,
                 address=address or None,
-                gstin=gstin or None
+                gstin=gstin or None,
+                payment_terms=payment_terms or None
             )
             messages.success(request, 'Customer added successfully.')
         elif action == 'edit':
@@ -2130,7 +2196,8 @@ def customer_details(request):
             customer.phone_number = phone_number or None
             customer.address = address or None
             customer.gstin = gstin or None
-            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address', 'gstin'])
+            customer.payment_terms = payment_terms or None
+            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address', 'gstin', 'payment_terms'])
             messages.success(request, 'Customer updated successfully.')
         elif action == 'delete':
             try:
@@ -2728,8 +2795,9 @@ def rfq_quotation_download(request, rfq_id):
     supplier_price_ids = request.POST.getlist('supplier_price_ids')
     mes_rates = request.POST.getlist('mes_rates')
     delivery_weeks = request.POST.get('delivery_weeks')
+    installation_charge = request.POST.get('installation_charge')
     products, quotation_product_ids_to_mark = _build_selected_quotation_products(
-        rfq, product_ids, supplier_price_ids, mes_rates=mes_rates, delivery_weeks=delivery_weeks
+        rfq, product_ids, supplier_price_ids, mes_rates=mes_rates, delivery_weeks=delivery_weeks, installation_charge=installation_charge
     )
     if not products:
         messages.error(request, 'Select at least one product to prepare quotation.')
