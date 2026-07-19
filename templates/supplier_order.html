@@ -32,8 +32,6 @@
               <th>Rate Per Unit</th>
               <th>Quantity</th>
               <th>PO Value</th>
-              <th>PO Number</th>
-              <th>PO Date</th>
               <th>Validity</th>
               <th>Action</th>
             </tr>
@@ -74,11 +72,17 @@
                   </div>
                 </td>
                 <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" value="{{ sp.po_value }}" readonly required></td>
-                <td><input type="text" name="po_number[]" class="form-control" value="{{ sp.po_number }}" required></td>
-                <td><input type="date" name="po_date[]" class="form-control" value="{{ sp.po_date|date:'Y-m-d' }}" required></td>
-                <td><input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" required></td>
+                <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
                 <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+                  {% if is_edit and po_prepared and not all_same_supplier %}
+                  <button type="button"
+                          class="btn btn-info btn-sm ms-1 rowSendMailBtn"
+                          data-email-index="{{ forloop.counter0 }}"
+                          {% if not sp.supplier.email %}disabled title="Supplier email is missing"{% endif %}>
+                    <i class="bi bi-envelope"></i> Send Email
+                  </button>
+                  {% endif %}
                 </td>
               </tr>
               {% endfor %}
@@ -116,8 +120,6 @@
                   </div>
                 </td>
                 <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
-                <td><input type="text" name="po_number[]" class="form-control" required></td>
-                <td><input type="date" name="po_date[]" class="form-control" required></td>
                 <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
                 <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
@@ -137,26 +139,40 @@
       <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow">Add Row</button>
       {% endif %}
       <div>
-        <button type="submit" class="btn btn-success">{% if is_edit %}Update{% else %}Submit{% endif %}</button>
-        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary">Cancel</a>
+        {% if is_edit %}
         <button type="submit"
                 name="action"
                 value="generate_po"
-                class="btn btn-primary ms-2"
+                class="btn btn-primary"
+                id="generatePoBtn"
+                title="Update supplier order and download Purchase Order PDF">
+          <i class="bi bi-file-earmark-arrow-down me-1"></i> Update and Prepare PO
+        </button>
+        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary ms-1">Close</a>
+        {% if po_prepared and all_same_supplier %}
+        <button type="button"
+                id="sendMailBtn"
+                class="btn btn-info ms-1"
+                {% if not has_supplier_emails %}disabled{% endif %}
+                title="Send the combined Purchase Order PDF to the supplier">
+          <i class="bi bi-envelope me-1"></i> Send Email
+        </button>
+        {% endif %}
+        {% else %}
+        <button type="submit" class="btn btn-success">Submit</button>
+        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary ms-1">Close</a>
+        <button type="submit"
+                name="action"
+                value="generate_po"
+                class="btn btn-primary ms-1"
                 id="generatePoBtn"
                 title="Download Purchase Order PDF">
           <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
         </button>
-        <a id="sendMailBtn"
-           href="javascript:void(0)"
-           class="btn btn-info ms-2 disabled"
-           style="pointer-events: none; opacity: 0.65;"
-           title="Send Purchase Order PDF by email to supplier">
-          <i class="bi bi-envelope me-1"></i> Send Mail
-        </a>
+        {% endif %}
         {% if supplier_orders and missing_email_suppliers %}
         <div class="text-danger small mt-2">
-          * Send Mail is disabled because the following suppliers do not have an Email ID configured: <strong>{{ missing_email_suppliers|join:", " }}</strong>. 
+          * Send Email is disabled for suppliers without an Email ID: <strong>{{ missing_email_suppliers|join:", " }}</strong>.
           Please add their email address in <a href="{% url 'supplier_details' %}">Masters -> Suppliers</a>.
         </div>
         {% endif %}
@@ -168,10 +184,12 @@
 {{ rfq_rate_map|json_script:'rfq-rate-map' }}
 {{ product_default_rate_map|json_script:'product-default-rate-map' }}
 {{ po_data_list|json_script:"po-email-data" }}
+{{ supplier_product_email_data|json_script:"supplier-product-email-data" }}
 <script>
 const rfqRateMap = JSON.parse(document.getElementById('rfq-rate-map').textContent);
 const productDefaultRateMap = JSON.parse(document.getElementById('product-default-rate-map').textContent);
 const poEmailData = JSON.parse(document.getElementById('po-email-data').textContent || '[]');
+const supplierProductEmailData = JSON.parse(document.getElementById('supplier-product-email-data').textContent || '[]');
 
 function getNextRowIndex() {
   return document.querySelectorAll('#supplierTable tbody tr').length;
@@ -215,8 +233,6 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
       </div>
     </td>
     <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
-    <td><input type="text" name="po_number[]" class="form-control" required></td>
-    <td><input type="date" name="po_date[]" class="form-control" required></td>
     <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
     <td>
       <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
@@ -375,31 +391,6 @@ document.addEventListener('change', function (e) {
         }
       }
 
-      // 3. Autofill PO Number
-      const poNumInput = row.querySelector('input[name="po_number[]"]');
-      if (poNumInput && !poNumInput.value) {
-        poNumInput.value = '{{ dpr.po_number|default:"" }}';
-      }
-
-      // 4. Autofill PO Date
-      const poDateInput = row.querySelector('input[name="po_date[]"]');
-      if (poDateInput && !poDateInput.value) {
-        poDateInput.value = '{{ dpr.po_date|date:"Y-m-d" }}';
-      }
-
-      // 5. Autofill Validity (1 day before customer PO validity if exists)
-      const poValInput = row.querySelector('.po-validity-input');
-      if (poValInput && !poValInput.value) {
-        const customerPoValidity = '{{ dpr.po_validity|date:"Y-m-d" }}';
-        if (customerPoValidity) {
-          const date = new Date(customerPoValidity);
-          date.setDate(date.getDate() - 1);
-          const yyyy = date.getFullYear();
-          const mm = String(date.getMonth() + 1).padStart(2, '0');
-          const dd = String(date.getDate()).padStart(2, '0');
-          poValInput.value = `${yyyy}-${mm}-${dd}`;
-        }
-      }
     }
   } else {
     updateRateFromRfq(row);
@@ -565,62 +556,52 @@ updateQuantityLimits();
 updateSupplierRowValues();
 updateOverallSupplierQty();
 
-// Enable Send Mail button only after Generate PO has been clicked
 const generatePoBtn = document.getElementById('generatePoBtn');
 const sendMailBtn = document.getElementById('sendMailBtn');
-if (generatePoBtn && sendMailBtn) {
-  const hasOrders = {% if supplier_orders %}true{% else %}false{% endif %};
-  const hasEmails = {% if has_supplier_emails %}true{% else %}false{% endif %};
-  const form = document.getElementById('supplierOrderForm');
-  
-  function enableSendMailBtn() {
-    sendMailBtn.classList.remove('disabled');
-    sendMailBtn.style.pointerEvents = 'auto';
-    sendMailBtn.style.opacity = '1';
-  }
+const supplierOrderForm = document.getElementById('supplierOrderForm');
 
-  // Also handle visual states on page load if emails are missing
-  if (hasOrders && hasEmails) {
-    enableSendMailBtn();
-  }
-
-  generatePoBtn.addEventListener('click', function() {
-    if (form) {
-      form.target = '_blank';
+if (generatePoBtn && supplierOrderForm) {
+  supplierOrderForm.addEventListener('submit', function(e) {
+    if (e.defaultPrevented || e.submitter !== generatePoBtn) {
+      return;
     }
-    if (hasEmails) {
-      enableSendMailBtn();
-    }
-    // Reload the main tab to show success message and load po_data_list
+    supplierOrderForm.target = '_blank';
+    // The prepared PDF opens in a new tab; refresh this page with the email actions.
     setTimeout(function() {
       window.location.href = window.location.pathname + '?po_generated=1';
     }, 1000);
   });
-
-  const normalSubmitBtn = form ? form.querySelector('button[type="submit"]:not(#generatePoBtn)') : null;
-  if (normalSubmitBtn) {
-    normalSubmitBtn.addEventListener('click', function() {
-      form.target = '_self';
-    });
-  }
-
-  sendMailBtn.addEventListener('click', function(e) {
-    e.preventDefault();
-    if (sendMailBtn.classList.contains('disabled')) return;
-    openSupplierPoEmailModal();
-  });
 }
 
-function openSupplierPoEmailModal() {
-  if (!poEmailData || poEmailData.length === 0) return;
+sendMailBtn?.addEventListener('click', function() {
+  if (sendMailBtn.disabled) return;
+  openSupplierPoEmailModal();
+});
+
+document.querySelectorAll('.rowSendMailBtn').forEach(function(button) {
+  button.addEventListener('click', function() {
+    if (button.disabled) return;
+    const emailData = supplierProductEmailData[Number(button.dataset.emailIndex)];
+    if (emailData) {
+      openSupplierPoEmailModal(emailData);
+    }
+  });
+});
+
+function openSupplierPoEmailModal(selectedPo = null) {
+  const availableData = selectedPo ? [selectedPo] : poEmailData;
+  if (!availableData || availableData.length === 0) return;
 
   const selectContainer = document.getElementById('poSelectGroupContainer');
   const selectElement = document.getElementById('supplierPoSelect');
-  
-  if (poEmailData.length > 1) {
+
+  if (selectedPo) {
+    selectContainer.style.display = 'none';
+    populateEmailModalFields(selectedPo);
+  } else if (availableData.length > 1) {
     selectContainer.style.display = 'block';
     selectElement.innerHTML = '';
-    poEmailData.forEach((po, idx) => {
+    availableData.forEach((po, idx) => {
       const opt = document.createElement('option');
       opt.value = idx;
       opt.textContent = `${po.supplier_name} (${po.po_number})`;
@@ -628,13 +609,13 @@ function openSupplierPoEmailModal() {
     });
 
     selectElement.onchange = function() {
-      populateEmailModalFields(poEmailData[selectElement.value]);
+      populateEmailModalFields(availableData[selectElement.value]);
     };
     
-    populateEmailModalFields(poEmailData[0]);
-  } else {
+    populateEmailModalFields(availableData[0]);
+  } else if (!selectedPo) {
     selectContainer.style.display = 'none';
-    populateEmailModalFields(poEmailData[0]);
+    populateEmailModalFields(availableData[0]);
   }
 
   bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierPoEmailModal')).show();
@@ -643,21 +624,28 @@ function openSupplierPoEmailModal() {
 function populateEmailModalFields(po) {
   document.getElementById('emailSupplierId').value = po.supplier_id;
   document.getElementById('emailPoNumber').value = po.po_number;
+  document.getElementById('emailSupplierProductId').value = po.supplier_product_id || '';
   document.getElementById('supplierEmailField').value = po.supplier_email || '';
   document.getElementById('supplierEmailSubject').value = po.default_subject || '';
   document.getElementById('supplierEmailBody').value = po.default_body || '';
   
   const note = document.getElementById('supplierAutoAttachmentNote');
-  note.textContent = `PO PDF for ${po.supplier_name} (${po.po_number}) will be attached automatically.`;
+  const productLabel = po.product_name ? ` for ${po.product_name}` : '';
+  note.textContent = `PO PDF${productLabel} for ${po.supplier_name} (${po.po_number}) will be attached automatically.`;
 }
 
 document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click', function() {
   const supplierId = document.getElementById('emailSupplierId').value;
   const poNumber = document.getElementById('emailPoNumber').value;
+  const supplierProductId = document.getElementById('emailSupplierProductId').value;
   if (!supplierId || !poNumber) return;
 
   const dprId = "{{ dpr.id }}";
-  window.open(`/dpr/${dprId}/generate-po/?supplier_id=${supplierId}&po_number=${poNumber}`, '_blank');
+  const params = new URLSearchParams({ supplier_id: supplierId, po_number: poNumber });
+  if (supplierProductId) {
+    params.set('supplier_product_id', supplierProductId);
+  }
+  window.open(`/dpr/${dprId}/generate-po/?${params.toString()}`, '_blank');
 });
 </script>
 
@@ -720,6 +708,7 @@ document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click
             
             <input type="hidden" name="supplier_id" id="emailSupplierId">
             <input type="hidden" name="po_number" id="emailPoNumber">
+            <input type="hidden" name="supplier_product_id" id="emailSupplierProductId">
             
             <div class="col-md-6">
               <label class="form-label fw-bold">Supplier Email(s) *</label>

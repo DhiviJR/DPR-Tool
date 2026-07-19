@@ -726,6 +726,7 @@ def _get_default_supplier_email_body():
         'Greetings from Metrology Engineering Solutions.\n\n'
         'We are interested in procuring the following / Attached items and request you to kindly provide your best quotation.\n\n\n'
         '“ Product details “\n\n'
+        '{products}\n\n'
         'We look forward to your prompt response.'
     )
 
@@ -1745,7 +1746,7 @@ def customer_order_edit(request, dpr_id):
 
         product_names = request.POST.getlist('product_name[]')
         quantities = request.POST.getlist('quantity[]')
-        rates = request.POST.getlist('rate_per_unit[]')
+        rates = request.POST.getlist('mes_rate_per_unit[]')
         _, po_value_error = _validate_po_value_matches_total(
             request.POST.get('po_value'),
             product_names,
@@ -1787,7 +1788,7 @@ def customer_order_edit(request, dpr_id):
 
         product_types = request.POST.getlist('product_type[]')
         quantities = request.POST.getlist('quantity[]')
-        rates = request.POST.getlist('rate_per_unit[]')
+        rates = request.POST.getlist('mes_rate_per_unit[]')
         mes_rates = request.POST.getlist('mes_rate_per_unit[]')
         remarks_list = request.POST.getlist('remarks[]')
 
@@ -1939,9 +1940,7 @@ def dpr_supplier(request, dpr_id):
         product_ids = request.POST.getlist('product[]')
         supplier_ids = request.POST.getlist('supplier[]')
         rates = request.POST.getlist('rate_per_unit[]')
-        po_dates = request.POST.getlist('po_date[]')
         quantities = request.POST.getlist('quantity[]')
-        po_numbers = request.POST.getlist('po_number[]')
         po_validities = request.POST.getlist('po_validity[]')
         supplier_product_ids = request.POST.getlist('supplier_product_id[]')
         quantity_by_product = {}
@@ -1949,6 +1948,10 @@ def dpr_supplier(request, dpr_id):
 
         existing_attachments = {
             str(sp.id): sp.po_attachment
+            for sp in supplier_orders
+        }
+        existing_po_numbers = {
+            str(sp.id): sp.po_number
             for sp in supplier_orders
         }
 
@@ -1960,9 +1963,7 @@ def dpr_supplier(request, dpr_id):
                 product_ids[i],
                 supplier_ids[i],
                 rates[i] if i < len(rates) else '',
-                po_dates[i] if i < len(po_dates) else '',
                 quantities[i] if i < len(quantities) else '',
-                po_numbers[i] if i < len(po_numbers) else '',
                 po_validities[i] if i < len(po_validities) else '',
             ]
             existing_id = (
@@ -2046,10 +2047,10 @@ def dpr_supplier(request, dpr_id):
                 supplier=supplier,
                 rate_per_unit=rate,
                 po_value=po_value,
-                po_date=po_dates[i] or None,
+                po_date=timezone.localdate(),
                 po_validity=po_validities[i] or None,
                 quantity=quantity,
-                po_number=po_numbers[i],
+                po_number=existing_po_numbers.get(existing_id, ''),
                 po_attachment=po_attachment
             )
 
@@ -2097,6 +2098,35 @@ def dpr_supplier(request, dpr_id):
             )
         })
 
+    supplier_ids = {sp.supplier_id for sp in supplier_orders}
+    all_same_supplier = bool(supplier_orders) and len(supplier_ids) == 1
+    po_prepared = bool(supplier_orders) and all(
+        (sp.po_number or '').startswith('SPO-')
+        for sp in supplier_orders
+    )
+    supplier_product_email_data = []
+    for sp in supplier_orders:
+        po_number = sp.po_number or 'PO'
+        supplier_product_email_data.append({
+            'supplier_product_id': sp.id,
+            'supplier_id': sp.supplier_id,
+            'po_number': po_number,
+            'product_name': sp.customer_product.product_name,
+            'supplier_name': sp.supplier.supplier_name,
+            'supplier_email': sp.supplier.email or '',
+            'default_subject': (
+                f"Purchase Order - {po_number} - {sp.customer_product.product_name}"
+            ),
+            'default_body': (
+                f"Dear Sir/Madam,\n\n"
+                f"Greetings from Metrology Engineering Solutions.\n\n"
+                f"Please find the attached Purchase Order ({po_number}) for "
+                f"{sp.customer_product.product_name}.\n\n"
+                f"Kindly acknowledge receipt and confirm the delivery date.\n\n"
+                f"Thank you,\nMetrology Engineering Solutions"
+            ),
+        })
+
     context = {
         'dpr': dpr,
         'products': products,
@@ -2111,6 +2141,9 @@ def dpr_supplier(request, dpr_id):
         'has_supplier_emails': has_supplier_emails,
         'missing_email_suppliers': missing_email_suppliers,
         'po_data_list': po_data_list,
+        'supplier_product_email_data': supplier_product_email_data,
+        'all_same_supplier': all_same_supplier,
+        'po_prepared': po_prepared,
     }
     return render(request, 'supplier_order.html', context)
 
@@ -2965,7 +2998,7 @@ def customer_order(request):
 
         product_names = request.POST.getlist('product_name[]')
         quantities = request.POST.getlist('quantity[]')
-        rates = request.POST.getlist('rate_per_unit[]')
+        rates = request.POST.getlist('mes_rate_per_unit[]')
         _, po_value_error = _validate_po_value_matches_total(
             request.POST.get('po_value'),
             product_names,
@@ -3027,7 +3060,7 @@ def customer_order(request):
         )
 
         rates = request.POST.getlist(
-            'rate_per_unit[]'
+            'mes_rate_per_unit[]'
         )
 
         mes_rates = request.POST.getlist(
@@ -3737,19 +3770,67 @@ def generate_supplier_po(request, dpr_id):
         messages.error(request, 'No supplier orders found for this DPR to generate a PO.')
         return redirect('dpr_supplier', dpr_id=dpr_id)
 
+    if dpr.po_validity:
+        invalid_supplier_order = supplier_products.filter(
+            po_validity__gte=dpr.po_validity
+        ).select_related('supplier').first()
+        if invalid_supplier_order:
+            messages.warning(
+                request,
+                'PO was not generated because supplier PO validity must be '
+                f'before customer PO validity ({dpr.po_validity}).'
+            )
+            return redirect('dpr_supplier', dpr_id=dpr_id)
+
+    # Assign one stable PO number per supplier when the PO is generated.
+    # Existing generated numbers are preserved on previews/re-downloads.
+    po_date = timezone.localdate()
+    supplier_ids = supplier_products.values_list('supplier_id', flat=True).distinct()
+    for supplier_id in supplier_ids:
+        generated_po_number = (
+            f'SPO-{po_date:%Y%m%d}-{dpr.id:04d}-{supplier_id:04d}'
+        )
+        supplier_products.filter(
+            supplier_id=supplier_id,
+        ).exclude(
+            po_number__startswith='SPO-',
+        ).update(
+            po_number=generated_po_number,
+            po_date=po_date,
+        )
+
+    supplier_products = SupplierProduct.objects.filter(
+        customer_product__dpr=dpr
+    ).select_related('customer_product', 'supplier')
+
     # Check for single PO preview filters
     preview_supplier_id = request.POST.get('supplier_id') or request.GET.get('supplier_id')
     preview_po_number = request.POST.get('po_number') or request.GET.get('po_number')
+    preview_supplier_product_id = (
+        request.POST.get('supplier_product_id')
+        or request.GET.get('supplier_product_id')
+    )
     if preview_supplier_id and preview_po_number:
         try:
             supplier = Supplier.objects.get(pk=preview_supplier_id)
         except Supplier.DoesNotExist:
             raise Http404
-        items = list(supplier_products.filter(supplier=supplier, po_number=preview_po_number))
+        preview_items = supplier_products.filter(
+            supplier=supplier,
+            po_number=preview_po_number,
+        )
+        if preview_supplier_product_id:
+            preview_items = preview_items.filter(pk=preview_supplier_product_id)
+        items = list(preview_items)
         if items:
             pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
             safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', preview_po_number)
-            filename = f"{safe_po_num}.pdf"
+            item_suffix = (
+                f"_item_{preview_supplier_product_id}"
+                if preview_supplier_product_id
+                else ''
+            )
+            filename = f"{safe_po_num}{item_suffix}.pdf"
             response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             return response
@@ -3808,6 +3889,7 @@ def send_supplier_po_email(request, dpr_id):
     if request.method == 'POST':
         supplier_id = request.POST.get('supplier_id')
         po_number = request.POST.get('po_number')
+        supplier_product_id = request.POST.get('supplier_product_id')
         supplier_email = request.POST.get('supplier_email', '').strip()
         email_subject = request.POST.get('email_subject', '').strip()
         email_body = request.POST.get('email_body', '').strip()
@@ -3837,7 +3919,13 @@ def send_supplier_po_email(request, dpr_id):
             messages.error(request, 'Selected supplier does not exist.')
             return redirect('dpr_supplier', dpr_id=dpr_id)
 
-        items = list(supplier_products.filter(supplier=supplier, po_number=po_number))
+        email_items = supplier_products.filter(
+            supplier=supplier,
+            po_number=po_number,
+        )
+        if supplier_product_id:
+            email_items = email_items.filter(pk=supplier_product_id)
+        items = list(email_items)
         if not items:
             messages.error(request, 'No PO products found for the selected supplier and PO number.')
             return redirect('dpr_supplier', dpr_id=dpr_id)
@@ -3851,7 +3939,12 @@ def send_supplier_po_email(request, dpr_id):
                 to=supplier_emails,
             )
             safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
-            filename = f"{safe_po_num}.pdf"
+            item_suffix = (
+                f"_item_{supplier_product_id}"
+                if supplier_product_id
+                else ''
+            )
+            filename = f"{safe_po_num}{item_suffix}.pdf"
             email.attach(filename, pdf_buffer.getvalue(), 'application/pdf')
 
             if email_attachment:
