@@ -1954,6 +1954,14 @@ def dpr_supplier(request, dpr_id):
             str(sp.id): sp.po_number
             for sp in supplier_orders
         }
+        existing_email_states = {
+            str(sp.id): (
+                sp.po_email_sent,
+                sp.customer_product_id,
+                sp.supplier_id,
+            )
+            for sp in supplier_orders
+        }
 
         for i in range(len(product_ids)):
             if not product_ids[i] or not supplier_ids[i]:
@@ -2042,6 +2050,14 @@ def dpr_supplier(request, dpr_id):
             if not po_attachment and existing_id:
                 po_attachment = existing_attachments.get(existing_id)
 
+            previous_email_state = existing_email_states.get(existing_id)
+            preserve_email_sent = bool(
+                previous_email_state
+                and previous_email_state[0]
+                and previous_email_state[1] == customer_product.id
+                and previous_email_state[2] == supplier.id
+            )
+
             SupplierProduct.objects.create(
                 customer_product=customer_product,
                 supplier=supplier,
@@ -2051,7 +2067,8 @@ def dpr_supplier(request, dpr_id):
                 po_validity=po_validities[i] or None,
                 quantity=quantity,
                 po_number=existing_po_numbers.get(existing_id, ''),
-                po_attachment=po_attachment
+                po_attachment=po_attachment,
+                po_email_sent=preserve_email_sent,
             )
 
         _sync_dpr_supplier_qty_ordered(dpr)
@@ -2077,16 +2094,25 @@ def dpr_supplier(request, dpr_id):
 
     groups = defaultdict(list)
     for sp in supplier_orders:
-        po_key = (sp.supplier, sp.po_number or 'PO')
-        groups[po_key].append(sp)
+        groups[sp.supplier].append(sp)
+
+    for sp in supplier_orders:
+        sp.show_supplier_email_action = False
 
     po_data_list = []
-    for (supplier, po_number), items in groups.items():
+    for group_index, (supplier, items) in enumerate(groups.items()):
+        po_number = items[0].po_number or 'PO'
+        first_item = items[0]
+        first_item.show_supplier_email_action = True
+        first_item.email_group_index = group_index
+        first_item.email_group_product_count = len(items)
         po_data_list.append({
             'supplier_id': supplier.id,
             'po_number': po_number,
             'supplier_name': supplier.supplier_name,
             'supplier_email': supplier.email or '',
+            'combined_supplier': True,
+            'product_count': len(items),
             'default_subject': f"Purchase Order - {po_number} from Metrology Engineering Solutions",
             'default_body': (
                 f"Dear Sir/Madam,\n\n"
@@ -2104,28 +2130,6 @@ def dpr_supplier(request, dpr_id):
         (sp.po_number or '').startswith('SPO-')
         for sp in supplier_orders
     )
-    supplier_product_email_data = []
-    for sp in supplier_orders:
-        po_number = sp.po_number or 'PO'
-        supplier_product_email_data.append({
-            'supplier_product_id': sp.id,
-            'supplier_id': sp.supplier_id,
-            'po_number': po_number,
-            'product_name': sp.customer_product.product_name,
-            'supplier_name': sp.supplier.supplier_name,
-            'supplier_email': sp.supplier.email or '',
-            'default_subject': (
-                f"Purchase Order - {po_number} - {sp.customer_product.product_name}"
-            ),
-            'default_body': (
-                f"Dear Sir/Madam,\n\n"
-                f"Greetings from Metrology Engineering Solutions.\n\n"
-                f"Please find the attached Purchase Order ({po_number}) for "
-                f"{sp.customer_product.product_name}.\n\n"
-                f"Kindly acknowledge receipt and confirm the delivery date.\n\n"
-                f"Thank you,\nMetrology Engineering Solutions"
-            ),
-        })
 
     context = {
         'dpr': dpr,
@@ -2141,7 +2145,6 @@ def dpr_supplier(request, dpr_id):
         'has_supplier_emails': has_supplier_emails,
         'missing_email_suppliers': missing_email_suppliers,
         'po_data_list': po_data_list,
-        'supplier_product_email_data': supplier_product_email_data,
         'all_same_supplier': all_same_supplier,
         'po_prepared': po_prepared,
     }
@@ -3788,13 +3791,15 @@ def generate_supplier_po(request, dpr_id):
     supplier_ids = supplier_products.values_list('supplier_id', flat=True).distinct()
     for supplier_id in supplier_ids:
         generated_po_number = (
-            f'SPO-{po_date:%Y%m%d}-{dpr.id:04d}-{supplier_id:04d}'
+            supplier_products.filter(
+                supplier_id=supplier_id,
+                po_number__startswith='SPO-',
+            ).values_list('po_number', flat=True).first()
+            or f'SPO-{po_date:%Y%m%d}-{dpr.id:04d}-{supplier_id:04d}'
         )
         supplier_products.filter(
             supplier_id=supplier_id,
-        ).exclude(
-            po_number__startswith='SPO-',
-        ).update(
+        ).exclude(po_number=generated_po_number).update(
             po_number=generated_po_number,
             po_date=po_date,
         )
@@ -3810,16 +3815,19 @@ def generate_supplier_po(request, dpr_id):
         request.POST.get('supplier_product_id')
         or request.GET.get('supplier_product_id')
     )
+    preview_combined_supplier = (
+        request.POST.get('combined_supplier') == '1'
+        or request.GET.get('combined_supplier') == '1'
+    )
     if preview_supplier_id and preview_po_number:
         try:
             supplier = Supplier.objects.get(pk=preview_supplier_id)
         except Supplier.DoesNotExist:
             raise Http404
-        preview_items = supplier_products.filter(
-            supplier=supplier,
-            po_number=preview_po_number,
-        )
-        if preview_supplier_product_id:
+        preview_items = supplier_products.filter(supplier=supplier)
+        if not preview_combined_supplier:
+            preview_items = preview_items.filter(po_number=preview_po_number)
+        if preview_supplier_product_id and not preview_combined_supplier:
             preview_items = preview_items.filter(pk=preview_supplier_product_id)
         items = list(preview_items)
         if items:
@@ -3835,16 +3843,16 @@ def generate_supplier_po(request, dpr_id):
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             return response
 
-    # Group supplier products by (supplier, po_number)
+    # Group all products into one PO per supplier.
     from collections import defaultdict
     groups = defaultdict(list)
     for sp in supplier_products:
-        po_key = (sp.supplier, sp.po_number or 'PO')
-        groups[po_key].append(sp)
+        groups[sp.supplier].append(sp)
 
     if len(groups) == 1:
-        # Only one PO, return it directly as a PDF
-        (supplier, po_number), items = list(groups.items())[0]
+        # Only one supplier PO, return it directly as a PDF.
+        supplier, items = list(groups.items())[0]
+        po_number = items[0].po_number or 'PO'
         pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
         
         safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
@@ -3856,7 +3864,8 @@ def generate_supplier_po(request, dpr_id):
         # Multiple POs, package into a ZIP
         archive = BytesIO()
         with ZipFile(archive, 'w', ZIP_DEFLATED) as zip_file:
-            for (supplier, po_number), items in groups.items():
+            for supplier, items in groups.items():
+                po_number = items[0].po_number or 'PO'
                 pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
                 safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
                 safe_supplier_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', supplier.supplier_name)
@@ -3890,6 +3899,7 @@ def send_supplier_po_email(request, dpr_id):
         supplier_id = request.POST.get('supplier_id')
         po_number = request.POST.get('po_number')
         supplier_product_id = request.POST.get('supplier_product_id')
+        combined_supplier = request.POST.get('combined_supplier') == '1'
         supplier_email = request.POST.get('supplier_email', '').strip()
         email_subject = request.POST.get('email_subject', '').strip()
         email_body = request.POST.get('email_body', '').strip()
@@ -3919,11 +3929,10 @@ def send_supplier_po_email(request, dpr_id):
             messages.error(request, 'Selected supplier does not exist.')
             return redirect('dpr_supplier', dpr_id=dpr_id)
 
-        email_items = supplier_products.filter(
-            supplier=supplier,
-            po_number=po_number,
-        )
-        if supplier_product_id:
+        email_items = supplier_products.filter(supplier=supplier)
+        if not combined_supplier:
+            email_items = email_items.filter(po_number=po_number)
+        if supplier_product_id and not combined_supplier:
             email_items = email_items.filter(pk=supplier_product_id)
         items = list(email_items)
         if not items:
@@ -3955,24 +3964,27 @@ def send_supplier_po_email(request, dpr_id):
                 )
 
             email.send(fail_silently=False)
+            SupplierProduct.objects.filter(
+                pk__in=[item.pk for item in items]
+            ).update(po_email_sent=True)
             messages.success(request, f"PO email sent successfully to: {supplier.supplier_name} ({', '.join(supplier_emails)})")
         except Exception as exc:
             messages.error(request, f"Failed to send email for {supplier.supplier_name}: {exc}")
 
         return redirect('dpr_supplier', dpr_id=dpr_id)
 
-    # Group supplier products by (supplier, po_number)
+    # Group all products into one email attachment per supplier.
     from collections import defaultdict
     groups = defaultdict(list)
     for sp in supplier_products:
-        po_key = (sp.supplier, sp.po_number or 'PO')
-        groups[po_key].append(sp)
+        groups[sp.supplier].append(sp)
 
     sent_emails = []
     missing_emails = []
     failed_emails = []
 
-    for (supplier, po_number), items in groups.items():
+    for supplier, items in groups.items():
+        po_number = items[0].po_number or 'PO'
         if not supplier.email:
             missing_emails.append(supplier.supplier_name)
             continue
@@ -3999,6 +4011,9 @@ def send_supplier_po_email(request, dpr_id):
             filename = f"{safe_po_num}.pdf"
             email.attach(filename, pdf_buffer.getvalue(), 'application/pdf')
             email.send(fail_silently=False)
+            SupplierProduct.objects.filter(
+                pk__in=[item.pk for item in items]
+            ).update(po_email_sent=True)
             
             sent_emails.append(f"{supplier.supplier_name} ({supplier.email})")
         except Exception as exc:

@@ -100,6 +100,7 @@ class SupplierProduct(models.Model):
     po_number = models.CharField(max_length=100)
 
     po_attachment = models.FileField(upload_to='supplier_po/', blank=True, null=True)
+    po_email_sent = models.BooleanField(default=False)
     quantity_received = models.IntegerField(default=0)
     quantity_not_ok = models.IntegerField(default=0)
     not_ok_reason = models.TextField(blank=True, null=True)

@@ -43,6 +43,11 @@
                 <td>{{ forloop.counter }}</td>
                 <td>
                   <input type="hidden" name="supplier_product_id[]" value="{{ sp.id }}">
+                  {% if sp.po_email_sent %}
+                  <div class="mb-1">
+                    <span class="badge bg-success">Supplier PO Sent</span>
+                  </div>
+                  {% endif %}
                   <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
                     <option value="">Select</option>
                     {% for p in products %}
@@ -75,12 +80,12 @@
                 <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
                 <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
-                  {% if is_edit and po_prepared and not all_same_supplier %}
+                  {% if is_edit and po_prepared and not all_same_supplier and sp.show_supplier_email_action %}
                   <button type="button"
                           class="btn btn-info btn-sm ms-1 rowSendMailBtn"
-                          data-email-index="{{ forloop.counter0 }}"
+                          data-email-index="{{ sp.email_group_index }}"
                           {% if not sp.supplier.email %}disabled title="Supplier email is missing"{% endif %}>
-                    <i class="bi bi-envelope"></i> Send Email
+                    <i class="bi bi-envelope"></i> Send Email{% if sp.email_group_product_count > 1 %} ({{ sp.email_group_product_count }} Products){% endif %}
                   </button>
                   {% endif %}
                 </td>
@@ -184,12 +189,10 @@
 {{ rfq_rate_map|json_script:'rfq-rate-map' }}
 {{ product_default_rate_map|json_script:'product-default-rate-map' }}
 {{ po_data_list|json_script:"po-email-data" }}
-{{ supplier_product_email_data|json_script:"supplier-product-email-data" }}
 <script>
 const rfqRateMap = JSON.parse(document.getElementById('rfq-rate-map').textContent);
 const productDefaultRateMap = JSON.parse(document.getElementById('product-default-rate-map').textContent);
 const poEmailData = JSON.parse(document.getElementById('po-email-data').textContent || '[]');
-const supplierProductEmailData = JSON.parse(document.getElementById('supplier-product-email-data').textContent || '[]');
 
 function getNextRowIndex() {
   return document.querySelectorAll('#supplierTable tbody tr').length;
@@ -575,13 +578,15 @@ if (generatePoBtn && supplierOrderForm) {
 
 sendMailBtn?.addEventListener('click', function() {
   if (sendMailBtn.disabled) return;
-  openSupplierPoEmailModal();
+  if (poEmailData.length > 0) {
+    openSupplierPoEmailModal({ ...poEmailData[0], combined_supplier: true });
+  }
 });
 
 document.querySelectorAll('.rowSendMailBtn').forEach(function(button) {
   button.addEventListener('click', function() {
     if (button.disabled) return;
-    const emailData = supplierProductEmailData[Number(button.dataset.emailIndex)];
+    const emailData = poEmailData[Number(button.dataset.emailIndex)];
     if (emailData) {
       openSupplierPoEmailModal(emailData);
     }
@@ -625,6 +630,7 @@ function populateEmailModalFields(po) {
   document.getElementById('emailSupplierId').value = po.supplier_id;
   document.getElementById('emailPoNumber').value = po.po_number;
   document.getElementById('emailSupplierProductId').value = po.supplier_product_id || '';
+  document.getElementById('emailCombinedSupplier').value = po.combined_supplier ? '1' : '';
   document.getElementById('supplierEmailField').value = po.supplier_email || '';
   document.getElementById('supplierEmailSubject').value = po.default_subject || '';
   document.getElementById('supplierEmailBody').value = po.default_body || '';
@@ -634,16 +640,21 @@ function populateEmailModalFields(po) {
   note.textContent = `PO PDF${productLabel} for ${po.supplier_name} (${po.po_number}) will be attached automatically.`;
 }
 
-document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click', function() {
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#previewSupplierAttachmentBtn')) return;
   const supplierId = document.getElementById('emailSupplierId').value;
   const poNumber = document.getElementById('emailPoNumber').value;
   const supplierProductId = document.getElementById('emailSupplierProductId').value;
+  const combinedSupplier = document.getElementById('emailCombinedSupplier').value;
   if (!supplierId || !poNumber) return;
 
   const dprId = "{{ dpr.id }}";
   const params = new URLSearchParams({ supplier_id: supplierId, po_number: poNumber });
   if (supplierProductId) {
     params.set('supplier_product_id', supplierProductId);
+  }
+  if (combinedSupplier) {
+    params.set('combined_supplier', '1');
   }
   window.open(`/dpr/${dprId}/generate-po/?${params.toString()}`, '_blank');
 });
@@ -709,6 +720,7 @@ document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click
             <input type="hidden" name="supplier_id" id="emailSupplierId">
             <input type="hidden" name="po_number" id="emailPoNumber">
             <input type="hidden" name="supplier_product_id" id="emailSupplierProductId">
+            <input type="hidden" name="combined_supplier" id="emailCombinedSupplier">
             
             <div class="col-md-6">
               <label class="form-label fw-bold">Supplier Email(s) *</label>
