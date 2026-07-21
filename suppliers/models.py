@@ -9,5 +9,11 @@ class Supplier(models.Model):
     gstin = models.CharField(max_length=15, blank=True, null=True, verbose_name="GSTIN")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def save(self, *args, **kwargs):
+        if self.gstin:
+            self.gstin = self.gstin.strip().upper()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.supplier_name
+

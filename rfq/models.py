@@ -71,6 +71,7 @@ class RFQProduct(models.Model):
         related_name='rfq_multi_price_requests'
     )
     quantity = models.IntegerField(default=0)
+    unit = models.CharField(max_length=20, default="No's", blank=True, null=True)
     rate_per_unit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     value = models.DecimalField(max_digits=12, decimal_places=2)
     quotation_email_sent = models.BooleanField(

@@ -44,7 +44,7 @@
             </div>
             <div class="col-lg">
                 <label class="form-label">GSTIN</label>
-                <input type="text" name="gstin" class="form-control" maxlength="15">
+                <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
             </div>
             <div class="col-lg">
                 <label class="form-label">Payment Terms</label>
@@ -67,6 +67,21 @@
 </div>
 
 <div class="dpr-card dpr-table-card">
+    <div class="dpr-table-toolbar p-3 border-bottom">
+        <div class="row g-2 align-items-center justify-content-between">
+            <div class="col-lg-5">
+                <form method="get" action="{% url 'customer_details' %}" id="customerSearchForm" class="m-0">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <input type="search" name="search" id="customerSearchInput" class="form-control" placeholder="Search by customer name..." value="{{ search_query|default:'' }}" autocomplete="off">
+                    </div>
+                </form>
+            </div>
+            <div class="col-lg-7 text-lg-end">
+                <span id="customerRowCount" class="text-muted small">Showing {{ customers|length }} records</span>
+            </div>
+        </div>
+    </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
@@ -109,7 +124,7 @@
                             <input type="tel" name="phone_number" form="form-{{ customer.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ customer.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
                         </td>
                         <td>
-                            <input type="text" name="gstin" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.gstin|default:'' }}" maxlength="15" disabled>
+                            <input type="text" name="gstin" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field js-gstin-input text-uppercase" value="{{ customer.gstin|default:''|upper }}" maxlength="15" disabled>
                         </td>
                         <td>
                             <div class="input-group input-group-sm">
@@ -154,9 +169,35 @@
 
 <script>
 document.addEventListener('input', function (e) {
-    if (!e.target.classList.contains('js-phone-input')) return;
-    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+    if (e.target.classList.contains('js-phone-input')) {
+        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+    }
+    if (e.target.name === 'gstin' || e.target.classList.contains('js-gstin-input')) {
+        e.target.value = e.target.value.toUpperCase();
+    }
 });
+
+const customerSearchInput = document.getElementById('customerSearchInput');
+if (customerSearchInput) {
+    customerSearchInput.addEventListener('input', function () {
+        const filter = this.value.toLowerCase().trim();
+        const rows = document.querySelectorAll('tbody tr');
+        let visibleCount = 0;
+        rows.forEach(row => {
+            const nameInput = row.querySelector('input[name="customer_name"]');
+            if (nameInput) {
+                const name = nameInput.value.toLowerCase();
+                const isMatch = name.includes(filter);
+                row.style.display = isMatch ? '' : 'none';
+                if (isMatch) visibleCount++;
+            }
+        });
+        const countSpan = document.getElementById('customerRowCount');
+        if (countSpan) {
+            countSpan.textContent = `Showing ${visibleCount} records`;
+        }
+    });
+}
 
 document.addEventListener('click', function (e) {
     const editButton = e.target.closest('.master-edit-btn');

@@ -33,4 +33,5 @@ urlpatterns = [
 ),
     path('add-supplier/', views.add_supplier, name='add_supplier'),
     path('get-customer-quotations/', views.get_customer_quotations, name='get_customer_quotations'),
+    path('check-customer-po-number/', views.check_customer_po_number, name='check_customer_po_number'),
 ]

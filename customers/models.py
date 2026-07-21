@@ -16,6 +16,10 @@ class Customer(models.Model):
     payment_terms = models.CharField(max_length=255, blank=True, null=True, verbose_name="Payment Terms")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def save(self, *args, **kwargs):
+        if self.gstin:
+            self.gstin = self.gstin.strip().upper()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.customer_name
-

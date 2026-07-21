@@ -52,9 +52,8 @@
                         <th class="sortable" data-col="7" data-sort-type="number">Quantity Delivered <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="8" data-sort-type="date">PO Validity <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="10" data-sort-type="date">Expected Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="11" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="12" data-sort-type="text">Delivery Status <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="10" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="11" data-sort-type="text">Delivery Status <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -73,7 +72,6 @@
                         <td class="quantity-delivered-cell" data-sort-value="{{ product.quantity_delivered }}">{{ product.quantity_delivered }}</td>
                         <td data-sort-value="{{ product.dpr.po_validity|date:'Y-m-d'|default:'' }}">{{ product.dpr.po_validity|date:'Y-m-d'|default:'-' }}</td>
                         <td data-sort-value="{{ product.dpr.po_value|default:0 }}">{{ product.dpr.po_value|default:'-' }}</td>
-                        <td data-sort-value="">-</td>
                         <td data-sort-value="view supplier status">
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="button" class="btn btn-info btn-sm btn-supplier-status">
@@ -95,7 +93,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="13" class="text-center">No product records found.</td>
+                        <td colspan="12" class="text-center">No product records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -303,7 +301,7 @@ function postStatusUpdate(row, selectElement, status, payload = {}) {
             quantityDeliveredCell.textContent = '0';
             quantityDeliveredCell.setAttribute('data-sort-value', '0');
         }
-        const inwardCell = row.cells[12];
+        const inwardCell = row.cells[11];
         if (inwardCell) {
             const statusLabels = {
                 delivered: 'closed',

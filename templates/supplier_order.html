@@ -77,7 +77,7 @@
                   </div>
                 </td>
                 <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" value="{{ sp.po_value }}" readonly required></td>
-                <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
+                <td><input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" required></td>
                 <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
                   {% if is_edit and po_prepared and not all_same_supplier and sp.show_supplier_email_action %}
@@ -144,14 +144,11 @@
       <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow">Add Row</button>
       {% endif %}
       <div>
-        {% if is_edit %}
-        <button type="submit"
-                name="action"
-                value="generate_po"
+        <button type="button"
                 class="btn btn-primary"
                 id="generatePoBtn"
-                title="Update supplier order and download Purchase Order PDF">
-          <i class="bi bi-file-earmark-arrow-down me-1"></i> Update and Prepare PO
+                title="Update supplier order and generate Purchase Order PDF">
+          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO & Update
         </button>
         <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary ms-1">Close</a>
         {% if po_prepared and all_same_supplier %}
@@ -163,18 +160,6 @@
           <i class="bi bi-envelope me-1"></i> Send Email
         </button>
         {% endif %}
-        {% else %}
-        <button type="submit" class="btn btn-success">Submit</button>
-        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary ms-1">Close</a>
-        <button type="submit"
-                name="action"
-                value="generate_po"
-                class="btn btn-primary ms-1"
-                id="generatePoBtn"
-                title="Download Purchase Order PDF">
-          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
-        </button>
-        {% endif %}
         {% if supplier_orders and missing_email_suppliers %}
         <div class="text-danger small mt-2">
           * Send Email is disabled for suppliers without an Email ID: <strong>{{ missing_email_suppliers|join:", " }}</strong>.
@@ -183,6 +168,76 @@
         {% endif %}
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Delivery Address Selection Modal -->
+<div class="modal fade" id="deliveryAddressModal" tabindex="-1" aria-labelledby="deliveryAddressModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content shadow border-0">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-bold" id="deliveryAddressModalLabel">
+          <i class="bi bi-geo-alt me-2"></i>Select Delivery Address for Purchase Order
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <p class="text-secondary mb-3">
+          Please select the <strong>DELIVERY ADDRESS</strong> to generate on the Purchase Order PDF. <span class="text-muted">(Invoice Address remains fixed).</span>
+        </p>
+
+        <div class="row g-3">
+          <!-- Option 1: Hosur Address -->
+          <div class="col-md-6">
+            <div class="card h-100 border-2 delivery-address-card active-delivery-card" id="cardHosurAddr" style="cursor: pointer; border-color: #0d6efd; background-color: #f8f9fa;">
+              <div class="card-body">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="modalDeliveryAddressChoice" id="radioHosurAddr" value="hosur" checked>
+                  <label class="form-check-label fw-bold text-primary fs-6" for="radioHosurAddr">
+                    Option 1: Hosur Address
+                  </label>
+                </div>
+                <hr class="my-2">
+                <div class="small text-dark lh-sm">
+                  <strong>METROLOGY ENGINEERING SOLUTIONS</strong><br>
+                  NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br>
+                  2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri,<br>
+                  Tamilnadu-635109.<br>
+                  Phone : +91-965-577-8807
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Option 2: Chennai Address -->
+          <div class="col-md-6">
+            <div class="card h-100 border-2 delivery-address-card" id="cardChennaiAddr" style="cursor: pointer; border-color: #dee2e6; background-color: #ffffff;">
+              <div class="card-body">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="modalDeliveryAddressChoice" id="radioChennaiAddr" value="chennai">
+                  <label class="form-check-label fw-bold text-primary fs-6" for="radioChennaiAddr">
+                    Option 2: Chennai Address
+                  </label>
+                </div>
+                <hr class="my-2">
+                <div class="small text-dark lh-sm">
+                  <strong>METROLOGY ENGINEERING SOLUTIONS</strong><br>
+                  14/65, 6th Street, Kamaraj Nagar, Korratur,<br>
+                  Chennai, Tamil Nadu, India-600 080<br>
+                  Phone : +91-965-577-8807
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary px-4 fw-bold" id="modalConfirmGeneratePoBtn">
+          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -360,12 +415,39 @@ document.addEventListener('change', function (e) {
 
   const row = e.target.closest('tr');
   
-  if (productSelect) {
+    if (productSelect) {
     const selectedOption = productSelect.options[productSelect.selectedIndex];
     if (selectedOption && selectedOption.value) {
-      // 1. Autofill Quantity (remaining / max qty)
+      const productId = String(selectedOption.value);
+
+      // 1. Auto-fill Supplier from rfqRateMap (first supplier linked to this product)
+      const supplierDropdown = row.querySelector('.supplier-dropdown');
+      if (supplierDropdown && supplierDropdown.value === '') {
+        const productRates = rfqRateMap[productId] || {};
+        const firstSupplierId = Object.keys(productRates)[0];
+        if (firstSupplierId) {
+          supplierDropdown.value = firstSupplierId;
+        }
+      }
+
+      // 2. Auto-fill Rate (RFQ supplier rate → default rate → data-rate)
+      const rateInput = row.querySelector('.rate-input');
+      if (rateInput) {
+        const supplierDropdown2 = row.querySelector('.supplier-dropdown');
+        const supplierId = supplierDropdown2 ? String(supplierDropdown2.value) : '';
+        const productRates = rfqRateMap[productId] || {};
+        if (supplierId && productRates[supplierId] !== undefined) {
+          rateInput.value = Number(productRates[supplierId]).toFixed(2);
+        } else if (productDefaultRateMap[productId] !== undefined) {
+          rateInput.value = Number(productDefaultRateMap[productId]).toFixed(2);
+        } else {
+          const dataRate = selectedOption.dataset.rate || selectedOption.getAttribute('data-rate') || '';
+          if (dataRate) rateInput.value = Number(dataRate).toFixed(2);
+        }
+      }
+
+      // 3. Auto-fill Quantity (remaining / max qty)
       const maxQty = parseInt(selectedOption.dataset.maxQty || '0', 10);
-      
       const usedByProduct = {};
       document.querySelectorAll('#supplierTable tbody tr').forEach(r => {
         const pSel = r.querySelector('.product-select');
@@ -376,26 +458,13 @@ document.addEventListener('change', function (e) {
         }
       });
       const remaining = Math.max(0, maxQty - (usedByProduct[productSelect.value] || 0));
-      
-       const quantityInput = row.querySelector('.quantity-input');
+      const quantityInput = row.querySelector('.quantity-input');
       if (quantityInput) {
         quantityInput.value = remaining;
       }
-
-      // 2. Autofill Rate (first try RFQ, fallback to default rate)
-      const supplierSelect = row.querySelector('.supplier-dropdown');
-      const supplierId = supplierSelect ? supplierSelect.value : '';
-      if (supplierId) {
-        updateRateFromRfq(row);
-      } else {
-        const rateInput = row.querySelector('.rate-input');
-        if (rateInput) {
-          rateInput.value = '';
-        }
-      }
-
     }
   } else {
+    // Supplier changed — update rate based on new supplier selection
     updateRateFromRfq(row);
   }
 
@@ -440,9 +509,6 @@ function updateRateFromRfq(row) {
   const rfqRate = productRates[supplierId];
   if (rfqRate !== undefined && rfqRate !== null && rfqRate !== '') {
     rateInput.value = Number(rfqRate).toFixed(2);
-  } else {
-    // If supplier is selected but has no price in RFQ, clear it so they can type it
-    rateInput.value = '';
   }
 }
 
@@ -559,9 +625,93 @@ updateQuantityLimits();
 updateSupplierRowValues();
 updateOverallSupplierQty();
 
-const generatePoBtn = document.getElementById('generatePoBtn');
+// Delivery Address Modal Logic for Generate PO
+document.addEventListener('DOMContentLoaded', function() {
+  const generatePoBtn = document.getElementById('generatePoBtn');
+  const deliveryAddressModal = document.getElementById('deliveryAddressModal');
+  const modalConfirmGeneratePoBtn = document.getElementById('modalConfirmGeneratePoBtn');
+  const cardHosurAddr = document.getElementById('cardHosurAddr');
+  const cardChennaiAddr = document.getElementById('cardChennaiAddr');
+  const radioHosurAddr = document.getElementById('radioHosurAddr');
+  const radioChennaiAddr = document.getElementById('radioChennaiAddr');
+
+  if (generatePoBtn) {
+    generatePoBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      const form = document.getElementById('supplierOrderForm');
+      if (form && !form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+      const modal = bootstrap.Modal.getOrCreateInstance(deliveryAddressModal);
+      modal.show();
+    });
+  }
+
+  function updateCardSelection(selected) {
+    if (selected === 'hosur') {
+      radioHosurAddr.checked = true;
+      cardHosurAddr.style.borderColor = '#0d6efd';
+      cardHosurAddr.style.backgroundColor = '#f8f9fa';
+      cardChennaiAddr.style.borderColor = '#dee2e6';
+      cardChennaiAddr.style.backgroundColor = '#ffffff';
+    } else {
+      radioChennaiAddr.checked = true;
+      cardChennaiAddr.style.borderColor = '#0d6efd';
+      cardChennaiAddr.style.backgroundColor = '#f8f9fa';
+      cardHosurAddr.style.borderColor = '#dee2e6';
+      cardHosurAddr.style.backgroundColor = '#ffffff';
+    }
+  }
+
+  if (cardHosurAddr) cardHosurAddr.addEventListener('click', () => updateCardSelection('hosur'));
+  if (cardChennaiAddr) cardChennaiAddr.addEventListener('click', () => updateCardSelection('chennai'));
+  if (radioHosurAddr) radioHosurAddr.addEventListener('change', () => updateCardSelection('hosur'));
+  if (radioChennaiAddr) radioChennaiAddr.addEventListener('change', () => updateCardSelection('chennai'));
+
+  if (modalConfirmGeneratePoBtn) {
+    modalConfirmGeneratePoBtn.addEventListener('click', function() {
+      const selectedAddress = document.querySelector('input[name="modalDeliveryAddressChoice"]:checked')?.value || 'hosur';
+      const form = document.getElementById('supplierOrderForm');
+      if (!form) return;
+
+      const newTab = window.open('about:blank', '_blank');
+
+      modalConfirmGeneratePoBtn.disabled = true;
+      modalConfirmGeneratePoBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processing...';
+
+      const formData = new FormData(form);
+      formData.append('delivery_address', selectedAddress);
+
+      fetch(window.location.href, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      }).then(response => {
+        const modal = bootstrap.Modal.getInstance(deliveryAddressModal);
+        if (modal) modal.hide();
+
+        const poUrl = "{% url 'generate_supplier_po' dpr.id %}?delivery_address=" + encodeURIComponent(selectedAddress);
+        if (newTab) {
+          newTab.location.href = poUrl;
+        } else {
+          window.open(poUrl, '_blank');
+        }
+        window.location.href = "{% url 'dpr_view' %}";
+      }).catch(err => {
+        console.error('Error updating supplier orders:', err);
+        if (newTab) newTab.close();
+        alert('An error occurred while updating supplier orders.');
+        modalConfirmGeneratePoBtn.disabled = false;
+        modalConfirmGeneratePoBtn.innerHTML = '<i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO';
+      });
+    });
+  }
+});
+
 const sendMailBtn = document.getElementById('sendMailBtn');
-const supplierOrderForm = document.getElementById('supplierOrderForm');
 
 if (generatePoBtn && supplierOrderForm) {
   supplierOrderForm.addEventListener('submit', function(e) {
@@ -760,3 +910,28 @@ document.addEventListener('click', function(e) {
 </div>
 
 {% endblock %}
+
+<script>
+// Auto-refresh every 30 seconds, but cancel if user is actively using the form
+(function () {
+  let refreshTimer = null;
+  const REFRESH_INTERVAL = 30000; // 30 seconds
+
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(function () {
+      location.reload();
+    }, REFRESH_INTERVAL);
+  }
+
+  // Cancel refresh if user interacts with the form
+  ['change', 'input', 'click', 'keydown', 'mousedown', 'touchstart'].forEach(function (evt) {
+    document.addEventListener(evt, function () {
+      clearTimeout(refreshTimer);
+    }, { passive: true });
+  });
+
+  scheduleRefresh();
+})();
+</script>
+

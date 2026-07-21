@@ -242,6 +242,9 @@
                            name="po_number"
                            id="poNumberInput"
                            value="{% if dpr %}{{ dpr.po_number|default:'' }}{% endif %}">
+                    <div id="poNumberExistsError" class="text-danger small mt-1 d-none">
+                        This customer po number was already exist
+                    </div>
 
                 </div>
 
@@ -594,6 +597,73 @@ function updatePoNumberVisibility() {
 document.getElementById('confirmationType').addEventListener('change', updatePoNumberVisibility);
 updatePoNumberVisibility();
 
+let isPoNumberDuplicate = false;
+
+async function checkPoNumberUniqueness() {
+    const confirmation = document.getElementById('confirmationType')?.value;
+    const poInput = document.getElementById('poNumberInput');
+    const errorDiv = document.getElementById('poNumberExistsError');
+    if (!poInput) return;
+
+    const poVal = poInput.value.trim();
+    if (confirmation === 'Customer PO' && poVal !== '') {
+        const dprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
+        try {
+            const resp = await fetch(`/check-customer-po-number/?po_number=${encodeURIComponent(poVal)}&dpr_id=${dprId}`);
+            const data = await resp.json();
+            if (data.exists) {
+                isPoNumberDuplicate = true;
+                poInput.classList.add('is-invalid');
+                if (errorDiv) {
+                    errorDiv.textContent = data.message || 'This customer po number was already exist';
+                    errorDiv.classList.remove('d-none');
+                }
+            } else {
+                isPoNumberDuplicate = false;
+                poInput.classList.remove('is-invalid');
+                if (errorDiv) {
+                    errorDiv.classList.add('d-none');
+                }
+            }
+        } catch (err) {
+            console.error('Error checking PO number uniqueness:', err);
+        }
+    } else {
+        isPoNumberDuplicate = false;
+        poInput.classList.remove('is-invalid');
+        if (errorDiv) {
+            errorDiv.classList.add('d-none');
+        }
+    }
+}
+
+const poInputEl = document.getElementById('poNumberInput');
+if (poInputEl) {
+    poInputEl.addEventListener('input', checkPoNumberUniqueness);
+    poInputEl.addEventListener('blur', checkPoNumberUniqueness);
+    poInputEl.addEventListener('change', checkPoNumberUniqueness);
+}
+document.getElementById('confirmationType')?.addEventListener('change', function() {
+    checkPoNumberUniqueness();
+});
+
+document.getElementById('customerOrderForm')?.addEventListener('submit', function(e) {
+    const confirmation = document.getElementById('confirmationType')?.value;
+    if (confirmation === 'Customer PO' && isPoNumberDuplicate) {
+        e.preventDefault();
+        alert('This customer po number was already exist');
+        if (poInputEl) {
+            poInputEl.focus();
+            poInputEl.classList.add('is-invalid');
+        }
+        const errorDiv = document.getElementById('poNumberExistsError');
+        if (errorDiv) {
+            errorDiv.classList.remove('d-none');
+        }
+        return false;
+    }
+});
+
 const productTypesList = [
     "APG steel", "ARG steel", "APG carbide", "ARG carbide", "SAPG", "SARG",
     "Multi-Gauge", "unit Std Air", "unit SPC Air", "unit Std lvdt", "unit SPC lvdt",
@@ -683,6 +753,10 @@ function populateProductsFromSelectedQuotations() {
         if (quotationValueInput) {
             quotationValueInput.value = totalQuotationValue.toFixed(2);
         }
+        const poValueInput = document.getElementById('poValueInput');
+        if (poValueInput) {
+            poValueInput.value = totalQuotationValue.toFixed(2);
+        }
     } else {
         tbody.innerHTML = generateProductRow(0);
     }
@@ -769,7 +843,8 @@ function loadCustomerQuotations() {
         return;
     }
 
-    fetch(`/get-customer-quotations/?customer_id=${customerId}`)
+    const currentDprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
+    fetch(`/get-customer-quotations/?customer_id=${customerId}&dpr_id=${currentDprId}`)
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
@@ -787,12 +862,15 @@ function loadCustomerQuotations() {
                     );
                 });
 
-                // Preserve any previously selected quotes that are not in the fetched list
-                selectedQuotes.forEach(q => {
-                    if (!fetchedQuotes.includes(q)) {
-                        addCheckbox(q, q, true);
-                    }
-                });
+                // Preserve previously selected quotes when editing existing DPR
+                const isEditPage = '{% if is_edit %}true{% else %}false{% endif %}' === 'true';
+                if (isEditPage) {
+                    selectedQuotes.forEach(q => {
+                        if (!fetchedQuotes.includes(q)) {
+                            addCheckbox(q, q, true);
+                        }
+                    });
+                }
 
                 updateDisplay();
             }
