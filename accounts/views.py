@@ -559,14 +559,23 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         if customer.region.lower() not in customer_address.lower():
             story.append(Paragraph(pdf_text(customer.region), normal))
             
-    # Check for GSTIN in address lines
-    gstin_found = False
-    for line in customer_address.split('\n'):
-        if 'gst' in line.lower():
-            gstin_found = True
-            break
-    if not gstin_found:
-        story.append(Paragraph('GSTIN : -', normal))
+    # Include GSTIN from customer master or fallback to address check
+    customer_gstin = (getattr(customer, 'gstin', None) or '').strip()
+    if customer_gstin:
+        if customer_gstin.upper().startswith('GST'):
+            story.append(Paragraph(pdf_text(customer_gstin), normal))
+        else:
+            story.append(Paragraph(f'GSTIN : {pdf_text(customer_gstin)}', normal))
+    else:
+        gstin_line = None
+        for line in customer_address.split('\n'):
+            if 'gst' in line.lower():
+                gstin_line = line.strip()
+                break
+        if gstin_line:
+            story.append(Paragraph(pdf_text(gstin_line), normal))
+        else:
+            story.append(Paragraph('GSTIN : -', normal))
         
     story.append(Paragraph('Kind Attension : -', normal))
     story.append(Paragraph(f'Phone :{pdf_text(customer_phone)}', normal))
@@ -3577,15 +3586,16 @@ def _build_single_po_pdf_buffer(dpr, supplier, items):
     story.append(Spacer(1, 2 * mm))
 
     # 3. BUYER / VENDOR / META Table
-    supplier_gst_no = ""
     addr = supplier.address or ""
-    gst_match = re.search(r'GST(?:IN)?\s*[:\-]?\s*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1})', addr, re.IGNORECASE)
-    if gst_match:
-        supplier_gst_no = gst_match.group(1)
-    else:
-        gst_match_alt = re.search(r'\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}\b', addr)
-        if gst_match_alt:
-            supplier_gst_no = gst_match_alt.group(0)
+    supplier_gst_no = (getattr(supplier, 'gstin', None) or '').strip()
+    if not supplier_gst_no:
+        gst_match = re.search(r'GST(?:IN)?\s*[:\-]?\s*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1})', addr, re.IGNORECASE)
+        if gst_match:
+            supplier_gst_no = gst_match.group(1)
+        else:
+            gst_match_alt = re.search(r'\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}\b', addr)
+            if gst_match_alt:
+                supplier_gst_no = gst_match_alt.group(0)
 
     buyer_para = Paragraph(
         '<b>Metrology Engineering Solutions</b>,<br/>'

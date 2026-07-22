@@ -407,6 +407,13 @@ if (supplierPhoneInput) {
 }
 
 document.addEventListener('change', function (e) {
+  if (e.target.classList.contains('rate-input') || e.target.classList.contains('quantity-input')) {
+    updateSupplierRowValues();
+    updateQuantityLimits();
+    updateOverallSupplierQty();
+    return;
+  }
+
   const productSelect = e.target.closest('.product-select');
   const supplierSelect = e.target.closest('.supplier-dropdown');
   if (!productSelect && !supplierSelect) {
@@ -460,7 +467,7 @@ document.addEventListener('change', function (e) {
       const remaining = Math.max(0, maxQty - (usedByProduct[productSelect.value] || 0));
       const quantityInput = row.querySelector('.quantity-input');
       if (quantityInput) {
-        quantityInput.value = remaining;
+        quantityInput.value = remaining > 0 ? remaining : 1;
       }
     }
   } else {
@@ -479,9 +486,6 @@ document.addEventListener('input', function (e) {
     || e.target.classList.contains('rate-input')
   ) {
     updateSupplierRowValues();
-  }
-
-  if (e.target.classList.contains('quantity-input')) {
     updateQuantityLimits();
     updateOverallSupplierQty();
   }
@@ -523,8 +527,16 @@ function updateSupplierRowValues() {
       return;
     }
 
-    const quantity = Number(qtyInput.value) || 0;
     const rate = Number(rateInput.value) || 0;
+    let quantity = Number(qtyInput.value);
+
+    if (rate > 0 && (!qtyInput.value || quantity <= 0)) {
+      quantity = 1;
+      qtyInput.value = quantity;
+    } else if (!qtyInput.value || isNaN(quantity)) {
+      quantity = 0;
+    }
+
     valueInput.value = (quantity * rate).toFixed(2);
   });
 }

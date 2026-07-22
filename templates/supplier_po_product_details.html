@@ -453,9 +453,19 @@ function showFirstTimeInwardModal() {
     okInput.max = orderedQty;
     notOkInput.max = orderedQty;
     
-    receivedInput.value = pendingSupplierInward.receivedQty || pendingSupplierInward.okQty || '0';
-    okInput.value = pendingSupplierInward.okQty || '0';
-    notOkInput.value = pendingSupplierInward.notOkQty || '0';
+    const initialReceived = pendingSupplierInward.receivedQty > 0
+        ? pendingSupplierInward.receivedQty
+        : '';
+    const initialOk = pendingSupplierInward.okQty > 0
+        ? pendingSupplierInward.okQty
+        : '';
+    const initialNotOk = pendingSupplierInward.notOkQty > 0
+        ? pendingSupplierInward.notOkQty
+        : '';
+
+    receivedInput.value = initialReceived;
+    okInput.value = initialOk;
+    notOkInput.value = initialNotOk;
     document.getElementById('supplierInwardNotOkReason').value = pendingSupplierInward.notOkReason || '';
     document.getElementById('supplierInwardHint').textContent =
         `Received quantity cannot exceed ${orderedQty}. OK quantity plus NOT OK quantity cannot exceed received quantity.`;
@@ -770,13 +780,25 @@ function updateReworkFieldsState() {
 });
 
 function autoFillNotOkQty() {
-    const receivedVal = parseInt(document.getElementById('supplierInwardReceivedQty').value || '0', 10);
-    const okVal = parseInt(document.getElementById('supplierInwardOkQty').value || '0', 10);
+    const receivedVal = document.getElementById('supplierInwardReceivedQty').value.trim();
+    const okInput = document.getElementById('supplierInwardOkQty');
+    const okValStr = okInput.value.trim();
     const notOkInput = document.getElementById('supplierInwardNotOkQty');
     
-    if (document.getElementById('supplierInwardOkQty').value !== '') {
-        const calculatedNotOk = Math.max(0, receivedVal - okVal);
-        notOkInput.value = calculatedNotOk;
+    if (receivedVal !== '') {
+        const receivedNum = parseInt(receivedVal, 10);
+        let okNum = parseInt(okValStr, 10);
+
+        if (okValStr !== '' && !isNaN(okNum)) {
+            if (okNum > receivedNum) {
+                okNum = receivedNum;
+                okInput.value = okNum;
+            }
+            const calculatedNotOk = Math.max(0, receivedNum - okNum);
+            notOkInput.value = calculatedNotOk;
+        } else if (okValStr === '') {
+            notOkInput.value = '';
+        }
         toggleSupplierInwardReason();
         validateSupplierInwardLive();
     }
@@ -794,13 +816,25 @@ document.getElementById('supplierInwardReceivedQty').addEventListener('change', 
 });
 
 function autoFillReworkNotOkQty() {
-    const receivedVal = parseInt(document.getElementById('reworkReceivedQty').value || '0', 10);
-    const okVal = parseInt(document.getElementById('reworkOkQty').value || '0', 10);
+    const receivedVal = document.getElementById('reworkReceivedQty').value.trim();
+    const okInput = document.getElementById('reworkOkQty');
+    const okValStr = okInput.value.trim();
     const notOkInput = document.getElementById('reworkNotOkQty');
     
-    if (document.getElementById('reworkOkQty').value !== '') {
-        const calculatedNotOk = Math.max(0, receivedVal - okVal);
-        notOkInput.value = calculatedNotOk;
+    if (receivedVal !== '') {
+        const receivedNum = parseInt(receivedVal, 10);
+        let okNum = parseInt(okValStr, 10);
+
+        if (okValStr !== '' && !isNaN(okNum)) {
+            if (okNum > receivedNum) {
+                okNum = receivedNum;
+                okInput.value = okNum;
+            }
+            const calculatedNotOk = Math.max(0, receivedNum - okNum);
+            notOkInput.value = calculatedNotOk;
+        } else if (okValStr === '') {
+            notOkInput.value = '';
+        }
         validateReworkLive();
     }
 }
