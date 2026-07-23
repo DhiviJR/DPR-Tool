@@ -140,9 +140,7 @@
           <span id="totalSupplierQty">{{ total_supplier_quantity|default:0 }}</span>/{{ total_customer_quantity }}
         </strong>
       </div>
-      {% if not is_fully_allocated %}
-      <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow">Add Row</button>
-      {% endif %}
+      <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow" {% if total_supplier_quantity >= total_customer_quantity and total_customer_quantity > 0 %}disabled{% endif %}>Add Row</button>
       <div>
         <button type="button"
                 class="btn btn-primary"
@@ -254,6 +252,11 @@ function getNextRowIndex() {
 }
 
 document.getElementById('addSupplierRow')?.addEventListener('click', function () {
+  const totalCustomer = parseInt('{{ total_customer_quantity }}', 10) || 0;
+  const totalSupplier = parseInt(document.getElementById('totalSupplierQty').textContent || '0', 10);
+  if (totalCustomer > 0 && totalSupplier >= totalCustomer) {
+    return;
+  }
   const tbody = document.querySelector('#supplierTable tbody');
   const rowCount = tbody.rows.length + 1;
   const rowIndex = getNextRowIndex();
@@ -299,6 +302,7 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
   tbody.appendChild(row);
   updateQuantityLimits();
   updateSupplierRowValues();
+  updateOverallSupplierQty();
 });
 
 let activeSupplierRow = null;
@@ -587,6 +591,16 @@ function updateOverallSupplierQty() {
   });
 
   document.getElementById('totalSupplierQty').textContent = totalSupplierQty;
+
+  const addRowBtn = document.getElementById('addSupplierRow');
+  if (addRowBtn) {
+    const totalCustomer = parseInt('{{ total_customer_quantity }}', 10) || 0;
+    if (totalCustomer > 0 && totalSupplierQty >= totalCustomer) {
+      addRowBtn.disabled = true;
+    } else {
+      addRowBtn.disabled = false;
+    }
+  }
 }
 
 document.getElementById('supplierOrderForm').addEventListener('submit', function (e) {

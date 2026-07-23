@@ -72,11 +72,11 @@
                         <td data-sort-value="{{ dpr.supplier_qty_received }}/{{ dpr.customer_qty_delivered }}">{{ dpr.supplier_qty_received }}/{{ dpr.customer_qty_delivered }}</td>
                         <td data-sort-value="{{ dpr.po_value|default:0 }}">{{ dpr.po_value|default:'-' }}</td>
                         <td data-sort-value="action">
-                            <div class="d-flex flex-wrap gap-2">
+                            <div class="d-flex flex-wrap gap-2 {% if dpr.filter_state == 'completed' %}justify-content-center{% endif %}">
                                 <button type="button" class="btn btn-info btn-sm btn-product-list">Product List</button>
+                                {% if dpr.filter_state != 'completed' %}
                                 <button type="button" class="btn btn-primary btn-sm btn-edit-dpr">Edit</button>
                                 <button type="button" class="btn btn-warning btn-sm btn-edit-supplier">Edit Supplier</button>
-                                {% if dpr.filter_state != 'completed' %}
                                 <select class="form-select form-select-sm dpr-status-select" style="width: 120px;">
                                     <option value="" {% if not dpr.status %}selected{% endif %}>Select</option>
                                     <option value="hold" {% if dpr.status == 'hold' %}selected{% endif %}>Hold</option>

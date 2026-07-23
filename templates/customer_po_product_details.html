@@ -147,9 +147,26 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <label for="partialDeliveredQty" class="form-label">Enter quantity delivered</label>
-                <input type="number" min="1" id="partialDeliveredQty" class="form-control">
-                <div class="form-text" id="partialDeliveryHint"></div>
+                <div class="mb-3">
+                    <label for="partialDeliveredQty" class="form-label">Enter quantity delivered</label>
+                    <input type="number" min="1" id="partialDeliveredQty" class="form-control">
+                    <div class="form-text" id="partialDeliveryHint"></div>
+                </div>
+                <div class="mb-3">
+                    <label for="partialDeliveryDetailType" class="form-label">Delivery Detail</label>
+                    <select id="partialDeliveryDetailType" class="form-select">
+                        <option value="invoice">Invoice</option>
+                        <option value="dc">DC</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="partialInvoiceDcNumber" class="form-label" id="partialInvoiceDcNumberLabel">Invoice number</label>
+                    <input type="text" id="partialInvoiceDcNumber" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label for="partialInvoiceDcAttachment" class="form-label">Attachment</label>
+                    <input type="file" id="partialInvoiceDcAttachment" class="form-control">
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -346,16 +363,36 @@ document.addEventListener('click', function (e) {
                 });
             }
 
-            const modal = new bootstrap.Modal(document.getElementById('supplierStatusModal'));
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierStatusModal'));
             modal.show();
         });
 });
 
+document.addEventListener('mousedown', function (e) {
+    if (!e.target.classList.contains('customer-product-status')) return;
+    const select = e.target;
+    if (select.value === 'partially_delivered' || select.value === 'delivered') {
+        select.dataset.tempReset = select.value;
+        select.value = '';
+    }
+});
+
+document.addEventListener('blur', function (e) {
+    if (!e.target.classList.contains('customer-product-status')) return;
+    const select = e.target;
+    if (select.value === '' && select.dataset.tempReset) {
+        updateDeliveryStatusDropdown(select, select.dataset.tempReset);
+        delete select.dataset.tempReset;
+    }
+}, true);
+
 document.addEventListener('change', function (e) {
     if (!e.target.classList.contains('customer-product-status')) return;
+    delete e.target.dataset.tempReset;
     const row = e.target.closest('tr[data-product-id]');
     const status = e.target.value;
     const quantityOrdered = parseInt(row.children[6].textContent || '0', 10);
+    const currentDelivered = row.querySelector('.quantity-delivered-cell')?.textContent.trim() || '';
 
     if (status === 'partially_delivered') {
         pendingPartialUpdate = {
@@ -366,7 +403,11 @@ document.addEventListener('change', function (e) {
         document.getElementById('partialDeliveredQty').value = '';
         document.getElementById('partialDeliveryHint').textContent =
             `Quantity must be greater than 0 and less than ${quantityOrdered}.`;
-        const modal = new bootstrap.Modal(document.getElementById('partialDeliveryModal'));
+        document.getElementById('partialDeliveryDetailType').value = 'invoice';
+        updatePartialDeliveryDetailNumberLabel();
+        document.getElementById('partialInvoiceDcNumber').value = '';
+        document.getElementById('partialInvoiceDcAttachment').value = '';
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('partialDeliveryModal'));
         modal.show();
         return;
     }
@@ -380,13 +421,23 @@ document.addEventListener('change', function (e) {
         updateDeliveryDetailNumberLabel();
         document.getElementById('invoiceDcNumber').value = '';
         document.getElementById('invoiceDcAttachment').value = '';
-        const modal = new bootstrap.Modal(document.getElementById('deliveredDetailsModal'));
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deliveredDetailsModal'));
         modal.show();
         return;
     }
 
     postStatusUpdate(row, e.target, status);
 });
+
+function updatePartialDeliveryDetailNumberLabel() {
+    const deliveryDetailType = document.getElementById('partialDeliveryDetailType')?.value;
+    const label = document.getElementById('partialInvoiceDcNumberLabel');
+    if (label) {
+        label.textContent = deliveryDetailType === 'dc' ? 'DC Number' : 'Invoice number';
+    }
+}
+
+document.getElementById('partialDeliveryDetailType')?.addEventListener('change', updatePartialDeliveryDetailNumberLabel);
 
 document.getElementById('savePartialDeliveryBtn').addEventListener('click', function () {
     if (!pendingPartialUpdate) return;
@@ -399,15 +450,34 @@ document.getElementById('savePartialDeliveryBtn').addEventListener('click', func
         return;
     }
 
+    const deliveryDetailType = document.getElementById('partialDeliveryDetailType').value;
+    const invoiceDcNumber = document.getElementById('partialInvoiceDcNumber').value.trim();
+    const invoiceDcAttachment = document.getElementById('partialInvoiceDcAttachment').files[0];
+    const numberLabel = deliveryDetailType === 'dc' ? 'DC Number' : 'Invoice number';
+
+    if (!invoiceDcNumber) {
+        alert(`${numberLabel} is required.`);
+        return;
+    }
+    if (!invoiceDcAttachment) {
+        alert('Invoice/DC attachment is required.');
+        return;
+    }
+
     postStatusUpdate(
         pendingPartialUpdate.row,
         pendingPartialUpdate.selectElement,
         'partially_delivered',
-        { quantityDelivered: enteredQty }
+        {
+            quantityDelivered: enteredQty,
+            deliveryDetailType: deliveryDetailType,
+            invoiceDcNumber: invoiceDcNumber,
+            invoiceDcAttachment: invoiceDcAttachment
+        }
     );
 
     const modalEl = document.getElementById('partialDeliveryModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.hide();
     pendingPartialUpdate = null;
 });
@@ -448,7 +518,7 @@ document.getElementById('saveDeliveredDetailsBtn').addEventListener('click', fun
     );
 
     const modalEl = document.getElementById('deliveredDetailsModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.hide();
     pendingDeliveredUpdate = null;
 });

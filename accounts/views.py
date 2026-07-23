@@ -353,7 +353,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
         selected_prices = supplier_prices_by_product.get(product.id, [])
         if selected_prices:
             for supplier_price in selected_prices:
-                rate = custom_mes_rate if custom_mes_rate is not None else supplier_price.price
+                rate = custom_mes_rate if custom_mes_rate is not None else (product.rate_per_unit if (product.rate_per_unit and product.rate_per_unit > 0) else supplier_price.price)
                 value = Decimal(product.quantity * rate)
                 quotation_products.append(SimpleNamespace(
                     id=product.id,
@@ -1209,6 +1209,8 @@ def dpr_view(request):
             dpr.filter_state = 'normal'
         dpr.row_class = _get_dpr_row_class(dpr.filter_state)
 
+    dprs.sort(key=lambda dpr: 1 if dpr.filter_state == 'completed' else 0)
+
     return render(
         request,
         'dpr_view.html',
@@ -1410,6 +1412,9 @@ def customer_product_status_update(request, product_id):
         customer_product.invoice_dc_attachment = None
     elif status == 'partially_delivered':
         delivered_qty_raw = request.POST.get('quantity_delivered', '').strip()
+        delivery_detail_type = request.POST.get('delivery_detail_type', '').strip()
+        invoice_dc_number = request.POST.get('invoice_dc_number', '').strip()
+        invoice_dc_attachment = request.FILES.get('invoice_dc_attachment')
         if not delivered_qty_raw:
             return JsonResponse({'status': 'error', 'message': 'Quantity delivered is required'}, status=400)
         try:
@@ -1421,10 +1426,19 @@ def customer_product_status_update(request, product_id):
                 'status': 'error',
                 'message': f'Quantity delivered must be greater than 0 and less than quantity ordered ({customer_product.quantity_ordered})'
             }, status=400)
+        if delivery_detail_type not in ('invoice', 'dc'):
+            return JsonResponse({'status': 'error', 'message': 'Delivery Detail is required'}, status=400)
+        if not invoice_dc_number:
+            label = 'Invoice number' if delivery_detail_type == 'invoice' else 'DC Number'
+            return JsonResponse({'status': 'error', 'message': f'{label} is required'}, status=400)
+        if not invoice_dc_attachment and not customer_product.invoice_dc_attachment:
+            return JsonResponse({'status': 'error', 'message': 'Invoice/DC attachment is required'}, status=400)
+
         customer_product.quantity_delivered = delivered_qty
-        customer_product.delivery_detail_type = None
-        customer_product.invoice_dc_number = None
-        customer_product.invoice_dc_attachment = None
+        customer_product.delivery_detail_type = delivery_detail_type
+        customer_product.invoice_dc_number = invoice_dc_number
+        if invoice_dc_attachment:
+            customer_product.invoice_dc_attachment = invoice_dc_attachment
     else:
         customer_product.quantity_delivered = 0
         customer_product.delivery_detail_type = None
@@ -1441,7 +1455,10 @@ def customer_product_status_update(request, product_id):
     _sync_dpr_customer_qty_delivered(customer_product.dpr)
     return JsonResponse({
         'status': 'ok',
-        'product_status': customer_product.status or ''
+        'product_status': customer_product.status or '',
+        'invoice_dc_number': customer_product.invoice_dc_number or '',
+        'delivery_detail_type': customer_product.delivery_detail_type or '',
+        'invoice_dc_attachment_url': customer_product.invoice_dc_attachment.url if customer_product.invoice_dc_attachment else ''
     })
 
 
@@ -2673,6 +2690,9 @@ def rfq_details(request):
                         )
                     if quotation_record is not None:
                         quotation_products = _deserialize_quotation_products(quotation_record.products_snapshot)
+                        if quotation_product_ids_to_mark:
+                            pid_set = {int(x) for x in quotation_product_ids_to_mark if str(x).isdigit()}
+                            quotation_products = [p for p in quotation_products if getattr(p, 'id', None) in pid_set]
                     else:
                         quotation_record = _create_rfq_quotation_record(
                             rfq,
@@ -2863,13 +2883,35 @@ def rfq_quotation_download(request, rfq_id):
         raise Http404
 
     if request.method == 'GET':
-        latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-revision_number', '-created_at').first()
+        req_product_ids = [str(x) for x in request.GET.getlist('product_ids') if str(x).strip()]
+        req_supplier_price_ids = [str(x) for x in request.GET.getlist('supplier_price_ids') if str(x).strip()]
+
+        latest_quotation = None
+        if req_product_ids or req_supplier_price_ids:
+            int_pids = [int(p) for p in req_product_ids if p.isdigit()]
+            int_spids = [int(p) for p in req_supplier_price_ids if p.isdigit()]
+            if int_pids or int_spids:
+                temp_prods, pids_to_mark = _build_selected_quotation_products(rfq, int_pids, int_spids)
+                latest_quotation = _find_latest_matching_quotation(rfq, pids_to_mark, email_sent=None)
+
+        if latest_quotation is None:
+            latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-revision_number', '-created_at').first()
+
         if latest_quotation:
             products = _deserialize_quotation_products(latest_quotation.products_snapshot)
             quote_no = latest_quotation.quotation_number
         else:
-            products = list(rfq.products.all())
+            products, _ = _build_selected_quotation_products(rfq, req_product_ids, req_supplier_price_ids)
             quote_no = _get_mes_quote_no(rfq)
+
+        if req_product_ids:
+            req_set = set(req_product_ids)
+            products = [p for p in products if str(getattr(p, 'id', '')) in req_set]
+        elif req_supplier_price_ids:
+            int_spids = [int(p) for p in req_supplier_price_ids if p.isdigit()]
+            if int_spids:
+                products, _ = _build_selected_quotation_products(rfq, [], int_spids)
+
         pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
         filename = f"{quote_no.replace('/', '_')}.pdf"
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')

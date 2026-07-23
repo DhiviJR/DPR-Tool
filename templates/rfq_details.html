@@ -735,12 +735,12 @@ document.addEventListener('click', function (e) {
 document.getElementById('previewQuotationAttachmentBtn')?.addEventListener('click', function () {
     const rfqId = document.getElementById('quotationEmailRfqId').value;
     if (!rfqId) return;
-    // Build query string with selected supplier_price_ids so the GET view finds the right snapshot
+    const prodInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_product_ids"]'));
     const spInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_supplier_price_ids"]'));
     const params = new URLSearchParams();
+    prodInputs.forEach(inp => params.append('product_ids', inp.value));
     spInputs.forEach(inp => params.append('supplier_price_ids', inp.value));
     const qs = params.toString();
-    // Use GET — the download view reads from the saved quotation snapshot (with MES rates)
     window.open(`/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`, '_blank');
 });
 
@@ -1553,6 +1553,78 @@ document.getElementById('addRfqForm').addEventListener('input', function (e) {
     refreshSupplierEmailBody();
 });
 
+function getActiveRow() {
+    const allCheckedInputs = document.querySelectorAll('.rfq-quotation-product:checked, .rfq-quotation-supplier-price:checked');
+    if (allCheckedInputs.length > 0) {
+        return allCheckedInputs[0].closest('tr[data-rfq-id]');
+    }
+    return null;
+}
+
+function updateCrossRowSelectionState() {
+    const activeRow = getActiveRow();
+
+    document.querySelectorAll('tr[data-rfq-id]').forEach(row => {
+        const selectionInputs = row.querySelectorAll('.rfq-quotation-product, .rfq-quotation-supplier-price');
+
+        if (activeRow && row !== activeRow) {
+            selectionInputs.forEach(input => {
+                input.checked = false;
+                input.style.display = 'none';
+            });
+        } else {
+            selectionInputs.forEach(input => {
+                input.style.display = '';
+            });
+        }
+    });
+}
+
+function updateRowButtons(row, activeRow) {
+    const prepareButton = row.querySelector('.rfq-prepare-quotation-btn');
+    if (prepareButton) {
+        const checkedProducts = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
+        const hasSelection = checkedProducts.length > 0;
+        const isRfqPrepared = row.dataset.rfqPrepared === 'true' || prepareButton.dataset.rfqPrepared === 'true';
+        let allAlreadyPrepared = hasSelection && (isRfqPrepared || checkedProducts.every(cb => {
+            const pid = cb.value;
+            const checkedRadio = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${pid}"]:checked`);
+            return (checkedRadio ? checkedRadio.dataset.prepared === 'true' : cb.dataset.prepared === 'true');
+        }));
+        prepareButton.disabled = !hasSelection;
+        prepareButton.innerHTML = (isRfqPrepared || allAlreadyPrepared)
+            ? '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Revised Quotation'
+            : '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Quotation';
+        prepareButton.title = "";
+    }
+
+    const sendEmailBtn = row.querySelector('.rfq-send-quotation-email-btn');
+    if (sendEmailBtn) {
+        const checkedProducts = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
+        const isRfqPrepared = row.dataset.rfqPrepared === 'true' || sendEmailBtn.dataset.rfqPrepared === 'true';
+        let allPrepared;
+        if (activeRow && row !== activeRow) {
+            allPrepared = false;
+        } else if (checkedProducts.length === 0) {
+            allPrepared = isRfqPrepared;
+        } else {
+            allPrepared = checkedProducts.every(cb => {
+                const pid = cb.value;
+                const checkedRadio = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${pid}"]:checked`);
+                const isCbPrepared = cb.dataset.prepared === 'true';
+                const isRadioPrepared = checkedRadio ? checkedRadio.dataset.prepared === 'true' : false;
+                return isCbPrepared || isRadioPrepared;
+            });
+        }
+        sendEmailBtn.disabled = !allPrepared;
+        if (!allPrepared && checkedProducts.length > 0) {
+            sendEmailBtn.title = "Quotation has not been prepared for the selected supplier/product options. Please prepare quotation first.";
+        } else {
+            sendEmailBtn.title = "";
+        }
+    }
+}
+
 document.addEventListener('change', function (e) {
     if (!e.target.classList.contains('rfq-quotation-product') &&
         !e.target.classList.contains('rfq-quotation-supplier-price')) return;
@@ -1583,43 +1655,12 @@ document.addEventListener('change', function (e) {
         }
     }
 
-    const prepareButton = row.querySelector('.rfq-prepare-quotation-btn');
-    if (prepareButton) {
-        const checkedProducts = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
-        const hasSelection = checkedProducts.length > 0;
-        const isRfqPrepared = row.dataset.rfqPrepared === 'true' || prepareButton.dataset.rfqPrepared === 'true';
-        let allAlreadyPrepared = hasSelection && (isRfqPrepared || checkedProducts.every(cb => {
-            const pid = cb.value;
-            const checkedRadio = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${pid}"]:checked`);
-            return (checkedRadio ? checkedRadio.dataset.prepared === 'true' : cb.dataset.prepared === 'true');
-        }));
-        prepareButton.disabled = !hasSelection;
-        prepareButton.innerHTML = (isRfqPrepared || allAlreadyPrepared)
-            ? '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Revised Quotation'
-            : '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Quotation';
-        prepareButton.title = "";
-    }
+    updateCrossRowSelectionState();
 
-    const sendEmailBtn = row.querySelector('.rfq-send-quotation-email-btn');
-    if (sendEmailBtn) {
-        const checkedProducts = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
-        let allPrepared = checkedProducts.length > 0;
-        checkedProducts.forEach(cb => {
-            const pid = cb.value;
-            const checkedRadio = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${pid}"]:checked`);
-            if (checkedRadio) {
-                if (checkedRadio.dataset.prepared !== 'true') allPrepared = false;
-            } else {
-                if (cb.dataset.prepared !== 'true') allPrepared = false;
-            }
-        });
-        sendEmailBtn.disabled = !allPrepared;
-        if (!allPrepared && checkedProducts.length > 0) {
-            sendEmailBtn.title = "Quotation has not been prepared for the selected supplier/product options. Please prepare quotation first.";
-        } else {
-            sendEmailBtn.title = "";
-        }
-    }
+    const activeRow = getActiveRow();
+    document.querySelectorAll('tr[data-rfq-id]').forEach(r => {
+        updateRowButtons(r, activeRow);
+    });
 });
 </script>
 {% endblock %}
