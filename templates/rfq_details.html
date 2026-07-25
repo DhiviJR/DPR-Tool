@@ -66,16 +66,24 @@
                             <label class="form-label">Mail Date *</label>
                             <input type="date" name="mail_date" id="rfqMailDate" class="form-control" required>
                         </div>
-                        <div class="col-lg-3">
+                        <div class="col-lg-2">
+                            <label class="form-label">Region *</label>
+                            <select id="rfqRegion" class="form-select" required>
+                                <option value="">Select Region</option>
+                                <option value="Chennai">Chennai</option>
+                                <option value="Hosur">Hosur</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-2">
                             <label class="form-label">Customer *</label>
                             <select name="customer_id" id="rfqCustomer" class="form-select" required>
                                 <option value="">Select Customer</option>
                                 {% for customer in customers %}
-                                <option value="{{ customer.id }}">{{ customer.customer_name }}{% if customer.region %} - {{ customer.region }}{% endif %}</option>
+                                <option value="{{ customer.id }}" data-region="{{ customer.region|default:'' }}">{{ customer.customer_name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-lg-3">
+                        <div class="col-lg-2">
                             <label class="form-label">Enquiry Details *</label>
                             <input type="text" name="enquiry_details" id="rfqEnquiryDetails" class="form-control" required>
                         </div>
@@ -1392,8 +1400,31 @@ function resetRfqForm() {
     if (currentAttachmentContainer) {
         currentAttachmentContainer.classList.add('d-none');
     }
+    filterRfqCustomersByRegion();
     setRfqProductRows([getBlankRfqProduct()]);
     refreshSupplierEmailBody(true);
+}
+
+function filterRfqCustomersByRegion() {
+    const regionDropdown = document.getElementById('rfqRegion');
+    const customerDropdown = document.getElementById('rfqCustomer');
+    if (!regionDropdown || !customerDropdown) return;
+
+    const region = regionDropdown.value;
+    const selectedOption = customerDropdown.options[customerDropdown.selectedIndex];
+
+    Array.from(customerDropdown.options).forEach(option => {
+        if (!option.value) return;
+        option.hidden = !region || option.dataset.region !== region;
+    });
+
+    if (
+        selectedOption
+        && selectedOption.value
+        && selectedOption.dataset.region !== region
+    ) {
+        customerDropdown.value = '';
+    }
 }
 
 function populateRfqForm(rfq) {
@@ -1403,6 +1434,8 @@ function populateRfqForm(rfq) {
     document.getElementById('rfqFormTitle').textContent = 'Edit RFQ';
     document.getElementById('rfqNoDisplay').value = rfq.rfq_no || '';
     document.getElementById('rfqMailDate').value = rfq.mail_date || '';
+    document.getElementById('rfqRegion').value = rfq.customer_region || '';
+    filterRfqCustomersByRegion();
     document.getElementById('rfqCustomer').value = rfq.customer_id || '';
     document.getElementById('rfqEnquiryDetails').value = rfq.enquiry_details || '';
     document.getElementById('rfqRemarks').value = rfq.remarks || '';
@@ -1422,6 +1455,7 @@ function populateRfqForm(rfq) {
 }
 
 document.getElementById('openAddRfqModal').addEventListener('click', resetRfqForm);
+document.getElementById('rfqRegion').addEventListener('change', filterRfqCustomersByRegion);
 
 document.addEventListener('click', function (e) {
     const editButton = e.target.closest('.rfq-edit-btn');

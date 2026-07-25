@@ -2745,7 +2745,7 @@ def rfq_details(request):
         return redirect('rfq_details')
 
     status_filter = request.GET.get('status', 'all')
-    all_rfqs = list(RFQ.objects.select_related('customer').prefetch_related('products__suppliers', 'products__supplier_prices__supplier', 'quotations').all())
+    all_rfqs = list(RFQ.objects.select_related('customer').prefetch_related('products__suppliers', 'products__supplier_prices__supplier', 'quotations').order_by('-created_at', '-id'))
     
     confirmed_dprs = list(DPR.objects.exclude(po_attachment='').exclude(po_attachment__isnull=True).values_list('quotation_number', flat=True))
     confirmed_quote_set = set()
@@ -2807,14 +2807,6 @@ def rfq_details(request):
         'overdue': len(overdue_rfqs),
     }
 
-    # Sort RFQs: red (table-danger) -> white ('') -> green (table-success)
-    class_order = {
-        'table-danger': 0,
-        '': 1,
-        'table-success': 2
-    }
-    rfqs_to_display.sort(key=lambda r: class_order.get(r.row_class, 1))
-
     rfq_payloads = []
     for rfq in rfqs_to_display:
         row_class = rfq.row_class
@@ -2825,6 +2817,7 @@ def rfq_details(request):
             'mail_date': rfq.mail_date.strftime('%Y-%m-%d') if rfq.mail_date else '',
             'customer_id': rfq.customer_id,
             'customer_name': rfq.customer.customer_name,
+            'customer_region': rfq.customer.region or '',
             'customer_email': rfq.customer.email or '',
             'enquiry_details': rfq.enquiry_details,
             'remarks': rfq.remarks or '',
