@@ -123,7 +123,7 @@ class RFQQuotation(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        unique_together = ('rfq', 'revision_number')
+        unique_together = ('rfq', 'quotation_number')
 
     def __str__(self):
         return self.quotation_number

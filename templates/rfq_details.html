@@ -352,8 +352,20 @@
                         <td data-sort-value="{{ rfq.rfq_no|lower }}" class="text-nowrap">
                             <span class="fw-semibold">{{ rfq.rfq_no }}</span>
                         </td>
-                        <td data-sort-value="{{ rfq.quotation_no_display|lower }}" class="text-nowrap {% if rfq.quotation_no_display == '-' or rfq.quotation_no_display == ' - ' %}text-center{% endif %}">
-                            <span class="fw-semibold {% if rfq.quotation_no_display == '-' or rfq.quotation_no_display == ' - ' %}fs-5 text-secondary{% endif %}">{% if rfq.quotation_no_display == '-' or rfq.quotation_no_display == ' - ' %}&ndash;{% else %}{{ rfq.quotation_no_display }}{% endif %}</span>
+                        <td data-sort-value="{{ rfq.quotation_no_display|lower }}" class="text-nowrap {% if not rfq.quotation_records_display %}text-center{% endif %}">
+                            {% if rfq.quotation_records_display %}
+                                <div class="d-flex flex-column gap-1">
+                                    {% for quotation in rfq.quotation_records_display %}
+                                    <a href="{% url 'rfq_quotation_download' rfq.id %}?quotation_id={{ quotation.id }}"
+                                       class="fw-semibold text-decoration-none"
+                                       target="_blank">
+                                        {{ quotation.quotation_number }}
+                                    </a>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <span class="fw-semibold fs-5 text-secondary">&ndash;</span>
+                            {% endif %}
                         </td>
                         <td data-sort-value="{{ rfq.mail_date|date:'Y-m-d' }}" class="text-nowrap">
                             {{ rfq.mail_date|date:'Y-m-d' }}
@@ -856,7 +868,11 @@ document.addEventListener('click', function (e) {
     }
 
     const selectedCheckboxes = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
-    const isRevision = selectedCheckboxes.length > 0 && selectedCheckboxes.every(cb => cb.dataset.prepared === 'true');
+    const isRevision = selectedCheckboxes.some(cb => {
+        const pid = cb.value;
+        const checkedRadio = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${pid}"]:checked`);
+        return cb.dataset.prepared === 'true' || (checkedRadio && checkedRadio.dataset.prepared === 'true');
+    });
     if (isRevision && !confirm('Prepare revised quotation for the selected product(s)?')) {
         return;
     }
@@ -1619,14 +1635,13 @@ function updateRowButtons(row, activeRow) {
     if (prepareButton) {
         const checkedProducts = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
         const hasSelection = checkedProducts.length > 0;
-        const isRfqPrepared = row.dataset.rfqPrepared === 'true' || prepareButton.dataset.rfqPrepared === 'true';
-        let allAlreadyPrepared = hasSelection && (isRfqPrepared || checkedProducts.every(cb => {
+        const hasPreparedSelection = checkedProducts.some(cb => {
             const pid = cb.value;
             const checkedRadio = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${pid}"]:checked`);
-            return (checkedRadio ? checkedRadio.dataset.prepared === 'true' : cb.dataset.prepared === 'true');
-        }));
+            return cb.dataset.prepared === 'true' || (checkedRadio && checkedRadio.dataset.prepared === 'true');
+        });
         prepareButton.disabled = !hasSelection;
-        prepareButton.innerHTML = (isRfqPrepared || allAlreadyPrepared)
+        prepareButton.innerHTML = hasPreparedSelection
             ? '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Revised Quotation'
             : '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Quotation';
         prepareButton.title = "";
