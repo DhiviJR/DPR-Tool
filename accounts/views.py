@@ -231,8 +231,33 @@ def _get_hsn_code(product):
 
 
 
-def _format_mes_quote_no(rfq, revision_number=0):
-    base_quote_no = _get_mes_quote_no(rfq)
+def _quote_number_base(quotation_number):
+    return re.sub(r'_R\d+$', '', quotation_number or '')
+
+
+def _quote_number_sequence(quotation_number):
+    match = re.match(r'^MES_Q(\d{4})/(\d{2}-\d{2})(?:_R\d+)?$', quotation_number or '')
+    if not match:
+        return None, None
+    return int(match.group(1)), match.group(2)
+
+
+def _get_next_mes_quote_base_no(rfq):
+    year = rfq.mail_date.year if rfq.mail_date else timezone.localdate().year
+    year_suffix = f"{str(year)[-2:]}-{str(year + 1)[-2:]}"
+    current_seq, _ = _quote_number_sequence(_get_mes_quote_no(rfq))
+    max_seq = (current_seq or 1) - 1
+
+    for quote_no in RFQQuotation.objects.values_list('quotation_number', flat=True):
+        seq, suffix = _quote_number_sequence(quote_no)
+        if suffix == year_suffix and seq:
+            max_seq = max(max_seq, seq)
+
+    return f"MES_Q{max_seq + 1:04d}/{year_suffix}"
+
+
+def _format_mes_quote_no(rfq, revision_number=0, base_quote_no=None):
+    base_quote_no = base_quote_no or _get_mes_quote_no(rfq)
     if revision_number:
         return f"{base_quote_no}_R{revision_number}"
     return base_quote_no
@@ -296,12 +321,50 @@ def _find_latest_matching_quotation(rfq, product_ids, email_sent=None):
     return None
 
 
+def _find_latest_overlapping_quotation(rfq, product_ids, email_sent=None):
+    selected_ids = {str(product_id) for product_id in product_ids}
+    if not selected_ids:
+        return None
+
+    queryset = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at', '-id')
+    if email_sent is not None:
+        queryset = queryset.filter(email_sent=email_sent)
+    for quotation in queryset:
+        if _product_snapshot_ids(quotation.products_snapshot) & selected_ids:
+            return quotation
+    return None
+
+
+def _next_revision_number_for_quote_base(rfq, base_quote_no):
+    latest_revision = 0
+    for quote_no in RFQQuotation.objects.filter(rfq=rfq).values_list('quotation_number', flat=True):
+        if _quote_number_base(quote_no) != base_quote_no:
+            continue
+        match = re.search(r'_R(\d+)$', quote_no or '')
+        latest_revision = max(latest_revision, int(match.group(1)) if match else 0)
+    return latest_revision + 1
+
+
 def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False):
-    latest = RFQQuotation.objects.filter(rfq=rfq).order_by('-revision_number').first()
-    revision_number = 0 if latest is None else latest.revision_number + 1
+    overlapping_quotation = _find_latest_overlapping_quotation(rfq, product_ids)
+
+    if overlapping_quotation:
+        base_quote_no = _quote_number_base(overlapping_quotation.quotation_number)
+        revision_number = _next_revision_number_for_quote_base(rfq, base_quote_no)
+        quotation_number = _format_mes_quote_no(
+            rfq,
+            revision_number,
+            base_quote_no=base_quote_no
+        )
+    else:
+        revision_number = 0
+        quotation_number = _get_mes_quote_no(rfq)
+        if RFQQuotation.objects.filter(rfq=rfq).exists() or RFQQuotation.objects.filter(quotation_number=quotation_number).exists():
+            quotation_number = _get_next_mes_quote_base_no(rfq)
+
     quotation = RFQQuotation.objects.create(
         rfq=rfq,
-        quotation_number=_format_mes_quote_no(rfq, revision_number),
+        quotation_number=quotation_number,
         revision_number=revision_number,
         products_snapshot=_serialize_quotation_products(products),
         email_sent=email_sent,
@@ -738,7 +801,7 @@ def _get_default_supplier_email_body():
         'Dear Sir/Madam,\n\n'
         'Greetings from Metrology Engineering Solutions.\n\n'
         'We are interested in procuring the following / Attached items and request you to kindly provide your best quotation.\n\n\n'
-        '“ Product details “\n\n'
+        '" Product details "\n\n'
         '{products}\n\n'
         'We look forward to your prompt response.'
     )
@@ -2764,7 +2827,8 @@ def rfq_details(request):
         rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
         rfq.quotation_prepared = rfq.quotation_prepared or rfq.quotations.exists() or any(p.quotation_prepared or p.quotation_email_sent for p in rfq.products.all())
 
-        latest_quotation = rfq.quotations.order_by('-revision_number', '-created_at').first()
+        rfq.quotation_records_display = list(rfq.quotations.order_by('created_at', 'id'))
+        latest_quotation = rfq.quotations.order_by('-created_at', '-id').first()
         if latest_quotation:
             rfq.quotation_no_display = latest_quotation.quotation_number
         elif any(p.quotation_prepared or p.quotation_email_sent for p in rfq.products.all()):
@@ -2878,8 +2942,11 @@ def rfq_quotation_download(request, rfq_id):
     if request.method == 'GET':
         req_product_ids = [str(x) for x in request.GET.getlist('product_ids') if str(x).strip()]
         req_supplier_price_ids = [str(x) for x in request.GET.getlist('supplier_price_ids') if str(x).strip()]
+        quotation_id = request.GET.get('quotation_id', '').strip()
 
         latest_quotation = None
+        if quotation_id.isdigit():
+            latest_quotation = RFQQuotation.objects.filter(rfq=rfq, id=int(quotation_id)).first()
         if req_product_ids or req_supplier_price_ids:
             int_pids = [int(p) for p in req_product_ids if p.isdigit()]
             int_spids = [int(p) for p in req_supplier_price_ids if p.isdigit()]
