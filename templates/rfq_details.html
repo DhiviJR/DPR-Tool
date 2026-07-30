@@ -838,8 +838,8 @@ function addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId = 
         <td><input type="number" class="form-control prepare-quote-qty" value="${quantity}" readonly></td>
         <td><input type="number" step="0.01" class="form-control prepare-quote-rate" value="${baseRate}" readonly></td>
         <td><input type="number" step="0.01" class="form-control" value="${baseValue}" readonly></td>
-        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-profit" name="mes_profit_percentages" value=""></td>
-        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-rate" name="mes_rates" value="${initialMesRate}" readonly></td>
+        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-profit" name="mes_profit_percentages" value="" placeholder="0%"></td>
+        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-rate" name="mes_rates" value="${initialMesRate}"></td>
         <td><input type="number" step="0.01" class="form-control prepare-quote-mes-value" value="${initialMesValue}" readonly></td>
         <td><button type="button" class="btn btn-outline-danger btn-sm prepare-quote-remove-row"><i class="bi bi-trash"></i></button></td>
     `;
@@ -988,23 +988,33 @@ document.addEventListener('click', function (e) {
 });
 
 document.addEventListener('input', function (e) {
-    if (!e.target.classList.contains('prepare-quote-mes-profit')) return;
+    if (!e.target.classList.contains('prepare-quote-mes-profit') && !e.target.classList.contains('prepare-quote-mes-rate')) return;
     const row = e.target.closest('tr');
     if (!row) return;
 
     const quantity = parseFloat(row.querySelector('.prepare-quote-qty')?.value || 0) || 0;
     const baseRate = parseFloat(row.querySelector('.prepare-quote-rate')?.value || 0) || 0;
+    const profitInput = row.querySelector('.prepare-quote-mes-profit');
     const rateInput = row.querySelector('.prepare-quote-mes-rate');
     const valueInput = row.querySelector('.prepare-quote-mes-value');
 
-    if (e.target.value.trim() === '') {
-        if (rateInput) rateInput.value = baseRate > 0 ? baseRate.toFixed(2) : '';
-        if (valueInput) valueInput.value = (quantity * baseRate) > 0 ? (quantity * baseRate).toFixed(2) : '';
-    } else {
-        const profitPercent = parseFloat(e.target.value) || 0;
-        const mesRate = baseRate * (1 + profitPercent / 100);
-        if (rateInput) rateInput.value = mesRate.toFixed(2);
-        if (valueInput) valueInput.value = (quantity * mesRate).toFixed(2);
+    if (e.target.classList.contains('prepare-quote-mes-profit')) {
+        if (e.target.value.trim() === '') {
+            if (rateInput) rateInput.value = baseRate > 0 ? baseRate.toFixed(2) : '';
+            if (valueInput) valueInput.value = (quantity * baseRate) > 0 ? (quantity * baseRate).toFixed(2) : '';
+        } else {
+            const profitPercent = parseFloat(e.target.value) || 0;
+            const mesRate = baseRate * (1 + profitPercent / 100);
+            if (rateInput) rateInput.value = mesRate.toFixed(2);
+            if (valueInput) valueInput.value = (quantity * mesRate).toFixed(2);
+        }
+    } else if (e.target.classList.contains('prepare-quote-mes-rate')) {
+        const customRate = parseFloat(e.target.value) || 0;
+        if (baseRate > 0 && customRate > 0) {
+            const calculatedProfit = ((customRate - baseRate) / baseRate) * 100;
+            if (profitInput) profitInput.value = calculatedProfit.toFixed(2);
+        }
+        if (valueInput) valueInput.value = (quantity * customRate) > 0 ? (quantity * customRate).toFixed(2) : '';
     }
     checkProfitWarning();
 });

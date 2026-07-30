@@ -47,6 +47,10 @@
                 <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
             </div>
             <div class="col-lg">
+                <label class="form-label">State Code</label>
+                <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10">
+            </div>
+            <div class="col-lg">
                 <label class="form-label">Payment Terms</label>
                 <div class="input-group">
                     <input type="number" name="payment_terms" class="form-control" min="0">
@@ -93,6 +97,7 @@
                         <th>Email</th>
                         <th>Phone Number</th>
                         <th>GSTIN</th>
+                        <th>State Code</th>
                         <th>Payment Terms</th>
                         <th>Address</th>
                         <th>Created At</th>
@@ -127,6 +132,9 @@
                             <input type="text" name="gstin" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field js-gstin-input text-uppercase" value="{{ customer.gstin|default:''|upper }}" maxlength="15" disabled>
                         </td>
                         <td>
+                            <input type="text" name="state_code" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field text-uppercase" value="{{ customer.state_code|default:''|upper }}" maxlength="10" disabled>
+                        </td>
+                        <td>
                             <div class="input-group input-group-sm">
                                 <input type="number" name="payment_terms" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.payment_terms|default:'' }}" min="0" disabled>
                                 <span class="input-group-text">Weeks</span>
@@ -158,7 +166,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="10" class="text-center">No customer records found.</td>
+                        <td colspan="11" class="text-center">No customer records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

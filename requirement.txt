@@ -3,3 +3,5 @@ mysqlclient
 Pillow
 pyserial
 reportlab
+python-dotenv
+
