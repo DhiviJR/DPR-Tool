@@ -3,6 +3,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from .models import CustomUser
 from django.contrib.auth.decorators import login_required
+from .decorators import role_required
 from django.conf import settings
 from django.core.mail import EmailMessage
 from django.core.exceptions import ValidationError
@@ -416,7 +417,12 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
         selected_prices = supplier_prices_by_product.get(product.id, [])
         if selected_prices:
             for supplier_price in selected_prices:
-                rate = custom_mes_rate if custom_mes_rate is not None else (product.rate_per_unit if (product.rate_per_unit and product.rate_per_unit > 0) else supplier_price.price)
+                if custom_mes_rate is not None:
+                    rate = custom_mes_rate
+                elif product.rate_per_unit and product.rate_per_unit > 0:
+                    rate = product.rate_per_unit
+                else:
+                    rate = supplier_price.price
                 value = Decimal(product.quantity * rate)
                 quotation_products.append(SimpleNamespace(
                     id=product.id,
@@ -434,8 +440,13 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                     installation_charge=installation_charge,
                 ))
         else:
-            rate = custom_mes_rate if custom_mes_rate is not None else product.rate_per_unit
-            value = Decimal(product.quantity * rate) if custom_mes_rate is not None else product.value
+            if custom_mes_rate is not None:
+                rate = custom_mes_rate
+            elif product.rate_per_unit and product.rate_per_unit > 0:
+                rate = product.rate_per_unit
+            else:
+                rate = Decimal('0.00')
+            value = Decimal(product.quantity * rate)
             quotation_products.append(SimpleNamespace(
                 id=product.id,
                 product_name=product.product_name,
@@ -570,8 +581,8 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 15 * mm, "METROLOGY ENGINEERING SOLUTIONS")
                 
                 self.setFont("Helvetica", 8)
-                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 19 * mm, "L-732/1156, 1st Floor, Rayakottai Hudco,42nd Cross,")
-                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 22 * mm, "Phase 10, Hosur, Krishnagiri, Tamil Nadu, India-635109")
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 19 * mm, "NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,")
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 22 * mm, "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri, Tamil Nadu - 635109")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 25 * mm, "Phone : +91-965-577-8807 / +91-965-577-8871")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 28 * mm, "Email-ID : info@mesinstruments.co.in | Web : www.mesinstruments.co.in")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 31 * mm, "GST : 33ABKFM1033E1ZS | PAN : ABKFM1033E")
@@ -1013,6 +1024,9 @@ def _get_dpr_row_class(filter_state):
 
 
 def user_login(request):
+    if request.method == 'GET' and request.user.is_authenticated:
+        logout(request)
+
     error = None
     username = ''
 
@@ -1035,12 +1049,14 @@ def user_login(request):
 
 
 
+@login_required
 def user_logout(request):
     logout(request)
     return redirect('login')
 
 
 
+@role_required('ADMIN')
 def register(request):
     if request.method == 'POST':
         username = request.POST.get('username')
@@ -1185,7 +1201,7 @@ def dashboard(request):
     })
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def dpr_view(request):
     confirmation_filter = request.GET.get('confirmation')
     case_filter = request.GET.get('case', '')
@@ -1285,7 +1301,7 @@ def dpr_view(request):
     )
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def dpr_products(request, dpr_id):
     try:
         dpr = DPR.objects.get(pk=dpr_id)
@@ -1305,7 +1321,7 @@ def dpr_products(request, dpr_id):
     return JsonResponse({'dpr_serial': dpr.serial_number, 'products': data})
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def dpr_documents_download(request, dpr_id):
     try:
         dpr = DPR.objects.get(pk=dpr_id)
@@ -1390,7 +1406,7 @@ def dpr_documents_download(request, dpr_id):
     return response
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def customer_po_product_details(request):
     validity_filter = request.GET.get('validity')
     today = timezone.localdate()
@@ -1437,7 +1453,7 @@ def customer_po_product_details(request):
     )
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def customer_product_status_update(request, product_id):
     if request.method != 'POST':
         raise Http404
@@ -1525,7 +1541,7 @@ def customer_product_status_update(request, product_id):
     })
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def supplier_status_details(request, product_id):
     try:
         customer_product = CustomerProduct.objects.select_related('dpr').get(pk=product_id)
@@ -1555,7 +1571,7 @@ def supplier_status_details(request, product_id):
     })
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def supplier_po_product_details(request):
     validity_filter = request.GET.get('validity')
     today = timezone.localdate()
@@ -1609,7 +1625,7 @@ def supplier_po_product_details(request):
     )
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def supplier_product_status_update(request, supplier_product_id):
     if request.method != 'POST':
         raise Http404
@@ -1735,7 +1751,7 @@ def supplier_product_status_update(request, supplier_product_id):
     return JsonResponse({'status': 'ok'})
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def supplier_product_expected_date_update(request, supplier_product_id):
     if request.method != 'POST':
         raise Http404
@@ -1750,7 +1766,7 @@ def supplier_product_expected_date_update(request, supplier_product_id):
     return JsonResponse({'status': 'ok'})
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def check_po_date_status(request, dpr_id):
     """Check if po_date exists for a DPR when Customer PO is selected"""
     if request.method != 'GET':
@@ -1772,7 +1788,7 @@ def check_po_date_status(request, dpr_id):
     })
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def save_po_confirmation_date(request, dpr_id):
     """Save po_confirmation_date when user confirms via modal"""
     if request.method != 'POST':
@@ -1791,7 +1807,7 @@ def save_po_confirmation_date(request, dpr_id):
     return JsonResponse({'status': 'ok'})
 
 
-@login_required
+@role_required('ADMIN', 'SALES', 'PURCHASE')
 def customer_order_edit(request, dpr_id):
     try:
         dpr = DPR.objects.get(pk=dpr_id)
@@ -1948,7 +1964,7 @@ def customer_order_edit(request, dpr_id):
     return render(request, 'customer_order.html', context)
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def dpr_supplier(request, dpr_id):
     try:
         dpr = DPR.objects.get(pk=dpr_id)
@@ -2244,7 +2260,7 @@ def dpr_supplier(request, dpr_id):
     return render(request, 'supplier_order.html', context)
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def dpr_status_update(request, dpr_id):
     if request.method != 'POST':
         raise Http404
@@ -2270,7 +2286,7 @@ def _validate_customer_region(region):
     return None
 
 
-@login_required
+@role_required('ADMIN')
 def customer_details(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -2281,6 +2297,7 @@ def customer_details(request):
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
+        state_code = request.POST.get('state_code', '').strip().upper()
         payment_terms = request.POST.get('payment_terms', '').strip()
 
 
@@ -2311,6 +2328,7 @@ def customer_details(request):
                 phone_number=phone_number or None,
                 address=address or None,
                 gstin=gstin or None,
+                state_code=state_code or None,
                 payment_terms=payment_terms or None
             )
             messages.success(request, 'Customer added successfully.')
@@ -2325,8 +2343,9 @@ def customer_details(request):
             customer.phone_number = phone_number or None
             customer.address = address or None
             customer.gstin = gstin or None
+            customer.state_code = state_code or None
             customer.payment_terms = payment_terms or None
-            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address', 'gstin', 'payment_terms'])
+            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address', 'gstin', 'state_code', 'payment_terms'])
             messages.success(request, 'Customer updated successfully.')
         elif action == 'delete':
             try:
@@ -2351,7 +2370,7 @@ def customer_details(request):
     return render(request, 'customer_details.html', {'customers': customers, 'search_query': search_query})
 
 
-@login_required
+@role_required('ADMIN', 'SALES')
 def rfq_details(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -2776,6 +2795,14 @@ def rfq_details(request):
                 email.send(fail_silently=False)
 
                 if quotation_products:
+                    for qp in quotation_products:
+                        if hasattr(qp, 'id') and qp.id:
+                            RFQProduct.objects.filter(id=qp.id).update(
+                                rate_per_unit=qp.rate_per_unit,
+                                value=qp.value,
+                                quotation_email_sent=True,
+                                quotation_prepared=True
+                            )
                     RFQProduct.objects.filter(
                         rfq=rfq,
                         id__in=quotation_product_ids_to_mark
@@ -2932,7 +2959,7 @@ def rfq_details(request):
     })
 
 
-@login_required
+@role_required('ADMIN', 'SALES')
 def rfq_quotation_download(request, rfq_id):
     try:
         rfq = RFQ.objects.select_related('customer').get(pk=rfq_id)
@@ -2947,30 +2974,24 @@ def rfq_quotation_download(request, rfq_id):
         latest_quotation = None
         if quotation_id.isdigit():
             latest_quotation = RFQQuotation.objects.filter(rfq=rfq, id=int(quotation_id)).first()
-        if req_product_ids or req_supplier_price_ids:
+        elif req_product_ids or req_supplier_price_ids:
             int_pids = [int(p) for p in req_product_ids if p.isdigit()]
             int_spids = [int(p) for p in req_supplier_price_ids if p.isdigit()]
             if int_pids or int_spids:
                 temp_prods, pids_to_mark = _build_selected_quotation_products(rfq, int_pids, int_spids)
                 latest_quotation = _find_latest_matching_quotation(rfq, pids_to_mark, email_sent=None)
 
-        if latest_quotation is None:
-            latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-revision_number', '-created_at').first()
-
-        if latest_quotation:
+        if req_product_ids or req_supplier_price_ids:
+            products, _ = _build_selected_quotation_products(rfq, req_product_ids, req_supplier_price_ids)
+            quote_no = latest_quotation.quotation_number if latest_quotation else _get_mes_quote_no(rfq)
+        elif latest_quotation:
             products = _deserialize_quotation_products(latest_quotation.products_snapshot)
             quote_no = latest_quotation.quotation_number
         else:
-            products, _ = _build_selected_quotation_products(rfq, req_product_ids, req_supplier_price_ids)
+            products, _ = _build_selected_quotation_products(rfq, [], [])
+            if not products:
+                products = list(rfq.products.all())
             quote_no = _get_mes_quote_no(rfq)
-
-        if req_product_ids:
-            req_set = set(req_product_ids)
-            products = [p for p in products if str(getattr(p, 'id', '')) in req_set]
-        elif req_supplier_price_ids:
-            int_spids = [int(p) for p in req_supplier_price_ids if p.isdigit()]
-            if int_spids:
-                products, _ = _build_selected_quotation_products(rfq, [], int_spids)
 
         pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
         filename = f"{quote_no.replace('/', '_')}.pdf"
@@ -3020,6 +3041,13 @@ def rfq_quotation_download(request, rfq_id):
     filename = f"{quote_no.replace('/', '_')}.pdf"
     response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
     if quotation_record:
+        for qp in products:
+            if hasattr(qp, 'id') and qp.id:
+                RFQProduct.objects.filter(id=qp.id).update(
+                    rate_per_unit=qp.rate_per_unit,
+                    value=qp.value,
+                    quotation_prepared=True
+                )
         RFQProduct.objects.filter(
             rfq=rfq,
             id__in=quotation_product_ids_to_mark
@@ -3031,7 +3059,7 @@ def rfq_quotation_download(request, rfq_id):
     return response
 
 
-@login_required
+@role_required('ADMIN')
 def supplier_details(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -3095,7 +3123,7 @@ def supplier_details(request):
         suppliers = suppliers.filter(supplier_name__icontains=search_query)
     return render(request, 'supplier_details.html', {'suppliers': suppliers, 'search_query': search_query})
 
-@login_required
+@role_required('ADMIN', 'SALES', 'PURCHASE')
 def customer_order(request):
 
     customers = Customer.objects.all()
@@ -3307,7 +3335,7 @@ def customer_order(request):
         context
     )
 
-@login_required
+@role_required('ADMIN')
 def add_customer(request):
 
     if request.method == 'POST':
@@ -3331,6 +3359,14 @@ def add_customer(request):
         address = request.POST.get(
             'address'
         , '').strip()
+
+        gstin = request.POST.get(
+            'gstin'
+        , '').strip().upper()
+
+        state_code = request.POST.get(
+            'state_code'
+        , '').strip().upper()
 
         if not customer_name:
             return JsonResponse({
@@ -3372,7 +3408,11 @@ def add_customer(request):
 
             phone_number=phone_number or None,
 
-            address=address or None
+            address=address or None,
+
+            gstin=gstin or None,
+
+            state_code=state_code or None
         )
 
         return JsonResponse({
@@ -3405,7 +3445,7 @@ def add_customer(request):
     )
 
 
-@login_required
+@role_required('ADMIN')
 def add_supplier(request):
     if request.method == 'POST':
         supplier_name = request.POST.get('supplier_name', '').strip()
@@ -3434,7 +3474,7 @@ def add_supplier(request):
     return JsonResponse({'status': 'error'})
 
 
-@login_required
+@role_required('ADMIN', 'SALES', 'PURCHASE')
 def get_customer_quotations(request):
     customer_id = request.GET.get('customer_id')
     if not customer_id:
@@ -3909,7 +3949,7 @@ def _build_single_po_pdf_buffer(dpr, supplier, items):
     return buffer
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def generate_supplier_po(request, dpr_id):
     """Generate a PDF Purchase Order for all supplier products linked to a DPR."""
     from zipfile import ZipFile, ZIP_DEFLATED
@@ -3939,6 +3979,46 @@ def generate_supplier_po(request, dpr_id):
             )
             return redirect('dpr_supplier', dpr_id=dpr_id)
 
+    # Check for single PO preview filters
+    preview_supplier_id = request.POST.get('supplier_id') or request.GET.get('supplier_id')
+    preview_po_number = request.POST.get('po_number') or request.GET.get('po_number')
+    preview_supplier_product_id = (
+        request.POST.get('supplier_product_id')
+        or request.GET.get('supplier_product_id')
+    )
+    preview_combined_supplier = (
+        request.POST.get('combined_supplier') == '1'
+        or request.GET.get('combined_supplier') == '1'
+    )
+    if preview_supplier_id or preview_po_number or preview_supplier_product_id:
+        preview_items = supplier_products
+        if preview_supplier_id:
+            try:
+                supplier = Supplier.objects.get(pk=preview_supplier_id)
+                preview_items = preview_items.filter(supplier=supplier)
+            except Supplier.DoesNotExist:
+                raise Http404
+        if preview_supplier_product_id and not preview_combined_supplier:
+            preview_items = preview_items.filter(pk=preview_supplier_product_id)
+        elif preview_po_number and not preview_combined_supplier:
+            preview_items = preview_items.filter(po_number=preview_po_number)
+
+        items = list(preview_items)
+        if items:
+            supplier = items[0].supplier
+            effective_po_number = preview_po_number or items[0].po_number or 'PO'
+            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+            safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', effective_po_number)
+            item_suffix = (
+                f"_item_{preview_supplier_product_id}"
+                if (preview_supplier_product_id and len(items) == 1)
+                else ''
+            )
+            filename = f"{safe_po_num}{item_suffix}.pdf"
+            response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            return response
+
     # Assign one stable PO number per supplier when the PO is generated.
     # Existing generated numbers are preserved on previews/re-downloads.
     po_date = timezone.localdate()
@@ -3961,41 +4041,6 @@ def generate_supplier_po(request, dpr_id):
     supplier_products = SupplierProduct.objects.filter(
         customer_product__dpr=dpr
     ).select_related('customer_product', 'supplier')
-
-    # Check for single PO preview filters
-    preview_supplier_id = request.POST.get('supplier_id') or request.GET.get('supplier_id')
-    preview_po_number = request.POST.get('po_number') or request.GET.get('po_number')
-    preview_supplier_product_id = (
-        request.POST.get('supplier_product_id')
-        or request.GET.get('supplier_product_id')
-    )
-    preview_combined_supplier = (
-        request.POST.get('combined_supplier') == '1'
-        or request.GET.get('combined_supplier') == '1'
-    )
-    if preview_supplier_id and preview_po_number:
-        try:
-            supplier = Supplier.objects.get(pk=preview_supplier_id)
-        except Supplier.DoesNotExist:
-            raise Http404
-        preview_items = supplier_products.filter(supplier=supplier)
-        if not preview_combined_supplier:
-            preview_items = preview_items.filter(po_number=preview_po_number)
-        if preview_supplier_product_id and not preview_combined_supplier:
-            preview_items = preview_items.filter(pk=preview_supplier_product_id)
-        items = list(preview_items)
-        if items:
-            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
-            safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', preview_po_number)
-            item_suffix = (
-                f"_item_{preview_supplier_product_id}"
-                if preview_supplier_product_id
-                else ''
-            )
-            filename = f"{safe_po_num}{item_suffix}.pdf"
-            response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
-            response['Content-Disposition'] = f'inline; filename="{filename}"'
-            return response
 
     # Group all products into one PO per supplier.
     from collections import defaultdict
@@ -4032,7 +4077,7 @@ def generate_supplier_po(request, dpr_id):
         return response
 
 
-@login_required
+@role_required('ADMIN', 'PURCHASE')
 def send_supplier_po_email(request, dpr_id):
     """Generate and send PO PDF as email attachment to each supplier of a DPR."""
     try:
@@ -4184,7 +4229,7 @@ def send_supplier_po_email(request, dpr_id):
     return redirect('dpr_supplier', dpr_id=dpr_id)
 
 
-@login_required
+@role_required('ADMIN', 'SALES', 'PURCHASE')
 def check_customer_po_number(request):
     """AJAX endpoint: checks if a customer PO number already exists (for duplicate validation)."""
     po_number = request.GET.get('po_number', '').strip()
@@ -4198,4 +4243,490 @@ def check_customer_po_number(request):
         except (ValueError, TypeError):
             pass
     return JsonResponse({'exists': qs.exists()})
+
+
+def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qtys=None):
+    from products.models import CustomerProduct
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, HRFlowable, Image
+    )
+    from reportlab.pdfgen import canvas
+    from django.conf import settings
+    import os
+
+    try:
+        target_product = CustomerProduct.objects.select_related('dpr', 'dpr__customer').get(pk=product_id)
+    except CustomerProduct.DoesNotExist:
+        return None
+
+    dpr = target_product.dpr
+    customer = dpr.customer
+    if selected_product_ids:
+        products = list(CustomerProduct.objects.filter(dpr=dpr, id__in=selected_product_ids))
+    else:
+        products = list(CustomerProduct.objects.filter(dpr=dpr))
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=10 * mm,
+        leftMargin=10 * mm,
+        topMargin=8 * mm,
+        bottomMargin=10 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+
+    normal = ParagraphStyle(
+        'InvNormal',
+        parent=styles['Normal'],
+        fontName='Times-Roman',
+        fontSize=9,
+        leading=11.5,
+        alignment=TA_LEFT,
+    )
+    bold = ParagraphStyle(
+        'InvBold',
+        parent=normal,
+        fontName='Times-Bold',
+    )
+    title_style = ParagraphStyle(
+        'InvTitle',
+        parent=normal,
+        fontName='Times-Bold',
+        fontSize=13,
+        leading=15,
+        alignment=TA_CENTER,
+    )
+    right_align = ParagraphStyle(
+        'InvRight',
+        parent=normal,
+        fontName='Times-Roman',
+        fontSize=9,
+        leading=11.5,
+        alignment=TA_RIGHT,
+    )
+    right_bold = ParagraphStyle(
+        'InvRightBold',
+        parent=normal,
+        fontName='Times-Bold',
+        fontSize=9,
+        leading=11.5,
+        alignment=TA_RIGHT,
+    )
+    center_align = ParagraphStyle(
+        'InvCenter',
+        parent=normal,
+        fontName='Times-Roman',
+        fontSize=9,
+        leading=11.5,
+        alignment=TA_CENTER,
+    )
+    center_bold = ParagraphStyle(
+        'InvCenterBold',
+        parent=bold,
+        alignment=TA_CENTER,
+    )
+
+    class NumberedCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.pages = []
+
+        def showPage(self):
+            self.pages.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            page_count = len(self.pages)
+            for page in self.pages:
+                self.__dict__.update(page)
+                self.saveState()
+                self.setFont("Times-Bold", 9)
+                self.drawRightString(
+                    self._pagesize[0] - 10 * mm,
+                    5 * mm,
+                    f"Page {self._pageNumber} of {page_count}"
+                )
+                self.restoreState()
+                super().showPage()
+            super().save()
+
+    story = []
+
+    story.append(Paragraph("<b>Original</b>", right_bold))
+    story.append(Spacer(1, 1 * mm))
+    story.append(Paragraph("TAX INVOICE", title_style))
+    story.append(Spacer(1, 1.5 * mm))
+
+    comp_header = (
+        "<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>"
+        "NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,<br/>"
+        "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri,<br/>"
+        "Tamilnadu - 635109,<br/>"
+        "Contact: 9655778871, 9655778807<br/>"
+        "Email : info@mesinstruments.co.in<br/>"
+        "GSTIN : 33ABKFM1033E1ZS"
+    )
+
+    cust_atten = customer.email.split('@')[0] if (customer.email and '@' in customer.email) else (customer.customer_name or "Mr.Nizamuddeen S")
+    cust_info = (
+        f"Kindly Atten : {cust_atten}<br/>"
+        f"<b>M/s. {customer.customer_name}</b><br/>"
+        f"{customer.address or ''}<br/>"
+        f"{customer.region or ''}<br/>"
+        f"Contact Number : {customer.phone_number or ''}<br/>"
+        f"Mail Id : {customer.email or ''}<br/>"
+        f"GSTIN : {customer.gstin or '-'}"
+    )
+
+    left_cell_content = [
+        Paragraph(comp_header, normal),
+        HRFlowable(width="100%", thickness=0.5, color=colors.black, spaceBefore=2, spaceAfter=2),
+        Paragraph(cust_info, normal),
+    ]
+
+    inv_no_val = (target_product.invoice_dc_number or '').strip()
+    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+    if match:
+        inv_no = f"MES-F{int(match.group(1)):04d}"
+    elif inv_no_val:
+        inv_no = inv_no_val
+    else:
+        inv_no = f"MES-F{target_product.id:04d}"
+    inv_date = timezone.localdate().strftime('%d/%m/%Y')
+    po_no = dpr.po_number or dpr.serial_number or '-'
+    po_date_str = dpr.po_date.strftime('%d/%m/%Y') if dpr.po_date else '-'
+    raw_terms = str(customer.payment_terms).strip() if customer.payment_terms else ''
+    if raw_terms.isdigit():
+        terms = f"{raw_terms} Week{'s' if raw_terms != '1' else ''}"
+    elif raw_terms:
+        terms = raw_terms
+    else:
+        terms = '30 Days Against Invoice'
+
+    right_table_data = [
+        [Paragraph("Invoice No :", normal), Paragraph(f"<b>{inv_no}</b>", normal), Paragraph("Dated :", normal), Paragraph(f"<b>{inv_date}</b>", normal)],
+        [Paragraph("Vendor Code :", normal), Paragraph("", normal), Paragraph("Terms of Payment :", normal), Paragraph(f"<b>{terms}</b>", normal)],
+        [Paragraph("Supplier Ref :", normal), Paragraph("", normal), Paragraph("Other Ref :", normal), Paragraph("", normal)],
+        [Paragraph("Buyer's PO No :", normal), Paragraph(f"<b>{po_no}</b>", normal), Paragraph("Dated :", normal), Paragraph(f"<b>{po_date_str}</b>", normal)],
+        [Paragraph("Despatch Through :", normal), Paragraph("By Hand", normal), Paragraph("Destination :", normal), Paragraph("", normal)],
+        [Paragraph("Shipping Address :", normal), Paragraph("", normal), Paragraph("", normal), Paragraph("", normal)],
+    ]
+
+    right_table = Table(
+        right_table_data,
+        colWidths=[24 * mm, 30 * mm, 28 * mm, 28 * mm]
+    )
+    right_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+        ('TOPPADDING', (0,0), (-1,-1), 1),
+        ('LEFTPADDING', (0,0), (-1,-1), 1),
+        ('RIGHTPADDING', (0,0), (-1,-1), 1),
+        ('LINEBELOW', (0,0), (-1,-1), 0.3, colors.lightgrey),
+    ]))
+
+    header_grid = Table([[left_cell_content, right_table]], colWidths=[80 * mm, 110 * mm])
+    header_grid.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOX', (0,0), (-1,-1), 1, colors.black),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('LEFTPADDING', (0,0), (-1,-1), 3),
+        ('RIGHTPADDING', (0,0), (-1,-1), 3),
+    ]))
+
+    story.append(header_grid)
+    story.append(Spacer(1, 1.5 * mm))
+
+    headers = [
+        Paragraph("<b>S.No</b>", center_bold),
+        Paragraph("<b>Part No</b>", center_bold),
+        Paragraph("<b>Description</b>", center_bold),
+        Paragraph("<b>HSN/SAC</b>", center_bold),
+        Paragraph("<b>Qty</b>", center_bold),
+        Paragraph("<b>Unit</b>", center_bold),
+        Paragraph("<b>Rate</b>", center_bold),
+        Paragraph("<b>Total</b>", center_bold),
+    ]
+
+    prod_table_data = [headers]
+
+    total_qty = 0
+    subtotal = Decimal('0.00')
+
+    for idx, p in enumerate(products, 1):
+        if custom_qtys and p.id in custom_qtys:
+            qty = custom_qtys[p.id]
+        else:
+            qty = p.quantity_delivered if p.quantity_delivered > 0 else p.quantity_ordered
+        rate = p.mes_rate_per_unit if (p.mes_rate_per_unit and p.mes_rate_per_unit > 0) else (p.rate_per_unit or Decimal('0.00'))
+        line_total = Decimal(qty) * rate
+
+        total_qty += qty
+        subtotal += line_total
+
+        hsn = _get_hsn_code(p)
+        uom = _get_uom(p.product_name).upper()
+
+        desc_text = f"<b>{p.product_name}</b>"
+        if p.remarks:
+            desc_text += f"<br/>{p.remarks}"
+
+        row = [
+            Paragraph(str(idx), center_align),
+            Paragraph(dpr.serial_number or "", center_align),
+            Paragraph(desc_text, normal),
+            Paragraph(hsn, center_align),
+            Paragraph(str(qty), center_align),
+            Paragraph(uom, center_align),
+            Paragraph(f"Rs. {rate:,.2f}", right_align),
+            Paragraph(f"<b>Rs. {line_total:,.2f}</b>", right_align),
+        ]
+        prod_table_data.append(row)
+
+    is_tamilnadu = (customer.gstin or '').startswith('33') or 'tamil' in (customer.region or '').lower()
+    if is_tamilnadu:
+        sgst_rate = Decimal('9.00')
+        cgst_rate = Decimal('9.00')
+        sgst_amt = (subtotal * sgst_rate / Decimal('100')).quantize(Decimal('0.01'))
+        cgst_amt = (subtotal * cgst_rate / Decimal('100')).quantize(Decimal('0.01'))
+        igst_amt = Decimal('0.00')
+        tax_total = sgst_amt + cgst_amt
+
+        tax_rows = [
+            ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
+            ["", "", Paragraph("SGST 9%", right_align), "", "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
+            ["", "", Paragraph("CGST 9%", right_align), "", "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
+            ["", "", Paragraph("IGST 0%", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("P & F 0%", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+        ]
+    else:
+        igst_rate = Decimal('18.00')
+        igst_amt = (subtotal * igst_rate / Decimal('100')).quantize(Decimal('0.01'))
+        sgst_amt = Decimal('0.00')
+        cgst_amt = Decimal('0.00')
+        tax_total = igst_amt
+
+        tax_rows = [
+            ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
+            ["", "", Paragraph("SGST", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("CGST", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("IGST", right_align), Paragraph("18%", center_align), "", "", "", Paragraph(f"Rs. {igst_amt:,.2f}", right_align)],
+            ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+        ]
+
+    grand_total = subtotal + tax_total
+    prod_table_data.extend(tax_rows)
+
+    prod_table_data.append([
+        "", "", Paragraph("<b>Total</b>", right_bold), "",
+        Paragraph(f"<b>{total_qty}</b>", center_bold), "", "",
+        Paragraph(f"<b>Rs. {grand_total:,.2f}</b>", right_bold)
+    ])
+
+    col_widths = [10 * mm, 26 * mm, 68 * mm, 18 * mm, 10 * mm, 12 * mm, 22 * mm, 24 * mm]
+
+    prod_table = Table(prod_table_data, colWidths=col_widths)
+    t_style = [
+        ('BOX', (0,0), (-1,-1), 1, colors.black),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('LEFTPADDING', (0,0), (-1,-1), 2),
+        ('RIGHTPADDING', (0,0), (-1,-1), 2),
+    ]
+    prod_table.setStyle(TableStyle(t_style))
+    story.append(prod_table)
+
+    # Amount Chargable Box
+    raw_words = _number_to_words(grand_total).upper().strip()
+    raw_words = re.sub(r'\bONLY\.?$', '', raw_words, flags=re.IGNORECASE).strip()
+    if not raw_words.endswith('RUPEES') and not raw_words.endswith('RUPPES'):
+        raw_words += ' RUPEES'
+    amount_words_str = f"{raw_words} ONLY."
+
+    amount_words_p = Paragraph(
+        f"<b>Amount Chargable (IN Words) : {amount_words_str}</b>",
+        bold
+    )
+
+    amount_words_table = Table([[amount_words_p]], colWidths=[190 * mm])
+    amount_words_table.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 1, colors.black),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('LEFTPADDING', (0,0), (-1,-1), 4),
+    ]))
+    story.append(amount_words_table)
+
+    # Bank Details Table (Left side)
+    bank_table_data = [
+        [Paragraph("Our Bank", normal), Paragraph(": Indian Bank", bold)],
+        [Paragraph("Branch", normal), Paragraph(": Bangalore Road", bold)],
+        [Paragraph("Account Number", normal), Paragraph(": 6706325980", bold)],
+        [Paragraph("IFSC Code", normal), Paragraph(": IDIB000B142", bold)],
+        [Paragraph("<br/><b>Declaration :</b><br/>We declare that this invoice shows the actual price of the goods described and all particulars are goods and correct.", normal), ""],
+    ]
+
+    bank_table = Table(bank_table_data, colWidths=[28 * mm, 67 * mm])
+    bank_table.setStyle(TableStyle([
+        ('SPAN', (0, 4), (1, 4)),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+    ]))
+
+    # Right side: Signatory seal box matching Image 2
+    seal_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'mes_seal.png')
+
+    sign_cell_content = [
+        Paragraph("For Metrology Enginnering Solutions", right_align),
+        Spacer(1, 1 * mm),
+    ]
+
+    if os.path.exists(seal_path):
+        seal_img = Image(seal_path, width=34 * mm, height=27 * mm)
+        seal_img.hAlign = 'RIGHT'
+        sign_cell_content.append(seal_img)
+        sign_cell_content.append(Spacer(1, -9 * mm))
+    else:
+        sign_cell_content.append(Spacer(1, 12 * mm))
+
+    sign_cell_content.append(Paragraph("Authorized Signatory", right_bold))
+
+    sign_box = Table([[sign_cell_content]], colWidths=[95 * mm])
+    sign_box.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 0.8, colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+    ]))
+
+    footer_master_data = [
+        [bank_table, sign_box]
+    ]
+
+    footer_master = Table(footer_master_data, colWidths=[95 * mm, 95 * mm])
+    footer_master.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (0, 0), 'TOP'),
+        ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+
+    story.append(KeepTogether([footer_master]))
+
+    doc.build(story, canvasmaker=NumberedCanvas)
+    return buffer
+
+
+@role_required('ADMIN', 'PURCHASE')
+def customer_invoice_modal_data(request, product_id):
+    """Return JSON data for the Generate Invoice modal popup showing only the selected product."""
+    from products.models import CustomerProduct
+    try:
+        target_product = CustomerProduct.objects.select_related('dpr', 'dpr__customer').get(pk=product_id)
+    except CustomerProduct.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Product not found'}, status=404)
+
+    dpr = target_product.dpr
+    all_dpr_products = list(CustomerProduct.objects.filter(dpr=dpr))
+    all_dpr_products_count = len(all_dpr_products)
+
+    inv_qty = target_product.quantity_delivered if target_product.quantity_delivered > 0 else target_product.quantity_ordered
+    data = [{
+        'id': target_product.id,
+        'product_name': target_product.product_name,
+        'quantity_ordered': target_product.quantity_ordered,
+        'quantity_delivered': target_product.quantity_delivered,
+        'invoice_qty': inv_qty,
+        'status': target_product.status or '',
+    }]
+
+    return JsonResponse({
+        'status': 'success',
+        'dpr_serial': dpr.serial_number,
+        'customer_name': dpr.customer.customer_name if dpr.customer else '',
+        'total_dpr_products_count': all_dpr_products_count,
+        'products': data,
+    })
+
+
+@role_required('ADMIN', 'PURCHASE')
+def generate_customer_invoice(request, product_id):
+    """Generate a Tax Invoice PDF for a customer product / DPR order."""
+    from products.models import CustomerProduct
+    try:
+        target_product = CustomerProduct.objects.select_related('dpr').get(pk=product_id)
+    except CustomerProduct.DoesNotExist:
+        raise Http404("Product not found")
+
+    dpr = target_product.dpr
+    all_products = list(CustomerProduct.objects.filter(dpr=dpr))
+
+    selected_product_ids = None
+    custom_qtys = {}
+
+    if request.method == 'POST':
+        raw_selected = request.POST.getlist('selected_products')
+        if raw_selected:
+            selected_product_ids = [int(pid) for pid in raw_selected if str(pid).isdigit()]
+
+            for pid in selected_product_ids:
+                raw_q = request.POST.get(f'qty_{pid}', '').strip()
+                if raw_q and raw_q.isdigit():
+                    custom_qtys[pid] = int(raw_q)
+
+            # Update delivered quantity and status for selected items
+            for p in all_products:
+                if p.id in selected_product_ids:
+                    if p.id in custom_qtys:
+                        p.quantity_delivered = custom_qtys[p.id]
+                    else:
+                        p.quantity_delivered = p.quantity_ordered
+
+                    if p.quantity_delivered >= p.quantity_ordered and p.quantity_delivered > 0:
+                        p.status = 'delivered'
+                    elif p.quantity_delivered > 0:
+                        p.status = 'partially_delivered'
+                    p.save()
+
+    pdf_buffer = _build_customer_invoice_pdf(product_id, selected_product_ids=selected_product_ids, custom_qtys=custom_qtys)
+    if not pdf_buffer:
+        raise Http404("Product not found")
+
+    inv_no_val = (target_product.invoice_dc_number or '').strip()
+    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+    if match:
+        inv_no = f"MES-F{int(match.group(1)):04d}"
+    elif inv_no_val:
+        inv_no = inv_no_val
+    else:
+        inv_no = f"MES-F{target_product.id:04d}"
+    safe_inv_no = re.sub(r'[^a-zA-Z0-9_\-]', '_', inv_no)
+    filename = f"Tax_Invoice_{safe_inv_no}.pdf"
+
+    response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    return response
 

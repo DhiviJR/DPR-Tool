@@ -12,7 +12,7 @@
 
             <div class="card-body">
 
-                <form method="POST">
+                <form method="POST" action="{% url 'login' %}" id="loginForm">
                     {% csrf_token %}
 
                     {% if error %}
@@ -22,16 +22,16 @@
                     {% endif %}
 
                     <div class="mb-3">
-                        <label>Username</label>
-                        <input type="text" name="username" class="form-control" value="{{ username|default:'' }}">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-control" value="{{ username|default:'' }}" required autocomplete="username">
                     </div>
 
                     <div class="mb-3">
-                        <label>Password</label>
-                        <input type="password" name="password" class="form-control">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-control" required autocomplete="current-password">
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100">
+                    <button type="submit" id="loginSubmitBtn" class="btn btn-primary w-100">
                         Login
                     </button>
 

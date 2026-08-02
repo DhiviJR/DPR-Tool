@@ -13,7 +13,8 @@
 </div> -->
 
 <!-- Quick actions -->
-<!-- <div class="dpr-card dpr-dashboard-menu mb-4">
+{% if can_view_masters %}
+<div class="dpr-card dpr-dashboard-menu mb-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
         <div>
             <h6 class="mb-1">Master Data</h6>
@@ -28,9 +29,11 @@
             </a>
         </div>
     </div>
-</div> -->
+</div>
+{% endif %}
 
 <div class="row g-3 mb-4">
+    {% if can_view_rfq %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
             <div class="dpr-action-card dpr-action-info">
@@ -40,6 +43,8 @@
             </div>
         </a>
     </div>
+    {% endif %}
+    {% if can_view_customer_order %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'customer_order' %}" class="dpr-card-hover">
             <div class="dpr-action-card dpr-action-primary">
@@ -49,6 +54,8 @@
             </div>
         </a>
     </div>
+    {% endif %}
+    {% if can_view_dpr %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'dpr_view' %}" class="dpr-card-hover">
             <div class="dpr-action-card dpr-action-primary">
@@ -58,6 +65,8 @@
             </div>
         </a>
     </div>
+    {% endif %}
+    {% if can_view_customer_po %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
             <div class="dpr-action-card dpr-action-info">
@@ -67,6 +76,8 @@
             </div>
         </a>
     </div>
+    {% endif %}
+    {% if can_view_supplier_po %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'supplier_po_product_details' %}" class="dpr-card-hover">
             <div class="dpr-action-card dpr-action-warning">
@@ -76,10 +87,12 @@
             </div>
         </a>
     </div>
+    {% endif %}
 </div>
 
 <!-- KPI summary cards (clickable) -->
 <div class="row g-3 mb-4">
+    {% if can_view_dpr %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'dpr_view' %}" class="dpr-card-hover">
             <div class="dpr-card p-3 h-100">
@@ -111,6 +124,8 @@
             </div>
         </a>
     </div>
+    {% endif %}
+    {% if can_view_rfq %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
             <div class="dpr-card p-3 h-100">
@@ -124,6 +139,8 @@
             </div>
         </a>
     </div>
+    {% endif %}
+    {% if can_view_customer_po %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
             <div class="dpr-card p-3 h-100">
@@ -137,6 +154,8 @@
             </div>
         </a>
     </div>
+    {% endif %}
+    {% if can_view_supplier_po %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'supplier_po_product_details' %}" class="dpr-card-hover">
             <div class="dpr-card p-3 h-100">
@@ -150,6 +169,8 @@
             </div>
         </a>
     </div>
+    {% endif %}
+    {% if can_view_dpr or can_view_supplier_po %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'dpr_view' %}?case=supplier_order_pending" class="dpr-card-hover">
             <div class="dpr-card p-3 h-100">
@@ -163,6 +184,7 @@
             </div>
         </a>
     </div>
+    {% endif %}
 </div>
 
 <!-- Insight panel: gauge + progress + mini output -->
@@ -177,6 +199,7 @@
             <div class="dpr-gauge-target">Overall delivery rate</div>
         </div>
         <div class="col-lg-3 px-lg-3 py-3 border-start">
+            {% if can_view_dpr %}
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
                     <span><i class="bi bi-journal-text me-1"></i> Total DPRs</span>
@@ -195,6 +218,8 @@
                     <div class="dpr-progress-fill bar-2" style="width: {{ mail_confirmation_pct }}%;"></div>
                 </div>
             </div>
+            {% endif %}
+            {% if can_view_customer_po %}
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
                     <span><i class="bi bi-bag-check me-1"></i> Customer delivered</span>
@@ -204,6 +229,8 @@
                     <div class="dpr-progress-fill bar-3" style="width: {{ customer_delivery_pct }}%;"></div>
                 </div>
             </div>
+            {% endif %}
+            {% if can_view_supplier_po %}
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
                     <span><i class="bi bi-box-seam me-1"></i> Supplier delivered</span>
@@ -213,7 +240,9 @@
                     <div class="dpr-progress-fill bar-4" style="width: {{ supplier_delivery_pct }}%;"></div>
                 </div>
             </div>
+            {% endif %}
         </div>
+        {% if can_view_rfq %}
         <div class="col-lg-3 px-lg-3 py-3 border-start border-end">
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
@@ -252,6 +281,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
         <div class="col-lg-3 py-3">
             <div class="text-center mb-2">
                 <canvas id="outputSparkline" height="80"></canvas>
@@ -264,15 +294,22 @@
         </div>
     </div>
     <div class="dpr-insight-footer">
+        {% if can_view_dpr %}
         <span class="stat-item"><i class="bi bi-journal-text"></i> {{ total_dpr_count }} DPRs</span>
         <span class="stat-item"><i class="bi bi-envelope"></i> {{ pending_mail_confirmation_count }} Mail</span>
+        {% endif %}
+        {% if can_view_customer_po %}
         <span class="stat-item"><i class="bi bi-bag-check"></i> {{ total_customer_products }} Customer lines</span>
+        {% endif %}
+        {% if can_view_supplier_po %}
         <span class="stat-item"><i class="bi bi-box-seam"></i> {{ total_supplier_products }} Supplier lines</span>
+        {% endif %}
     </div>
 </div>
 
 <!-- Charts + validity alerts -->
 <div class="row g-3 mb-4">
+    {% if can_view_customer_po %}
     <div class="col-lg-4">
         <div class="dpr-card dpr-chart-card h-100 d-flex flex-column">
             <div class="card-header">Customer Product Status</div>
@@ -295,6 +332,8 @@
             </div>
         </div>
     </div>
+    {% endif %}
+    {% if can_view_supplier_po %}
     <div class="col-lg-4">
         <div class="dpr-card dpr-chart-card h-100 d-flex flex-column">
             <div class="card-header">Supplier Product Status</div>
@@ -317,10 +356,12 @@
             </div>
         </div>
     </div>
+    {% endif %}
     <div class="col-lg-4">
         <div class="dpr-card h-100 p-3">
             <h6 class="fw-bold text-primary mb-3">Validity Alerts</h6>
 
+            {% if can_view_customer_po %}
             <div class="dpr-alert-item">
                 <div class="alert-left">
                     <div class="dpr-alert-icon info"><i class="bi bi-clock-history"></i></div>
@@ -353,7 +394,9 @@
                 </div>
                 <span class="dpr-alert-count">{{ customer_invoice_pending_count }}</span>
             </div>
+            {% endif %}
 
+            {% if can_view_supplier_po %}
             <div class="dpr-alert-item">
                 <div class="alert-left">
                     <div class="dpr-alert-icon info"><i class="bi bi-clock-history"></i></div>
@@ -375,7 +418,9 @@
                 </div>
                 <span class="dpr-alert-count">{{ supplier_expired_count }}</span>
             </div>
+            {% endif %}
 
+            {% if can_view_rfq %}
             <div class="dpr-alert-item">
                 <div class="alert-left">
                     <div class="dpr-alert-icon info"><i class="bi bi-envelope"></i></div>
@@ -386,10 +431,13 @@
                 </div>
                 <span class="dpr-alert-count">{{ rfq_quotation_not_sent_count }}</span>
             </div>
+            {% endif %}
 
+            {% if can_view_customer_po %}
             <div class="text-end mt-2">
                 <a href="{% url 'customer_po_product_details' %}" class="small fw-semibold text-decoration-none">View all customer PO &rsaquo;</a>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -397,11 +445,17 @@
 <!-- Footer action bar -->
 <div class="dpr-footer-bar d-flex flex-wrap justify-content-between align-items-center gap-3">
     <div>
+        {% if can_view_customer_po %}
         <span class="dpr-pill warn"><i class="bi bi-clock"></i> Customer expiring: {{ customer_within_7_days_count }}</span>
         <span class="dpr-pill danger"><i class="bi bi-exclamation-circle"></i> Customer expired: {{ customer_expired_count }}</span>
+        {% endif %}
+        {% if can_view_supplier_po %}
         <span class="dpr-pill warn"><i class="bi bi-clock"></i> Supplier expiring: {{ supplier_within_7_days_count }}</span>
         <span class="dpr-pill danger"><i class="bi bi-exclamation-circle"></i> Supplier expired: {{ supplier_expired_count }}</span>
+        {% endif %}
+        {% if can_view_rfq %}
         <span class="dpr-pill warn"><i class="bi bi-envelope"></i> RFQ pending: {{ rfq_quotation_not_sent_count }}</span>
+        {% endif %}
     </div>
    
 </div>

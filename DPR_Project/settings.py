@@ -13,6 +13,13 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -82,12 +89,14 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'accounts.context_processors.rbac_context',
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'DPR_Project.wsgi.application'
+
 
 
 # Database
@@ -161,24 +170,25 @@ LOGOUT_REDIRECT_URL = '/login/'
 
 EMAIL_BACKEND = os.environ.get(
     'DJANGO_EMAIL_BACKEND',
-    'django.core.mail.backends.filebased.EmailBackend'
+    'django.core.mail.backends.smtp.EmailBackend'
 )
 EMAIL_FILE_PATH = os.path.join(BASE_DIR, 'sent_emails')
-EMAIL_HOST = os.environ.get('DJANGO_EMAIL_HOST', '')
-EMAIL_PORT = int(os.environ.get('DJANGO_EMAIL_PORT', '25'))
-EMAIL_HOST_USER = os.environ.get('DJANGO_EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST = os.environ.get('DJANGO_EMAIL_HOST', 'smtp.hostinger.com')
+EMAIL_PORT = int(os.environ.get('DJANGO_EMAIL_PORT', '465'))
+EMAIL_HOST_USER = os.environ.get('DJANGO_EMAIL_HOST_USER', 'info@mbt-corporation.com')
+EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', 'Dhivibe@2013')
 EMAIL_USE_TLS = os.environ.get('DJANGO_EMAIL_USE_TLS', 'False').lower() == 'true'
-EMAIL_USE_SSL = os.environ.get('DJANGO_EMAIL_USE_SSL', 'False').lower() == 'true'
-EMAIL_TIMEOUT = int(os.environ.get('DJANGO_EMAIL_TIMEOUT', '20'))
+EMAIL_USE_SSL = os.environ.get('DJANGO_EMAIL_USE_SSL', 'True').lower() == 'true'
+EMAIL_TIMEOUT = int(os.environ.get('DJANGO_EMAIL_TIMEOUT', '30'))
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DJANGO_DEFAULT_FROM_EMAIL',
-    'info@mesinstruments.co.in'
+    'info@mbt-corporation.com'
 )
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
 
 

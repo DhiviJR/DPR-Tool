@@ -62,7 +62,15 @@
                         <td data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
                         <td data-sort-value="{{ row.customer_product.dpr.serial_number|default:''|lower }}">{{ row.customer_product.dpr.serial_number }}</td>
                         <td data-sort-value="{{ row.supplier.supplier_name|default:''|lower }}">{{ row.supplier.supplier_name }}</td>
-                        <td data-sort-value="{{ row.po_number|default:''|lower }}">{{ row.po_number|default:'-' }}</td>
+                        <td data-sort-value="{{ row.po_number|default:''|lower }}">
+                            {% if row.po_number and row.po_number != '-' %}
+                                <a href="{% url 'generate_supplier_po' row.customer_product.dpr.id %}?supplier_id={{ row.supplier.id }}&po_number={{ row.po_number|urlencode }}&supplier_product_id={{ row.id }}" target="_blank" class="text-decoration-none text-primary fw-semibold">
+                                    {{ row.po_number }}
+                                </a>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td data-sort-value="{{ row.customer_product.product_name|default:''|lower }}">{{ row.customer_product.product_name }}</td>
                         <td data-sort-value="{{ row.po_date|date:'Y-m-d'|default:'' }}">{{ row.po_date|date:'Y-m-d'|default:'-' }}</td>
                         <td data-sort-value="{{ row.quantity }}">{{ row.quantity }}</td>
