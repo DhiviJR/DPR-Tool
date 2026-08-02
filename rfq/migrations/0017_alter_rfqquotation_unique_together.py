@@ -10,8 +10,13 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterUniqueTogether(
-            name='rfqquotation',
-            unique_together={('rfq', 'quotation_number')},
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AlterUniqueTogether(
+                    name='rfqquotation',
+                    unique_together={('rfq', 'quotation_number')},
+                ),
+            ],
+            database_operations=[],
         ),
     ]
