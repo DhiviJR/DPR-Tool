@@ -13,6 +13,7 @@ def rbac_context(request):
             'can_view_dpr': False,
             'can_view_customer_po': False,
             'can_view_supplier_po': False,
+            'can_view_accounts': False,
             'can_view_masters': False,
         }
 
@@ -27,9 +28,10 @@ def rbac_context(request):
         'is_sales': is_sales,
         'is_purchase': is_purchase,
         'can_view_rfq': is_admin or is_sales,
-        'can_view_customer_order': is_admin or is_sales or is_purchase,
+        'can_view_customer_order': is_admin or is_purchase,
         'can_view_dpr': is_admin or is_purchase,
-        'can_view_customer_po': is_admin or is_purchase,
+        'can_view_customer_po': is_admin or is_purchase or is_sales,
         'can_view_supplier_po': is_admin or is_purchase,
+        'can_view_accounts': is_admin,
         'can_view_masters': is_admin,
     }

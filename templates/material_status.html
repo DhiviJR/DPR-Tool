@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Material Status | DPR System{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h1 class="dpr-page-title mb-1">Material Status</h1>
+        <p class="dpr-page-subtitle mb-0">Overview of supplier product delivery status and pending materials</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'supplier_po_product_details' %}" class="btn btn-outline-primary dpr-back-btn btn-sm">
+            <i class="bi bi-box-seam me-1"></i>Supplier PO Details
+        </a>
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards for Material Status -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'material_status' %}" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon blue"><i class="bi bi-boxes"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value text-dark">{{ total_products }}</div>
+                        <div class="dpr-kpi-label">Total Material Items</div>
+                        <div class="small text-muted mt-1">Ordered Qty: {{ total_ordered_qty }}</div>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'material_status' %}?case=delivered" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="dpr-kpi-icon green"><i class="bi bi-check-circle-fill"></i></div>
+                        <div>
+                            <div class="dpr-kpi-value text-success">{{ delivered_count }}</div>
+                            <div class="dpr-kpi-label">Products Delivered</div>
+                            <div class="small text-muted mt-1">Received Qty: {{ total_received_qty }}</div>
+                        </div>
+                    </div>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 fw-semibold">Delivered</span>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'material_status' %}?case=not_delivered" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="dpr-kpi-icon red"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                        <div>
+                            <div class="dpr-kpi-value text-danger">{{ not_delivered_count }}</div>
+                            <div class="dpr-kpi-label">Products Not Delivered</div>
+                            <div class="small text-muted mt-1">Pending Qty: {{ total_pending_qty }}</div>
+                        </div>
+                    </div>
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1 fw-semibold">Not Delivered</span>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon purple"><i class="bi bi-pie-chart-fill"></i></div>
+                <div class="flex-grow-1">
+                    <div class="dpr-kpi-value text-dark">{{ delivery_pct }}%</div>
+                    <div class="dpr-kpi-label">Delivery Completion Rate</div>
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ delivery_pct }}%;" aria-valuenow="{{ delivery_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Material Status Table Card -->
+<div class="dpr-card dpr-table-card border-0 shadow-sm">
+    <div class="dpr-table-toolbar">
+        <div class="row g-2 align-items-center">
+            <div class="col-lg-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="search" id="materialSearch" class="form-control border-start-0 ps-0"
+                           placeholder="Search by DPR, product, supplier, PO number..." autocomplete="off">
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="d-flex align-items-center gap-2">
+                    <label for="materialCaseFilter" class="form-label mb-0 small text-nowrap text-muted fw-semibold">Filter Status:</label>
+                    <select id="materialCaseFilter" class="form-select form-select-sm">
+                        <option value="" {% if not case_filter %}selected{% endif %}>All Materials ({{ total_products }})</option>
+                        <option value="delivered" {% if case_filter == 'delivered' %}selected{% endif %}>Delivered ({{ delivered_count }})</option>
+                        <option value="not_delivered" {% if case_filter == 'not_delivered' %}selected{% endif %}>Not Delivered ({{ not_delivered_count }})</option>
+                        <option value="partially_delivered" {% if case_filter == 'partially_delivered' %}selected{% endif %}>Partially Delivered ({{ partially_delivered_count }})</option>
+                        <option value="pending" {% if case_filter == 'pending' %}selected{% endif %}>Pending ({{ pending_count }})</option>
+                        <option value="cancelled" {% if case_filter == 'cancelled' %}selected{% endif %}>Cancelled ({{ cancelled_count }})</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-lg-3 text-lg-end">
+                <span id="materialRowCount" class="text-muted small fw-semibold">Showing {{ supplier_products|length }} items</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="materialStatusTable" class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>S.No</th>
+                        <th>DPR Serial No</th>
+                        <th>Supplier Name</th>
+                        <th>PO Number</th>
+                        <th>Product / Material</th>
+                        <th class="text-center">Qty Ordered</th>
+                        <th class="text-center">Qty Delivered</th>
+                        <th class="text-center">Qty Remaining</th>
+                        <th class="text-center">Material Status</th>
+                        <th>PO Validity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sp in supplier_products %}
+                    <tr data-status="{% if sp.is_delivered %}delivered{% elif sp.status == 'partially_delivered' %}partially_delivered{% elif sp.status == 'cancelled' %}cancelled{% else %}pending{% endif %}"
+                        data-not-delivered="{% if not sp.is_delivered %}true{% else %}false{% endif %}">
+                        <td>{{ forloop.counter }}</td>
+                        <td class="fw-semibold text-primary">{{ sp.customer_product.dpr.serial_number|default:'-' }}</td>
+                        <td>{{ sp.supplier.supplier_name|default:'-' }}</td>
+                        <td>
+                            {% if sp.po_number and sp.po_number != '-' %}
+                                <a href="{% url 'generate_supplier_po' sp.customer_product.dpr.id %}?supplier_id={{ sp.supplier.id }}&po_number={{ sp.po_number|urlencode }}&supplier_product_id={{ sp.id }}" target="_blank" class="text-decoration-none text-primary fw-semibold">
+                                    {{ sp.po_number }}
+                                </a>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="fw-medium">{{ sp.customer_product.product_name }}</td>
+                        <td class="text-center fw-semibold">{{ sp.quantity }}</td>
+                        <td class="text-center text-success fw-bold">{{ sp.quantity_received }}</td>
+                        <td class="text-center {% if sp.remaining_qty > 0 %}text-danger fw-bold{% else %}text-muted{% endif %}">
+                            {{ sp.remaining_qty }}
+                        </td>
+                        <td class="text-center">
+                            {% if sp.status == 'delivered' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-check-circle me-1"></i>Delivered
+                                </span>
+                            {% elif sp.status == 'partially_delivered' %}
+                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-hourglass-split me-1"></i>Partially Delivered
+                                </span>
+                            {% elif sp.status == 'cancelled' %}
+                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelled
+                                </span>
+                            {% else %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-clock-history me-1"></i>Not Delivered (Pending)
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>{{ sp.po_validity|date:'Y-m-d'|default:'-' }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-2 text-secondary"></i>
+                            No material records found matching criteria.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('materialSearch');
+    const filterSelect = document.getElementById('materialCaseFilter');
+    const table = document.getElementById('materialStatusTable');
+    const rows = table.querySelectorAll('tbody tr');
+    const rowCountSpan = document.getElementById('materialRowCount');
+
+    function filterTable() {
+        const query = searchInput.value.toLowerCase().trim();
+        const filterVal = filterSelect.value;
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            if (row.cells.length === 1) return; // skip empty row if present
+
+            const text = row.textContent.toLowerCase();
+            const status = row.getAttribute('data-status');
+            const isNotDelivered = row.getAttribute('data-not-delivered') === 'true';
+
+            let matchesQuery = !query || text.includes(query);
+            let matchesFilter = true;
+
+            if (filterVal === 'delivered') {
+                matchesFilter = (status === 'delivered');
+            } else if (filterVal === 'not_delivered') {
+                matchesFilter = isNotDelivered;
+            } else if (filterVal === 'partially_delivered') {
+                matchesFilter = (status === 'partially_delivered');
+            } else if (filterVal === 'pending') {
+                matchesFilter = (status === 'pending');
+            } else if (filterVal === 'cancelled') {
+                matchesFilter = (status === 'cancelled');
+            }
+
+            if (matchesQuery && matchesFilter) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (rowCountSpan) {
+            rowCountSpan.textContent = `Showing ${visibleCount} items`;
+        }
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterTable);
+    if (filterSelect) filterSelect.addEventListener('change', filterTable);
+});
+</script>
+{% endblock %}

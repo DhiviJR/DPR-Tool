@@ -4,6 +4,7 @@ from django.contrib import messages
 from .models import CustomUser
 from django.contrib.auth.decorators import login_required
 from .decorators import role_required
+from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.core.mail import EmailMessage
 from django.core.exceptions import ValidationError
@@ -1023,6 +1024,7 @@ def _get_dpr_row_class(filter_state):
     return ''
 
 
+@csrf_exempt
 def user_login(request):
     if request.method == 'GET' and request.user.is_authenticated:
         logout(request)
@@ -1179,6 +1181,7 @@ def dashboard(request):
         'supplier_within_7_days_count': supplier_within_7_days_count,
         'supplier_expired_count': supplier_expired_count,
         'supplier_delivered_count': supplier_delivered_count,
+        'supplier_not_delivered_count': total_supplier_products - supplier_delivered_count,
         'supplier_partial_count': supplier_partial_count,
         'supplier_cancelled_count': supplier_cancelled_count,
         'supplier_pending_count': supplier_pending_count,
@@ -1406,20 +1409,21 @@ def dpr_documents_download(request, dpr_id):
     return response
 
 
-@role_required('ADMIN', 'PURCHASE')
+@role_required('ADMIN', 'PURCHASE', 'SALES')
 def customer_po_product_details(request):
     validity_filter = request.GET.get('validity')
+    case_filter = request.GET.get('case', '').strip()
     today = timezone.localdate()
     within_7_days = today + timedelta(days=5)
 
     products = CustomerProduct.objects.select_related(
         'dpr',
         'dpr__customer'
-    ).annotate(
+    ).prefetch_related('supplierproduct_set').annotate(
         status_rank=Case(
-            When(status__isnull=True, then=Value(0)),
-            When(status='partially_delivered', then=Value(0)),
-            default=Value(1),
+            When(status='delivered', then=Value(2)),
+            When(status='partially_delivered', then=Value(1)),
+            default=Value(0),
             output_field=IntegerField()
         )
     )
@@ -1432,7 +1436,8 @@ def customer_po_product_details(request):
     elif validity_filter == 'expired':
         products = products.filter(dpr__po_validity__lt=today)
 
-    products = list(products.order_by('status_rank', 'dpr__po_validity', 'id'))
+    products = list(products.order_by('status_rank', 'dpr__po_validity', '-id'))
+
     for product in products:
         product.validity_state = _get_validity_state(product.dpr.po_validity, today)
         product.row_class = _get_status_validity_row_class(
@@ -1444,11 +1449,65 @@ def customer_po_product_details(request):
             product.validity_state
         )
 
+        sps = list(product.supplierproduct_set.all())
+        if not sps:
+            product.material_status_code = 'pending'
+            product.material_status_label = 'Not Delivered (Pending)'
+        else:
+            if all(sp.status == 'delivered' for sp in sps):
+                product.material_status_code = 'delivered'
+                product.material_status_label = 'Delivered'
+            elif any(sp.status == 'partially_delivered' or sp.quantity_received > 0 for sp in sps):
+                product.material_status_code = 'partially_delivered'
+                product.material_status_label = 'Partially Delivered'
+            else:
+                product.material_status_code = 'pending'
+                product.material_status_label = 'Not Delivered (Pending)'
+
+        inv_no_val = (product.invoice_dc_number or '').strip()
+        match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+        if match:
+            product.generated_invoice_number = f"MES-F{int(match.group(1)):04d}"
+        elif inv_no_val:
+            product.generated_invoice_number = inv_no_val
+        else:
+            product.generated_invoice_number = f"MES-F{product.id:04d}"
+
+    # Sort Red (Pending/Expired/Not Delivered) at TOP (0), Yellow (Partial/Due Soon) in MIDDLE (1), Green (Delivered/Closed) at BOTTOM (2)
+    def _color_rank(p):
+        if p.status == 'delivered' or (p.quantity_delivered and p.quantity_delivered >= p.quantity_ordered):
+            return 2
+        if p.row_class == 'table-success':
+            return 2
+        if p.status == 'partially_delivered' or p.row_class in ('table-warning', 'table-info'):
+            return 1
+        return 0
+
+    import datetime
+    products.sort(key=lambda p: (_color_rank(p), p.dpr.po_validity or datetime.date.max, -p.id))
+
+    total_products = len(products)
+    delivered_count = sum(1 for p in products if p.status == 'delivered')
+    not_delivered_count = total_products - delivered_count
+
+    total_ordered_qty = sum(p.quantity_ordered or 0 for p in products)
+    total_delivered_qty = sum(p.quantity_delivered or 0 for p in products)
+    total_pending_qty = max(total_ordered_qty - total_delivered_qty, 0)
+    delivery_pct = _pct(delivered_count, total_products)
+
     return render(
         request,
         'customer_po_product_details.html',
         {
             'products': products,
+            'total_products': total_products,
+            'delivered_count': delivered_count,
+            'not_delivered_count': not_delivered_count,
+            'total_ordered_qty': total_ordered_qty,
+            'total_delivered_qty': total_delivered_qty,
+            'total_pending_qty': total_pending_qty,
+            'delivery_pct': delivery_pct,
+            'case_filter': case_filter,
         }
     )
 
@@ -1556,6 +1615,8 @@ def supplier_status_details(request, product_id):
         {
             'supplier_name': row.supplier.supplier_name,
             'quantity': row.quantity,
+            'quantity_received': row.quantity_received,
+            'expected_date': row.expected_date.strftime('%Y-%m-%d') if row.expected_date else '-',
             'po_number': row.po_number,
             'po_value': str(row.po_value),
             'po_date': row.po_date.strftime('%Y-%m-%d') if row.po_date else '-',
@@ -1623,6 +1684,277 @@ def supplier_po_product_details(request):
         'supplier_po_product_details.html',
         {'supplier_products': supplier_products}
     )
+
+
+@role_required('ADMIN', 'PURCHASE')
+def material_status(request):
+    case_filter = request.GET.get('case', '').strip()
+
+    supplier_products = SupplierProduct.objects.select_related(
+        'customer_product',
+        'customer_product__dpr',
+        'customer_product__dpr__customer',
+        'supplier'
+    ).annotate(
+        status_rank=Case(
+            When(status='delivered', then=Value(1)),
+            default=Value(0),
+            output_field=IntegerField()
+        )
+    )
+
+    total_products = supplier_products.count()
+    delivered_count = supplier_products.filter(status='delivered').count()
+    not_delivered_count = total_products - delivered_count
+
+    partially_delivered_count = supplier_products.filter(status='partially_delivered').count()
+    pending_count = supplier_products.filter(status__isnull=True).count()
+    cancelled_count = supplier_products.filter(status='cancelled').count()
+
+    total_ordered_qty = sum(sp.quantity for sp in supplier_products)
+    total_received_qty = sum(sp.quantity_received for sp in supplier_products)
+    total_pending_qty = max(total_ordered_qty - total_received_qty, 0)
+
+    delivery_pct = _pct(delivered_count, total_products)
+
+    if case_filter == 'delivered':
+        supplier_products = supplier_products.filter(status='delivered')
+    elif case_filter == 'not_delivered':
+        supplier_products = supplier_products.exclude(status='delivered')
+    elif case_filter == 'partially_delivered':
+        supplier_products = supplier_products.filter(status='partially_delivered')
+    elif case_filter == 'pending':
+        supplier_products = supplier_products.filter(status__isnull=True)
+    elif case_filter == 'cancelled':
+        supplier_products = supplier_products.filter(status='cancelled')
+
+    supplier_products = list(supplier_products.order_by('status_rank', '-id'))
+
+    for sp in supplier_products:
+        sp.remaining_qty = max(sp.quantity - sp.quantity_received, 0)
+        sp.is_delivered = (sp.status == 'delivered')
+
+    return render(
+        request,
+        'material_status.html',
+        {
+            'supplier_products': supplier_products,
+            'total_products': total_products,
+            'delivered_count': delivered_count,
+            'not_delivered_count': not_delivered_count,
+            'partially_delivered_count': partially_delivered_count,
+            'pending_count': pending_count,
+            'cancelled_count': cancelled_count,
+            'total_ordered_qty': total_ordered_qty,
+            'total_received_qty': total_received_qty,
+            'total_pending_qty': total_pending_qty,
+            'delivery_pct': delivery_pct,
+            'case_filter': case_filter,
+        }
+    )
+
+
+@role_required('ADMIN')
+def accounts_details(request):
+    case_filter = request.GET.get('case', '').strip()
+    today = timezone.localdate()
+
+    products = CustomerProduct.objects.select_related(
+        'dpr',
+        'dpr__customer'
+    )
+
+    items = []
+    total_invoice_value = Decimal('0.00')
+    total_received_amount = Decimal('0.00')
+    total_outstanding_amount = Decimal('0.00')
+    overdue_amount = Decimal('0.00')
+
+    received_count = 0
+    partially_received_count = 0
+    not_received_count = 0
+    due_soon_count = 0
+    overdue_count = 0
+
+    for product in products:
+        inv_date = product.invoice_date or product.dpr.po_date or product.dpr.created_at.date()
+        inv_no = (product.invoice_dc_number or '').strip()
+        if not inv_no:
+            inv_no = f"MES-F{product.id:04d}"
+
+        cust = product.dpr.customer
+        terms_str = (cust.payment_terms or '').lower() if cust else ''
+        days = 30
+        match = re.search(r'(\d+)', terms_str)
+        if match:
+            try:
+                days = int(match.group(1))
+            except ValueError:
+                pass
+        
+        terms_date = inv_date + timedelta(days=days)
+
+        po_val = product.value or Decimal('0.00')
+        rec_amt = product.received_amount or Decimal('0.00')
+        rem_amt = max(po_val - rec_amt, Decimal('0.00'))
+
+        is_paid = (product.payment_status == 'amount_received' or rec_amt >= po_val)
+        is_due_soon = not is_paid and (today <= terms_date <= today + timedelta(days=7))
+        is_overdue = not is_paid and (today > terms_date)
+
+        if is_paid:
+            color_state = 'green'
+            received_count += 1
+        elif is_due_soon:
+            color_state = 'orange'
+            due_soon_count += 1
+            if product.payment_status == 'partially_received':
+                partially_received_count += 1
+            else:
+                not_received_count += 1
+        elif is_overdue:
+            color_state = 'red'
+            overdue_count += 1
+            overdue_amount += rem_amt
+            if product.payment_status == 'partially_received':
+                partially_received_count += 1
+            else:
+                not_received_count += 1
+        else:
+            color_state = 'orange' if (terms_date - today).days <= 7 else 'red' if today > terms_date else 'normal'
+            if product.payment_status == 'partially_received':
+                partially_received_count += 1
+            else:
+                not_received_count += 1
+
+        total_invoice_value += po_val
+        total_received_amount += rec_amt
+        total_outstanding_amount += rem_amt
+
+        item = {
+            'product': product,
+            'dpr': product.dpr,
+            'customer_name': cust.customer_name if cust else '-',
+            'invoice_number': inv_no,
+            'invoice_date': inv_date,
+            'terms_date': terms_date,
+            'po_value': po_val,
+            'received_amount': rec_amt,
+            'remaining_amount': rem_amt,
+            'payment_status': product.payment_status or 'not_received',
+            'color_state': color_state,
+            'is_paid': is_paid,
+            'is_due_soon': is_due_soon,
+            'is_overdue': is_overdue,
+        }
+        items.append(item)
+
+    items.sort(key=lambda x: x['invoice_date'], reverse=True)
+
+    if case_filter == 'amount_received':
+        items = [x for x in items if x['is_paid']]
+    elif case_filter == 'partially_received':
+        items = [x for x in items if x['payment_status'] == 'partially_received']
+    elif case_filter == 'not_received':
+        items = [x for x in items if x['payment_status'] == 'not_received' and not x['is_paid']]
+    elif case_filter == 'due_soon':
+        items = [x for x in items if x['is_due_soon']]
+    elif case_filter == 'overdue':
+        items = [x for x in items if x['is_overdue']]
+
+    total_products = len(products)
+    delivery_pct = _pct(received_count, total_products)
+
+    return render(
+        request,
+        'accounts_details.html',
+        {
+            'items': items,
+            'total_products': total_products,
+            'total_invoice_value': total_invoice_value,
+            'total_received_amount': total_received_amount,
+            'total_outstanding_amount': total_outstanding_amount,
+            'overdue_amount': overdue_amount,
+            'received_count': received_count,
+            'partially_received_count': partially_received_count,
+            'not_received_count': not_received_count,
+            'due_soon_count': due_soon_count,
+            'overdue_count': overdue_count,
+            'delivery_pct': delivery_pct,
+            'case_filter': case_filter,
+        }
+    )
+
+
+@role_required('ADMIN')
+def customer_product_payment_update(request, product_id):
+    if request.method != 'POST':
+        raise Http404
+    try:
+        product = CustomerProduct.objects.select_related('dpr').get(pk=product_id)
+    except CustomerProduct.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Product not found'}, status=404)
+
+    payment_status = request.POST.get('payment_status', '').strip()
+    if payment_status not in ('amount_received', 'partially_received', 'not_received'):
+        return JsonResponse({'status': 'error', 'message': 'Invalid payment status'}, status=400)
+
+    today = timezone.localdate()
+
+    if payment_status == 'amount_received':
+        product.payment_status = 'amount_received'
+        product.received_amount = product.value or Decimal('0.00')
+        product.payment_received_date = today
+    elif payment_status == 'partially_received':
+        amount_raw = request.POST.get('received_amount', '').strip()
+        try:
+            amt = Decimal(amount_raw or '0')
+        except InvalidOperation:
+            return JsonResponse({'status': 'error', 'message': 'Received amount must be a valid number'}, status=400)
+        
+        if amt <= 0:
+            return JsonResponse({'status': 'error', 'message': 'Received amount must be greater than 0'}, status=400)
+        
+        po_val = product.value or Decimal('0.00')
+        if amt >= po_val:
+            product.payment_status = 'amount_received'
+            product.received_amount = po_val
+        else:
+            product.payment_status = 'partially_received'
+            product.received_amount = amt
+
+        rec_date_raw = request.POST.get('payment_received_date', '').strip()
+        if rec_date_raw:
+            try:
+                from datetime import datetime
+                product.payment_received_date = datetime.strptime(rec_date_raw, '%Y-%m-%d').date()
+            except ValueError:
+                product.payment_received_date = today
+        else:
+            product.payment_received_date = today
+            
+        notes = request.POST.get('payment_notes', '').strip()
+        if notes:
+            product.payment_notes = notes
+
+    elif payment_status == 'not_received':
+        product.payment_status = 'not_received'
+        product.received_amount = Decimal('0.00')
+        product.payment_received_date = None
+
+    product.save(update_fields=[
+        'payment_status',
+        'received_amount',
+        'payment_received_date',
+        'payment_notes'
+    ])
+
+    return JsonResponse({
+        'status': 'ok',
+        'payment_status': product.payment_status,
+        'received_amount': str(product.received_amount),
+        'payment_received_date': product.payment_received_date.strftime('%Y-%m-%d') if product.payment_received_date else '',
+    })
 
 
 @role_required('ADMIN', 'PURCHASE')
@@ -1807,7 +2139,7 @@ def save_po_confirmation_date(request, dpr_id):
     return JsonResponse({'status': 'ok'})
 
 
-@role_required('ADMIN', 'SALES', 'PURCHASE')
+@role_required('ADMIN', 'PURCHASE')
 def customer_order_edit(request, dpr_id):
     try:
         dpr = DPR.objects.get(pk=dpr_id)
@@ -3123,7 +3455,7 @@ def supplier_details(request):
         suppliers = suppliers.filter(supplier_name__icontains=search_query)
     return render(request, 'supplier_details.html', {'suppliers': suppliers, 'search_query': search_query})
 
-@role_required('ADMIN', 'SALES', 'PURCHASE')
+@role_required('ADMIN', 'PURCHASE')
 def customer_order(request):
 
     customers = Customer.objects.all()
@@ -4590,23 +4922,12 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
         ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
     ]))
 
-    # Right side: Signatory seal box matching Image 2
-    seal_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'mes_seal.png')
-
+    # Right side: Signatory box
     sign_cell_content = [
         Paragraph("For Metrology Enginnering Solutions", right_align),
-        Spacer(1, 1 * mm),
+        Spacer(1, 18 * mm),
+        Paragraph("Authorized Signatory", right_bold),
     ]
-
-    if os.path.exists(seal_path):
-        seal_img = Image(seal_path, width=34 * mm, height=27 * mm)
-        seal_img.hAlign = 'RIGHT'
-        sign_cell_content.append(seal_img)
-        sign_cell_content.append(Spacer(1, -9 * mm))
-    else:
-        sign_cell_content.append(Spacer(1, 12 * mm))
-
-    sign_cell_content.append(Paragraph("Authorized Signatory", right_bold))
 
     sign_box = Table([[sign_cell_content]], colWidths=[95 * mm])
     sign_box.setStyle(TableStyle([
@@ -4653,13 +4974,14 @@ def customer_invoice_modal_data(request, product_id):
     all_dpr_products = list(CustomerProduct.objects.filter(dpr=dpr))
     all_dpr_products_count = len(all_dpr_products)
 
-    inv_qty = target_product.quantity_delivered if target_product.quantity_delivered > 0 else target_product.quantity_ordered
+    remaining_qty = max(target_product.quantity_ordered - (target_product.quantity_delivered or 0), 0)
     data = [{
         'id': target_product.id,
         'product_name': target_product.product_name,
         'quantity_ordered': target_product.quantity_ordered,
-        'quantity_delivered': target_product.quantity_delivered,
-        'invoice_qty': inv_qty,
+        'quantity_delivered': target_product.quantity_delivered or 0,
+        'remaining_qty': remaining_qty,
+        'invoice_qty': remaining_qty,
         'status': target_product.status or '',
     }]
 
@@ -4701,7 +5023,7 @@ def generate_customer_invoice(request, product_id):
             for p in all_products:
                 if p.id in selected_product_ids:
                     if p.id in custom_qtys:
-                        p.quantity_delivered = custom_qtys[p.id]
+                        p.quantity_delivered = (p.quantity_delivered or 0) + custom_qtys[p.id]
                     else:
                         p.quantity_delivered = p.quantity_ordered
 

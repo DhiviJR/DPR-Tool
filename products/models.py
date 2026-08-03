@@ -66,6 +66,12 @@ class CustomerProduct(models.Model):
         null=True,
         default=None
     )
+    PAYMENT_STATUS_CHOICES = (
+        ('not_received', 'Not Received'),
+        ('partially_received', 'Partially Received'),
+        ('amount_received', 'Amount Received'),
+    )
+
     quantity_delivered = models.IntegerField(default=0)
     delivery_detail_type = models.CharField(max_length=20, blank=True, null=True)
     invoice_dc_number = models.CharField(max_length=150, blank=True, null=True)
@@ -74,6 +80,16 @@ class CustomerProduct(models.Model):
         blank=True,
         null=True
     )
+
+    invoice_date = models.DateField(blank=True, null=True)
+    payment_status = models.CharField(
+        max_length=25,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='not_received'
+    )
+    received_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_received_date = models.DateField(blank=True, null=True)
+    payment_notes = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return self.product_name

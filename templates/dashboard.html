@@ -66,17 +66,7 @@
         </a>
     </div>
     {% endif %}
-    {% if can_view_customer_po %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
-            <div class="dpr-action-card dpr-action-info">
-                <i class="bi bi-bag-check fs-4 mb-2 d-block"></i>
-                <small>View DPR</small>
-                <h6 class="mb-0">Customer Order Details</h6>
-            </div>
-        </a>
-    </div>
-    {% endif %}
+
     {% if can_view_supplier_po %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'supplier_po_product_details' %}" class="dpr-card-hover">
@@ -84,6 +74,26 @@
                 <i class="bi bi-box-seam fs-4 mb-2 d-block"></i>
                 <small>View DPR</small>
                 <h6 class="mb-0">Supplier Order Details</h6>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
+            <div class="dpr-action-card dpr-action-success">
+                <i class="bi bi-boxes fs-4 mb-2 d-block"></i>
+                <small>View Status</small>
+                <h6 class="mb-0">Material Status</h6>
+            </div>
+        </a>
+    </div>
+    {% endif %}
+    {% if can_view_accounts %}
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'accounts_details' %}" class="dpr-card-hover">
+            <div class="dpr-action-card dpr-action-primary" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: #fff;">
+                <i class="bi bi-wallet2 fs-4 mb-2 d-block"></i>
+                <small>Financial Tracking</small>
+                <h6 class="mb-0">Accounts</h6>
             </div>
         </a>
     </div>
@@ -140,21 +150,7 @@
         </a>
     </div>
     {% endif %}
-    {% if can_view_customer_po %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
-            <div class="dpr-card p-3 h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="dpr-kpi-icon teal"><i class="bi bi-people"></i></div>
-                    <div>
-                        <div class="dpr-kpi-value">{{ total_customer_products }}</div>
-                        <div class="dpr-kpi-label">Customer Products</div>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    {% endif %}
+
     {% if can_view_supplier_po %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'supplier_po_product_details' %}" class="dpr-card-hover">
@@ -164,6 +160,19 @@
                     <div>
                         <div class="dpr-kpi-value">{{ total_supplier_products }}</div>
                         <div class="dpr-kpi-label">Supplier Products</div>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
+            <div class="dpr-card p-3 h-100">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon green"><i class="bi bi-boxes"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value"><span class="text-success">{{ supplier_delivered_count }}</span> <span class="fs-6 text-muted fw-normal">/ {{ supplier_not_delivered_count }} Not Del.</span></div>
+                        <div class="dpr-kpi-label">Material Status (Del / Not Del)</div>
                     </div>
                 </div>
             </div>
@@ -219,17 +228,7 @@
                 </div>
             </div>
             {% endif %}
-            {% if can_view_customer_po %}
-            <div class="dpr-progress-row">
-                <div class="dpr-progress-label">
-                    <span><i class="bi bi-bag-check me-1"></i> Customer delivered</span>
-                    <span>{{ customer_delivered_count }} ({{ customer_delivery_pct }}%)</span>
-                </div>
-                <div class="dpr-progress-track">
-                    <div class="dpr-progress-fill bar-3" style="width: {{ customer_delivery_pct }}%;"></div>
-                </div>
-            </div>
-            {% endif %}
+
             {% if can_view_supplier_po %}
             <div class="dpr-progress-row">
                 <div class="dpr-progress-label">
@@ -298,9 +297,7 @@
         <span class="stat-item"><i class="bi bi-journal-text"></i> {{ total_dpr_count }} DPRs</span>
         <span class="stat-item"><i class="bi bi-envelope"></i> {{ pending_mail_confirmation_count }} Mail</span>
         {% endif %}
-        {% if can_view_customer_po %}
-        <span class="stat-item"><i class="bi bi-bag-check"></i> {{ total_customer_products }} Customer lines</span>
-        {% endif %}
+
         {% if can_view_supplier_po %}
         <span class="stat-item"><i class="bi bi-box-seam"></i> {{ total_supplier_products }} Supplier lines</span>
         {% endif %}
@@ -309,30 +306,7 @@
 
 <!-- Charts + validity alerts -->
 <div class="row g-3 mb-4">
-    {% if can_view_customer_po %}
-    <div class="col-lg-4">
-        <div class="dpr-card dpr-chart-card h-100 d-flex flex-column">
-            <div class="card-header">Customer Product Status</div>
-            <div class="card-body flex-grow-1 d-flex align-items-center">
-                <div class="row align-items-center w-100 g-0">
-                    <div class="col-7">
-                        <div style="height: 240px; position: relative;">
-                            <canvas id="customerStatusChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="col-5">
-                        <ul class="dpr-chart-legend">
-                            <li><span class="dot" style="background:#64748b"></span> Pending ({{ customer_pending_count }})</li>
-                            <li><span class="dot" style="background:#8b5cf6"></span> Partial ({{ customer_partial_count }})</li>
-                            <li><span class="dot" style="background:#ec4899"></span> Delivered ({{ customer_delivered_count }})</li>
-                            <li><span class="dot" style="background:#38bdf8"></span> Cancelled ({{ customer_cancelled_count }})</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
+
     {% if can_view_supplier_po %}
     <div class="col-lg-4">
         <div class="dpr-card dpr-chart-card h-100 d-flex flex-column">
@@ -361,40 +335,7 @@
         <div class="dpr-card h-100 p-3">
             <h6 class="fw-bold text-primary mb-3">Validity Alerts</h6>
 
-            {% if can_view_customer_po %}
-            <div class="dpr-alert-item">
-                <div class="alert-left">
-                    <div class="dpr-alert-icon info"><i class="bi bi-clock-history"></i></div>
-                    <div>
-                        <div class="fw-semibold small">Customer — expiring within 5 days</div>
-                        <a href="{% url 'customer_po_product_details' %}?validity=within7" class="small text-decoration-none">View details &rsaquo;</a>
-                    </div>
-                </div>
-                <span class="dpr-alert-count">{{ customer_within_7_days_count }}</span>
-            </div>
 
-            <div class="dpr-alert-item">
-                <div class="alert-left">
-                    <div class="dpr-alert-icon warn"><i class="bi bi-exclamation-triangle"></i></div>
-                    <div>
-                        <div class="fw-semibold small">Customer — validity expired</div>
-                        <a href="{% url 'customer_po_product_details' %}?validity=expired" class="small text-decoration-none">View details &rsaquo;</a>
-                    </div>
-                </div>
-                <span class="dpr-alert-count">{{ customer_expired_count }}</span>
-            </div>
-
-            <div class="dpr-alert-item">
-                <div class="alert-left">
-                    <div class="dpr-alert-icon info"><i class="bi bi-receipt"></i></div>
-                    <div>
-                        <div class="fw-semibold small">Customer — invoice pending</div>
-                        <a href="{% url 'customer_po_product_details' %}?case=invoice_pending" class="small text-decoration-none">View details &rsaquo;</a>
-                    </div>
-                </div>
-                <span class="dpr-alert-count">{{ customer_invoice_pending_count }}</span>
-            </div>
-            {% endif %}
 
             {% if can_view_supplier_po %}
             <div class="dpr-alert-item">

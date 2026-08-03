@@ -10,13 +10,73 @@
     <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
 </div>
 
-<div class="dpr-card dpr-table-card">
+<!-- KPI Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon blue"><i class="bi bi-bag-check"></i></div>
+                <div>
+                    <div class="dpr-kpi-value text-dark">{{ total_products }}</div>
+                    <div class="dpr-kpi-label">Total Product Items</div>
+                    <div class="small text-muted mt-1">Ordered Qty: {{ total_ordered_qty }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon green"><i class="bi bi-check-circle-fill"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value text-success">{{ delivered_count }}</div>
+                        <div class="dpr-kpi-label">Products Delivered</div>
+                        <div class="small text-muted mt-1">Delivered Qty: {{ total_delivered_qty }}</div>
+                    </div>
+                </div>
+                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 fw-semibold">Delivered</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon red"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value text-danger">{{ not_delivered_count }}</div>
+                        <div class="dpr-kpi-label">Products Pending</div>
+                        <div class="small text-muted mt-1">Pending Qty: {{ total_pending_qty }}</div>
+                    </div>
+                </div>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1 fw-semibold">Pending</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon purple"><i class="bi bi-pie-chart-fill"></i></div>
+                <div class="flex-grow-1">
+                    <div class="dpr-kpi-value text-dark">{{ delivery_pct }}%</div>
+                    <div class="dpr-kpi-label">Delivery Completion Rate</div>
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ delivery_pct }}%;" aria-valuenow="{{ delivery_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="dpr-card dpr-table-card border-0 shadow-sm">
     <div class="dpr-table-toolbar">
         <div class="row g-2 align-items-center">
             <div class="col-lg-5">
                 <div class="input-group">
-                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input type="search" id="customerPoSearch" class="form-control"
+                    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="search" id="customerPoSearch" class="form-control border-start-0 ps-0"
                            placeholder="Search DPR, product, customer, dates, quantities…" autocomplete="off">
                 </div>
             </div>
@@ -33,14 +93,14 @@
                 </select>
             </div>
             <div class="col-lg-4 text-lg-end">
-                <span id="customerPoRowCount" class="text-muted small"></span>
+                <span id="customerPoRowCount" class="text-muted small fw-semibold"></span>
             </div>
         </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table id="customerPoTable" class="table table-hover align-middle mb-0">
-                <thead>
+                <thead class="table-light">
                     <tr>
                         <th class="sortable" data-col="0" data-sort-type="number">S.No <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="1" data-sort-type="text">DPR Serial No <i class="sort-icon bi bi-arrow-down-up"></i></th>
@@ -81,24 +141,36 @@
                         </td>
                         <td class="text-nowrap" style="white-space: nowrap;" data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'invoice_pending' %}invoice pending{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
                             <div class="d-inline-flex align-items-center gap-1 text-nowrap">
-                                <select class="form-select form-select-sm customer-product-status" style="width: 145px;" data-prev-status="{{ product.status|default:'' }}">
-                                    <option value="" {% if not product.status %}selected{% endif %}>Select</option>
-                                    <option value="delivered" {% if product.status == 'delivered' %}selected{% endif %}>Closed</option>
-                                    <option value="partially_delivered" {% if product.status == 'partially_delivered' %}selected{% endif %}>Partially Closed</option>
-                                    <option value="cancelled" {% if product.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                                    {% if product.status == 'invoice_pending' %}
-                                    <option value="invoice_pending" selected hidden>Invoice Pending</option>
-                                    {% endif %}
-                                </select>
+                                {% if product.quantity_delivered < product.quantity_ordered and product.status != 'delivered' and product.status != 'cancelled' %}
+                                {% if product.material_status_code == 'pending' %}
+                                <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed;" data-product-id="{{ product.id }}" disabled title="Material not yet received from supplier">
+                                    Generate Invoice
+                                </button>
+                                {% else %}
                                 <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a;" data-product-id="{{ product.id }}">
                                     Generate Invoice
+                                </button>
+                                {% endif %}
+                                {% elif product.status == 'delivered' or product.quantity_delivered >= product.quantity_ordered %}
+                                <a href="{% url 'generate_customer_invoice' product.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF">
+                                    <i class="bi bi-file-earmark-pdf me-1"></i>{{ product.generated_invoice_number }}
+                                </a>
+                                {% endif %}
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger btn-cancel-customer-order"
+                                        data-product-id="{{ product.id }}"
+                                        {% if product.status == 'cancelled' %}disabled{% endif %}>
+                                    {% if product.status == 'cancelled' %}Cancelled{% else %}Cancel Order{% endif %}
                                 </button>
                             </div>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="text-center">No product records found.</td>
+                        <td colspan="12" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-2 text-secondary"></i>
+                            No product records found.
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -130,9 +202,11 @@
                                 <th>S.No</th>
                                 <th>Supplier</th>
                                 <th>Qty</th>
+                                <th>Qty Received</th>
                                 <th>PO Number</th>
                                 <th>PO Value</th>
                                 <th>PO Date</th>
+                                <th>Expected Date</th>
                                 <th>PO Validity</th>
                             </tr>
                         </thead>
@@ -351,7 +425,7 @@ document.addEventListener('click', function (e) {
             const tbody = document.getElementById('supplierStatusBody');
             tbody.innerHTML = '';
             if (!data.supplier_rows.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No supplier records found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center">No supplier records found.</td></tr>';
             } else {
                 data.supplier_rows.forEach((item, index) => {
                     const tr = document.createElement('tr');
@@ -359,9 +433,11 @@ document.addEventListener('click', function (e) {
                         <td>${index + 1}</td>
                         <td>${item.supplier_name}</td>
                         <td>${item.quantity}</td>
+                        <td>${item.quantity_received}</td>
                         <td>${item.po_number}</td>
                         <td>${item.po_value}</td>
                         <td>${item.po_date}</td>
+                        <td>${item.expected_date}</td>
                         <td>${item.po_validity}</td>
                     `;
                     tbody.appendChild(tr);
@@ -371,6 +447,46 @@ document.addEventListener('click', function (e) {
             const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierStatusModal'));
             modal.show();
         });
+});
+
+document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('btn-cancel-customer-order')) return;
+    const button = e.target;
+    const productId = button.getAttribute('data-product-id');
+    const row = button.closest('tr[data-product-id]');
+
+    if (!confirm('Are you sure you want to cancel this order?')) return;
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    const formData = new FormData();
+    formData.append('status', 'cancelled');
+
+    fetch(`/customer-product/${productId}/status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            button.textContent = 'Cancelled';
+            button.disabled = true;
+            if (row) {
+                const qtyDelCell = row.querySelector('.quantity-delivered-cell');
+                if (qtyDelCell) {
+                    qtyDelCell.textContent = '0';
+                }
+            }
+        } else {
+            alert(data.message || 'Error cancelling order.');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('An error occurred while cancelling order.');
+    });
 });
 
 document.addEventListener('mousedown', function (e) {
@@ -582,7 +698,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (productsBody) {
                         let rowsHtml = '';
                         data.products.forEach((p, idx) => {
-                            const defaultQty = (p.quantity_delivered && p.quantity_delivered > 0) ? p.quantity_delivered : (p.invoice_qty || p.quantity_ordered);
+                            const remainingQty = (p.remaining_qty !== undefined) ? p.remaining_qty : Math.max(p.quantity_ordered - (p.quantity_delivered || 0), 0);
+                            const defaultQty = remainingQty;
                             rowsHtml += `
                                 <tr>
                                     <td class="text-center">
@@ -592,7 +709,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <td><strong>${p.product_name}</strong></td>
                                     <td class="text-center">${p.quantity_ordered}</td>
                                     <td class="text-center">
-                                        <input type="number" name="qty_${p.id}" value="${defaultQty}" min="1" max="${p.quantity_ordered}" class="form-control form-control-sm text-center qty-delivered-input" style="max-width: 75px; margin: 0 auto;" data-prod-id="${p.id}">
+                                        <input type="number" name="qty_${p.id}" value="${defaultQty}" min="${remainingQty > 0 ? 1 : 0}" max="${remainingQty}" class="form-control form-control-sm text-center qty-delivered-input" style="max-width: 75px; margin: 0 auto;" data-prod-id="${p.id}" ${remainingQty <= 0 ? 'disabled' : ''}>
                                     </td>
                                     <td class="text-center invoice-qty-display-${p.id}">
                                         ${defaultQty}

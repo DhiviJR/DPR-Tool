@@ -1,0 +1,390 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Accounts | DPR System{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h1 class="dpr-page-title mb-1">Accounts & Financial Tracking</h1>
+        <p class="dpr-page-subtitle mb-0">Track invoice payment status, terms dates, received amounts, and outstanding balances</p>
+    </div>
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+    </a>
+</div>
+
+<!-- KPI Summary Cards for Accounts -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon blue"><i class="bi bi-receipt"></i></div>
+                <div>
+                    <div class="dpr-kpi-value text-dark">₹ {{ total_invoice_value|floatformat:2 }}</div>
+                    <div class="dpr-kpi-label">Total Invoiced Value</div>
+                    <div class="small text-muted mt-1">{{ total_products }} Invoices</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'accounts_details' %}?case=amount_received" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="dpr-kpi-icon green"><i class="bi bi-cash-stack"></i></div>
+                        <div>
+                            <div class="dpr-kpi-value text-success">₹ {{ total_received_amount|floatformat:2 }}</div>
+                            <div class="dpr-kpi-label">Total Received</div>
+                            <div class="small text-muted mt-1">{{ received_count }} Received</div>
+                        </div>
+                    </div>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 fw-semibold">Received</span>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'accounts_details' %}?case=due_soon" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="dpr-kpi-icon amber"><i class="bi bi-clock-history"></i></div>
+                        <div>
+                            <div class="dpr-kpi-value text-warning">₹ {{ total_outstanding_amount|floatformat:2 }}</div>
+                            <div class="dpr-kpi-label">Outstanding Balance</div>
+                            <div class="small text-muted mt-1">{{ due_soon_count }} Due Within 7 Days</div>
+                        </div>
+                    </div>
+                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2.5 py-1 fw-semibold">Due Soon</span>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'accounts_details' %}?case=overdue" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="dpr-kpi-icon red"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                        <div>
+                            <div class="dpr-kpi-value text-danger">₹ {{ overdue_amount|floatformat:2 }}</div>
+                            <div class="dpr-kpi-label">Overdue Amount</div>
+                            <div class="small text-muted mt-1">{{ overdue_count }} Overdue Invoices</div>
+                        </div>
+                    </div>
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1 fw-semibold">Overdue</span>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Accounts Data Table Card -->
+<div class="dpr-card dpr-table-card border-0 shadow-sm">
+    <div class="dpr-table-toolbar">
+        <div class="row g-2 align-items-center">
+            <div class="col-lg-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="search" id="accountsSearch" class="form-control border-start-0 ps-0"
+                           placeholder="Search by invoice number, customer, dates, amount…" autocomplete="off">
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="d-flex align-items-center gap-2">
+                    <label for="accountsCaseFilter" class="form-label mb-0 small text-nowrap text-muted fw-semibold">Filter Status:</label>
+                    <select id="accountsCaseFilter" class="form-select form-select-sm">
+                        <option value="" {% if not case_filter %}selected{% endif %}>All Accounts ({{ total_products }})</option>
+                        <option value="amount_received" {% if case_filter == 'amount_received' %}selected{% endif %}>Amount Received ({{ received_count }})</option>
+                        <option value="partially_received" {% if case_filter == 'partially_received' %}selected{% endif %}>Partially Received ({{ partially_received_count }})</option>
+                        <option value="not_received" {% if case_filter == 'not_received' %}selected{% endif %}>Not Received ({{ not_received_count }})</option>
+                        <option value="due_soon" {% if case_filter == 'due_soon' %}selected{% endif %}>Due Soon (7 Days) ({{ due_soon_count }})</option>
+                        <option value="overdue" {% if case_filter == 'overdue' %}selected{% endif %}>Overdue ({{ overdue_count }})</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-lg-3 text-lg-end">
+                <span id="accountsRowCount" class="text-muted small fw-semibold">Showing {{ items|length }} records</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="accountsTable" class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>S.No</th>
+                        <th>Invoice Number</th>
+                        <th>Customer Name</th>
+                        <th>Invoice Date</th>
+                        <th class="text-end">Invoice Amount</th>
+                        <th>Payment Terms Date</th>
+                        <th class="text-end">Received Amount</th>
+                        <th class="text-center">Payment Status</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr data-product-id="{{ item.product.id }}"
+                        data-po-value="{{ item.po_value }}"
+                        data-received-amount="{{ item.received_amount }}"
+                        data-color-state="{{ item.color_state }}"
+                        data-payment-status="{{ item.payment_status }}"
+                        class="{% if item.color_state == 'green' %}table-success-light{% elif item.color_state == 'orange' %}table-warning-light{% elif item.color_state == 'red' %}table-danger-light{% endif %}">
+                        <td>{{ forloop.counter }}</td>
+                        <td class="fw-semibold">
+                            <a href="{% url 'generate_customer_invoice' item.product.id %}" target="_blank" class="text-primary text-decoration-underline" title="Open Invoice PDF">
+                                {{ item.invoice_number }}
+                            </a>
+                        </td>
+                        <td class="fw-medium">{{ item.customer_name }}</td>
+                        <td>{{ item.invoice_date|date:'Y-m-d' }}</td>
+                        <td class="text-end fw-bold">₹ {{ item.po_value|floatformat:2 }}</td>
+                        <td>
+                            <span class="{% if item.is_overdue %}text-danger fw-bold{% elif item.is_due_soon %}text-warning fw-bold{% else %}text-secondary{% endif %}">
+                                {{ item.terms_date|date:'Y-m-d' }}
+                            </span>
+                        </td>
+                        <td class="text-end fw-semibold text-success received-amount-cell">
+                            ₹ {{ item.received_amount|floatformat:2 }}
+                        </td>
+                        <td class="text-center status-badge-cell">
+                            {% if item.color_state == 'green' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-check-circle-fill me-1"></i>Amount Received
+                                </span>
+                            {% elif item.color_state == 'orange' %}
+                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-clock-history me-1"></i>
+                                    {% if item.payment_status == 'partially_received' %}Partially Received{% else %}Due Within 7 Days{% endif %}
+                                </span>
+                            {% else %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-exclamation-circle-fill me-1"></i>
+                                    {% if item.payment_status == 'partially_received' %}Partially Received (Overdue){% else %}Payment Overdue{% endif %}
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <select class="form-select form-select-sm account-action-select d-inline-block style-select" style="width: 155px;"
+                                    data-product-id="{{ item.product.id }}"
+                                    data-invoice-no="{{ item.invoice_number }}"
+                                    data-customer="{{ item.customer_name }}"
+                                    data-po-val="{{ item.po_value }}"
+                                    data-rec-val="{{ item.received_amount }}">
+                                <option value="" disabled selected>Action</option>
+                                <option value="amount_received" {% if item.payment_status == 'amount_received' %}selected{% endif %}>Amount Received</option>
+                                <option value="partially_received" {% if item.payment_status == 'partially_received' %}selected{% endif %}>Partially Received</option>
+                                <option value="not_received" {% if item.payment_status == 'not_received' %}selected{% endif %}>Not Received</option>
+                            </select>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-2 text-secondary"></i>
+                            No account records found matching criteria.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Popup Modal for Partial Payment Received -->
+<div class="modal fade" id="partialPaymentModal" tabindex="-1" aria-labelledby="partialPaymentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-dark" id="partialPaymentModalLabel">
+                    <i class="bi bi-cash-coin me-2 text-warning"></i>Record Partial Payment
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="partialPaymentForm">
+                {% csrf_token %}
+                <input type="hidden" id="modalProductId" name="product_id">
+                <input type="hidden" name="payment_status" value="partially_received">
+                <div class="modal-body p-4">
+                    <div class="mb-3 p-3 bg-light rounded-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted small">Invoice Number:</span>
+                            <span id="modalInvoiceNo" class="fw-bold text-primary"></span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted small">Customer Name:</span>
+                            <span id="modalCustomerName" class="fw-semibold"></span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted small">Total Invoice Amount:</span>
+                            <span id="modalTotalAmount" class="fw-bold text-dark"></span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="modalReceivedAmount" class="form-label fw-semibold">Received Amount (₹) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">₹</span>
+                            <input type="number" step="0.01" min="0.01" id="modalReceivedAmount" name="received_amount" class="form-control" placeholder="Enter amount received" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="modalPaymentDate" class="form-label fw-semibold">Payment Received Date</label>
+                        <input type="date" id="modalPaymentDate" name="payment_received_date" class="form-control" value="{% now 'Y-m-d' %}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="modalPaymentNotes" class="form-label fw-semibold">Notes / Reference (Optional)</label>
+                        <textarea id="modalPaymentNotes" name="payment_notes" class="form-control" rows="2" placeholder="Cheque / NEFT / UTR number or remarks..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light px-4 py-3">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Save Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('accountsSearch');
+    const filterSelect = document.getElementById('accountsCaseFilter');
+    const table = document.getElementById('accountsTable');
+    const rows = table.querySelectorAll('tbody tr');
+    const rowCountSpan = document.getElementById('accountsRowCount');
+
+    const partialModalEl = document.getElementById('partialPaymentModal');
+    const partialModal = new bootstrap.Modal(partialModalEl);
+    const partialForm = document.getElementById('partialPaymentForm');
+
+    let currentActionSelect = null;
+
+    function filterTable() {
+        const query = searchInput.value.toLowerCase().trim();
+        const filterVal = filterSelect.value;
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            if (row.cells.length === 1) return;
+
+            const text = row.textContent.toLowerCase();
+            const colorState = row.getAttribute('data-color-state');
+            const paymentStatus = row.getAttribute('data-payment-status');
+
+            let matchesQuery = !query || text.includes(query);
+            let matchesFilter = true;
+
+            if (filterVal === 'amount_received') {
+                matchesFilter = (paymentStatus === 'amount_received' || colorState === 'green');
+            } else if (filterVal === 'partially_received') {
+                matchesFilter = (paymentStatus === 'partially_received');
+            } else if (filterVal === 'not_received') {
+                matchesFilter = (paymentStatus === 'not_received' && colorState !== 'green');
+            } else if (filterVal === 'due_soon') {
+                matchesFilter = (colorState === 'orange');
+            } else if (filterVal === 'overdue') {
+                matchesFilter = (colorState === 'red');
+            }
+
+            if (matchesQuery && matchesFilter) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (rowCountSpan) {
+            rowCountSpan.textContent = `Showing ${visibleCount} records`;
+        }
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterTable);
+    if (filterSelect) filterSelect.addEventListener('change', filterTable);
+
+    // Handle Action Dropdown change
+    document.querySelectorAll('.account-action-select').forEach(select => {
+        select.addEventListener('change', function() {
+            const val = this.value;
+            const productId = this.getAttribute('data-product-id');
+            const invoiceNo = this.getAttribute('data-invoice-no');
+            const customer = this.getAttribute('data-customer');
+            const poVal = this.getAttribute('data-po-val');
+            const recVal = this.getAttribute('data-rec-val');
+            currentActionSelect = this;
+
+            if (val === 'partially_received') {
+                document.getElementById('modalProductId').value = productId;
+                document.getElementById('modalInvoiceNo').textContent = invoiceNo;
+                document.getElementById('modalCustomerName').textContent = customer;
+                document.getElementById('modalTotalAmount').textContent = '₹ ' + parseFloat(poVal).toFixed(2);
+                document.getElementById('modalReceivedAmount').value = recVal && parseFloat(recVal) > 0 ? recVal : '';
+                document.getElementById('modalReceivedAmount').max = poVal;
+                partialModal.show();
+            } else if (val === 'amount_received' || val === 'not_received') {
+                postPaymentStatusUpdate(productId, val, 0, '', '');
+            }
+        });
+    });
+
+    // Handle Partial Payment Form Submission
+    partialForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const productId = document.getElementById('modalProductId').value;
+        const receivedAmount = document.getElementById('modalReceivedAmount').value;
+        const paymentDate = document.getElementById('modalPaymentDate').value;
+        const notes = document.getElementById('modalPaymentNotes').value;
+
+        if (!receivedAmount || parseFloat(receivedAmount) <= 0) {
+            alert('Please enter a valid received amount.');
+            return;
+        }
+
+        postPaymentStatusUpdate(productId, 'partially_received', receivedAmount, paymentDate, notes);
+        partialModal.hide();
+    });
+
+    function postPaymentStatusUpdate(productId, paymentStatus, receivedAmount, paymentDate, notes) {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const formData = new FormData();
+        formData.append('payment_status', paymentStatus);
+        if (paymentStatus === 'partially_received') {
+            formData.append('received_amount', receivedAmount);
+            formData.append('payment_received_date', paymentDate);
+            formData.append('payment_notes', notes);
+        }
+
+        fetch(`/customer-product/${productId}/payment-status/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                location.reload(); // Reload to refresh metrics and table status
+            } else {
+                alert(data.message || 'Error updating payment status.');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('An error occurred while saving payment status.');
+        });
+    }
+});
+</script>
+{% endblock %}

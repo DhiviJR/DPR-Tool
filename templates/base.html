@@ -43,6 +43,14 @@
                 <li class="nav-item">
                     <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'supplier_po_product_details' %}active{% endif %}" href="{% url 'supplier_po_product_details' %}">Supplier PO</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'customer_po_product_details' %}active{% endif %}" href="{% url 'customer_po_product_details' %}">Material Status</a>
+                </li>
+                {% endif %}
+                {% if can_view_accounts %}
+                <li class="nav-item">
+                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'accounts_details' %}active{% endif %}" href="{% url 'accounts_details' %}">Accounts</a>
+                </li>
                 {% endif %}
                 {% if can_view_rfq %}
                 <li class="nav-item">

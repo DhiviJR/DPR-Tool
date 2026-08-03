@@ -46,7 +46,7 @@ CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
     if origin.strip()
-]
+] or ['http://127.0.0.1:8000', 'http://localhost:8000']
 
 
 # Application definition
