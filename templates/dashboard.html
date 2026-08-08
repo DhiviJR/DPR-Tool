@@ -13,20 +13,24 @@
 </div> -->
 
 <!-- Quick actions -->
-{% if can_view_masters %}
+{% if can_view_masters or can_view_customer_details %}
 <div class="dpr-card dpr-dashboard-menu mb-4">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
         <div>
             <h6 class="mb-1">Master Data</h6>
-            <div class="small text-muted">Manage customer and supplier details</div>
+            <div class="small text-muted">Manage customer{% if can_view_masters %} and supplier{% endif %} details</div>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            {% if can_view_customer_details or is_admin or is_sales %}
             <a href="{% url 'customer_details' %}" class="btn btn-outline-primary btn-sm">
                 <i class="bi bi-people me-1"></i>Customer Details
             </a>
+            {% endif %}
+            {% if can_view_masters %}
             <a href="{% url 'supplier_details' %}" class="btn btn-outline-primary btn-sm">
                 <i class="bi bi-building me-1"></i>Supplier Details
             </a>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -40,6 +44,17 @@
                 <i class="bi bi-envelope-paper fs-4 mb-2 d-block"></i>
                 <small>Manage RFQ</small>
                 <h6 class="mb-0">RFQ</h6>
+            </div>
+        </a>
+    </div>
+    {% endif %}
+    {% if can_view_customer_po and not is_admin and not is_purchase %}
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
+            <div class="dpr-action-card dpr-action-success">
+                <i class="bi bi-bag-check fs-4 mb-2 d-block"></i>
+                <small>Track Products &amp; Validity</small>
+                <h6 class="mb-0">Customer PO</h6>
             </div>
         </a>
     </div>
@@ -77,6 +92,7 @@
             </div>
         </a>
     </div>
+    {% if not is_purchase %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
             <div class="dpr-action-card dpr-action-success">
@@ -86,6 +102,7 @@
             </div>
         </a>
     </div>
+    {% endif %}
     {% endif %}
     {% if can_view_accounts %}
     <div class="col-md-6 col-xl-3">
@@ -150,6 +167,21 @@
         </a>
     </div>
     {% endif %}
+    {% if can_view_customer_po %}
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
+            <div class="dpr-card p-3 h-100">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon blue"><i class="bi bi-bag-check"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value">{{ total_customer_products }}</div>
+                        <div class="dpr-kpi-label">Customer PO Products</div>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endif %}
 
     {% if can_view_supplier_po %}
     <div class="col-md-6 col-xl-3">
@@ -165,6 +197,7 @@
             </div>
         </a>
     </div>
+    {% if not is_purchase %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
             <div class="dpr-card p-3 h-100">
@@ -178,6 +211,7 @@
             </div>
         </a>
     </div>
+    {% endif %}
     {% endif %}
     {% if can_view_dpr or can_view_supplier_po %}
     <div class="col-md-6 col-xl-3">
@@ -307,6 +341,31 @@
 <!-- Charts + validity alerts -->
 <div class="row g-3 mb-4">
 
+    {% if can_view_customer_po %}
+    <div class="col-lg-4">
+        <div class="dpr-card dpr-chart-card h-100 d-flex flex-column">
+            <div class="card-header">Customer Product Status</div>
+            <div class="card-body flex-grow-1 d-flex align-items-center">
+                <div class="row align-items-center w-100 g-0">
+                    <div class="col-7">
+                        <div style="height: 240px; position: relative;">
+                            <canvas id="customerStatusChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-5">
+                        <ul class="dpr-chart-legend">
+                            <li><span class="dot" style="background:#64748b"></span> Pending ({{ customer_pending_count }})</li>
+                            <li><span class="dot" style="background:#8b5cf6"></span> Partial ({{ customer_partial_count }})</li>
+                            <li><span class="dot" style="background:#ec4899"></span> Delivered ({{ customer_delivered_count }})</li>
+                            <li><span class="dot" style="background:#38bdf8"></span> Cancelled ({{ customer_cancelled_count }})</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% if can_view_supplier_po %}
     <div class="col-lg-4">
         <div class="dpr-card dpr-chart-card h-100 d-flex flex-column">
@@ -331,11 +390,34 @@
         </div>
     </div>
     {% endif %}
-    <div class="col-lg-4">
+
+    <div class="{% if can_view_customer_po and can_view_supplier_po %}col-lg-4{% else %}col-lg-6{% endif %}">
         <div class="dpr-card h-100 p-3">
             <h6 class="fw-bold text-primary mb-3">Validity Alerts</h6>
 
+            {% if can_view_customer_po %}
+            <div class="dpr-alert-item">
+                <div class="alert-left">
+                    <div class="dpr-alert-icon info"><i class="bi bi-clock-history"></i></div>
+                    <div>
+                        <div class="fw-semibold small">Customer — expiring within 5 days</div>
+                        <a href="{% url 'customer_po_product_details' %}?validity=within7" class="small text-decoration-none">View details &rsaquo;</a>
+                    </div>
+                </div>
+                <span class="dpr-alert-count">{{ customer_within_7_days_count }}</span>
+            </div>
 
+            <div class="dpr-alert-item">
+                <div class="alert-left">
+                    <div class="dpr-alert-icon danger"><i class="bi bi-x-circle"></i></div>
+                    <div>
+                        <div class="fw-semibold small">Customer — validity expired</div>
+                        <a href="{% url 'customer_po_product_details' %}?validity=expired" class="small text-decoration-none">View details &rsaquo;</a>
+                    </div>
+                </div>
+                <span class="dpr-alert-count">{{ customer_expired_count }}</span>
+            </div>
+            {% endif %}
 
             {% if can_view_supplier_po %}
             <div class="dpr-alert-item">
@@ -372,6 +454,18 @@
                 </div>
                 <span class="dpr-alert-count">{{ rfq_quotation_not_sent_count }}</span>
             </div>
+            {% if rfq_overdue_count %}
+            <div class="dpr-alert-item">
+                <div class="alert-left">
+                    <div class="dpr-alert-icon danger"><i class="bi bi-envelope-exclamation"></i></div>
+                    <div>
+                        <div class="fw-semibold small">RFQ — price pending / overdue</div>
+                        <a href="{% url 'rfq_details' %}?status=overdue" class="small text-decoration-none">View details &rsaquo;</a>
+                    </div>
+                </div>
+                <span class="dpr-alert-count">{{ rfq_overdue_count }}</span>
+            </div>
+            {% endif %}
             {% endif %}
 
             {% if can_view_customer_po %}
@@ -415,109 +509,119 @@ const chartColors = {
 
 const deliveryPct = {{ overall_delivery_pct }};
 const gaugeCtx = document.getElementById('deliveryGauge');
-new Chart(gaugeCtx, {
-    type: 'doughnut',
-    data: {
-        datasets: [{
-            data: [deliveryPct, Math.max(0, 100 - deliveryPct)],
-            backgroundColor: ['#22c55e', '#e2e8f0'],
-            borderWidth: 0,
-            circumference: 180,
-            rotation: 270
-        }]
-    },
-    options: {
-        responsive: true,
-        cutout: '72%',
-        plugins: { legend: { display: false }, tooltip: { enabled: false } }
-    }
-});
+if (gaugeCtx) {
+    new Chart(gaugeCtx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [deliveryPct, Math.max(0, 100 - deliveryPct)],
+                backgroundColor: ['#22c55e', '#e2e8f0'],
+                borderWidth: 0,
+                circumference: 180,
+                rotation: 270
+            }]
+        },
+        options: {
+            responsive: true,
+            cutout: '72%',
+            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        }
+    });
+}
 
 const sparkCtx = document.getElementById('outputSparkline');
-new Chart(sparkCtx, {
-    type: 'line',
-    data: {
-        labels: ['', '', '', '', '', ''],
-        datasets: [{
-            data: [
-                {{ customer_pending_count }},
-                {{ customer_partial_count }},
-                {{ customer_delivered_count }},
-                {{ supplier_pending_count }},
-                {{ supplier_partial_count }},
-                {{ supplier_delivered_count }}
-            ],
-            borderColor: '#2563eb',
-            backgroundColor: 'rgba(37, 99, 235, 0.15)',
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-            x: { display: false },
-            y: { display: false }
+if (sparkCtx) {
+    new Chart(sparkCtx, {
+        type: 'line',
+        data: {
+            labels: ['', '', '', '', '', ''],
+            datasets: [{
+                data: [
+                    {{ customer_pending_count }},
+                    {{ customer_partial_count }},
+                    {{ customer_delivered_count }},
+                    {{ supplier_pending_count }},
+                    {{ supplier_partial_count }},
+                    {{ supplier_delivered_count }}
+                ],
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.15)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: { display: false }
+            }
         }
-    }
-});
+    });
+}
 
-new Chart(document.getElementById('customerStatusChart'), {
-    type: 'doughnut',
-    data: {
-        labels: ['Pending', 'Partially Delivered', 'Delivered', 'Cancelled'],
-        datasets: [{
-            data: [
-                {{ customer_pending_count }},
-                {{ customer_partial_count }},
-                {{ customer_delivered_count }},
-                {{ customer_cancelled_count }}
-            ],
-            backgroundColor: [
-                chartColors.pending,
-                chartColors.partial,
-                chartColors.delivered,
-                chartColors.cancelled
-            ],
-            borderWidth: 0
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '62%',
-        plugins: { legend: { display: false } }
-    }
-});
+const customerChartCtx = document.getElementById('customerStatusChart');
+if (customerChartCtx) {
+    new Chart(customerChartCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Pending', 'Partially Delivered', 'Delivered', 'Cancelled'],
+            datasets: [{
+                data: [
+                    {{ customer_pending_count }},
+                    {{ customer_partial_count }},
+                    {{ customer_delivered_count }},
+                    {{ customer_cancelled_count }}
+                ],
+                backgroundColor: [
+                    chartColors.pending,
+                    chartColors.partial,
+                    chartColors.delivered,
+                    chartColors.cancelled
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '62%',
+            plugins: { legend: { display: false } }
+        }
+    });
+}
 
-new Chart(document.getElementById('supplierStatusChart'), {
-    type: 'doughnut',
-    data: {
-        labels: ['Pending', 'Partially Delivered', 'Delivered', 'Cancelled'],
-        datasets: [{
-            data: [
-                {{ supplier_pending_count }},
-                {{ supplier_partial_count }},
-                {{ supplier_delivered_count }},
-                {{ supplier_cancelled_count }}
-            ],
-            backgroundColor: [
-                chartColors.pending,
-                chartColors.partial,
-                chartColors.delivered,
-                chartColors.cancelled
-            ],
-            borderWidth: 0
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '62%',
-        plugins: { legend: { display: false } }
-    }
-});
+const supplierChartCtx = document.getElementById('supplierStatusChart');
+if (supplierChartCtx) {
+    new Chart(supplierChartCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Pending', 'Partially Delivered', 'Delivered', 'Cancelled'],
+            datasets: [{
+                data: [
+                    {{ supplier_pending_count }},
+                    {{ supplier_partial_count }},
+                    {{ supplier_delivered_count }},
+                    {{ supplier_cancelled_count }}
+                ],
+                backgroundColor: [
+                    chartColors.pending,
+                    chartColors.partial,
+                    chartColors.delivered,
+                    chartColors.cancelled
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '62%',
+            plugins: { legend: { display: false } }
+        }
+    });
+}
 </script>
 {% endblock %}

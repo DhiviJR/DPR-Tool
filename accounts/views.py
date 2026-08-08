@@ -1133,37 +1133,41 @@ def dashboard(request):
             for part in dpr_quote_str.split(','):
                 confirmed_quote_set.add(part.strip())
 
-    rfq_confirmed_count = 0
-    rfq_quotation_sent_count = 0
-    rfq_price_pending_count = 0
-    rfq_overdue_count = 0
-    rfq_quotation_pending_count = 0
+    pending_rfqs = []
+    confirmed_rfqs = []
+    overdue_rfqs = []
 
     for rfq in all_rfqs:
+        rfq.row_class = _get_rfq_row_alert_class(rfq)
+        rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
         rfq_quote_nos = list(rfq.quotations.values_list('quotation_number', flat=True))
-        is_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
-        if is_confirmed:
-            rfq_confirmed_count += 1
-        
-        if rfq.quotation_email_sent:
-            rfq_quotation_sent_count += 1
+        is_po_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
+        is_quote_submitted = (
+            rfq.row_class == 'table-success'
+            or rfq.quotation_email_sent
+            or rfq.quotations.filter(email_sent=True).exists()
+            or is_po_confirmed
+        )
+
+        if is_quote_submitted:
+            confirmed_rfqs.append(rfq)
+        elif rfq.row_class == 'table-danger':
+            overdue_rfqs.append(rfq)
         else:
-            rfq_quotation_pending_count += 1
-            is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
-            if is_overdue and not is_confirmed:
-                rfq_overdue_count += 1
-        
-        products = list(rfq.products.all())
-        if products and any(not p.price_known or p.value == 0 for p in products):
-            rfq_price_pending_count += 1
+            pending_rfqs.append(rfq)
+
+    rfq_confirmed_count = len(confirmed_rfqs)
+    rfq_quotation_sent_count = len(confirmed_rfqs)
+    rfq_overdue_count = len(overdue_rfqs)
+    rfq_quotation_pending_count = len(pending_rfqs)
+    rfq_quotation_not_sent_count = len(pending_rfqs)
 
     rfq_confirmed_pct = _pct(rfq_confirmed_count, total_rfq_count)
     rfq_quotation_sent_pct = _pct(rfq_quotation_sent_count, total_rfq_count)
-    rfq_price_pending_pct = _pct(rfq_price_pending_count, total_rfq_count)
     rfq_overdue_pct = _pct(rfq_overdue_count, total_rfq_count)
+    rfq_price_pending_count = rfq_overdue_count
+    rfq_price_pending_pct = rfq_overdue_pct
     rfq_quotation_pending_pct = _pct(rfq_quotation_pending_count, total_rfq_count)
-
-    rfq_quotation_not_sent_count = RFQ.objects.filter(quotation_email_sent=False).count()
 
     return render(request, 'dashboard.html', {
         'total_dpr_count': total_dpr_count,
@@ -1419,7 +1423,7 @@ def customer_po_product_details(request):
     products = CustomerProduct.objects.select_related(
         'dpr',
         'dpr__customer'
-    ).prefetch_related('supplierproduct_set').annotate(
+    ).prefetch_related('supplierproduct_set', 'invoices').annotate(
         status_rank=Case(
             When(status='delivered', then=Value(2)),
             When(status='partially_delivered', then=Value(1)),
@@ -1472,6 +1476,8 @@ def customer_po_product_details(request):
             product.generated_invoice_number = inv_no_val
         else:
             product.generated_invoice_number = f"MES-F{product.id:04d}"
+
+        product.generated_invoices = list(product.invoices.all().order_by('id'))
 
     # Sort Red (Pending/Expired/Not Delivered) at TOP (0), Yellow (Partial/Due Soon) in MIDDLE (1), Green (Delivered/Closed) at BOTTOM (2)
     def _color_rank(p):
@@ -1834,9 +1840,14 @@ def accounts_details(request):
         item = {
             'product': product,
             'dpr': product.dpr,
+            'customer_id': cust.id if cust else '',
             'customer_name': cust.customer_name if cust else '-',
+            'customer_email': cust.email if cust and cust.email else 'ajayasok008@gmail.com',
+            'customer_po_number': (product.dpr.po_number or '').strip() if product.dpr else '',
+            'product_name': product.product_name or product.product_type or '-',
             'invoice_number': inv_no,
             'invoice_date': inv_date,
+            'invoice_date_formatted': inv_date.strftime('%d-%m-%Y') if inv_date else '-',
             'terms_date': terms_date,
             'po_value': po_val,
             'received_amount': rec_amt,
@@ -1846,21 +1857,12 @@ def accounts_details(request):
             'is_paid': is_paid,
             'is_due_soon': is_due_soon,
             'is_overdue': is_overdue,
+            'expected_payment_date': product.expected_payment_date,
+            'follow_up_remarks': product.follow_up_remarks or '',
         }
         items.append(item)
 
     items.sort(key=lambda x: x['invoice_date'], reverse=True)
-
-    if case_filter == 'amount_received':
-        items = [x for x in items if x['is_paid']]
-    elif case_filter == 'partially_received':
-        items = [x for x in items if x['payment_status'] == 'partially_received']
-    elif case_filter == 'not_received':
-        items = [x for x in items if x['payment_status'] == 'not_received' and not x['is_paid']]
-    elif case_filter == 'due_soon':
-        items = [x for x in items if x['is_due_soon']]
-    elif case_filter == 'overdue':
-        items = [x for x in items if x['is_overdue']]
 
     total_products = len(products)
     delivery_pct = _pct(received_count, total_products)
@@ -1887,6 +1889,33 @@ def accounts_details(request):
 
 
 @role_required('ADMIN')
+def customer_product_followup_update(request, product_id):
+    if request.method != 'POST':
+        raise Http404
+    try:
+        product = CustomerProduct.objects.get(pk=product_id)
+    except CustomerProduct.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Product not found'}, status=404)
+
+    exp_date_raw = request.POST.get('expected_payment_date', '').strip()
+    remarks = request.POST.get('follow_up_remarks', '').strip()
+
+    if exp_date_raw:
+        try:
+            from datetime import datetime
+            product.expected_payment_date = datetime.strptime(exp_date_raw, '%Y-%m-%d').date()
+        except ValueError:
+            product.expected_payment_date = None
+    else:
+        product.expected_payment_date = None
+
+    product.follow_up_remarks = remarks
+    product.save(update_fields=['expected_payment_date', 'follow_up_remarks'])
+
+    return JsonResponse({'status': 'ok'})
+
+
+@role_required('ADMIN')
 def customer_product_payment_update(request, product_id):
     if request.method != 'POST':
         raise Http404
@@ -1901,27 +1930,26 @@ def customer_product_payment_update(request, product_id):
 
     today = timezone.localdate()
 
-    if payment_status == 'amount_received':
-        product.payment_status = 'amount_received'
-        product.received_amount = product.value or Decimal('0.00')
-        product.payment_received_date = today
-    elif payment_status == 'partially_received':
+    if payment_status in ('amount_received', 'partially_received'):
+        po_val = product.value or Decimal('0.00')
         amount_raw = request.POST.get('received_amount', '').strip()
         try:
             amt = Decimal(amount_raw or '0')
         except InvalidOperation:
-            return JsonResponse({'status': 'error', 'message': 'Received amount must be a valid number'}, status=400)
-        
-        if amt <= 0:
-            return JsonResponse({'status': 'error', 'message': 'Received amount must be greater than 0'}, status=400)
-        
-        po_val = product.value or Decimal('0.00')
-        if amt >= po_val:
+            amt = po_val
+
+        if payment_status == 'amount_received':
             product.payment_status = 'amount_received'
-            product.received_amount = po_val
+            product.received_amount = amt if amt > 0 else po_val
         else:
-            product.payment_status = 'partially_received'
-            product.received_amount = amt
+            if amt >= po_val:
+                product.payment_status = 'amount_received'
+                product.received_amount = po_val
+            elif amt > 0:
+                product.payment_status = 'partially_received'
+                product.received_amount = amt
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Received amount must be greater than 0'}, status=400)
 
         rec_date_raw = request.POST.get('payment_received_date', '').strip()
         if rec_date_raw:
@@ -1932,7 +1960,7 @@ def customer_product_payment_update(request, product_id):
                 product.payment_received_date = today
         else:
             product.payment_received_date = today
-            
+
         notes = request.POST.get('payment_notes', '').strip()
         if notes:
             product.payment_notes = notes
@@ -1942,11 +1970,27 @@ def customer_product_payment_update(request, product_id):
         product.received_amount = Decimal('0.00')
         product.payment_received_date = None
 
+    if 'expected_payment_date' in request.POST:
+        exp_date_raw = request.POST.get('expected_payment_date', '').strip()
+        if exp_date_raw:
+            try:
+                from datetime import datetime
+                product.expected_payment_date = datetime.strptime(exp_date_raw, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        else:
+            product.expected_payment_date = None
+
+    if 'follow_up_remarks' in request.POST:
+        product.follow_up_remarks = request.POST.get('follow_up_remarks', '').strip()
+
     product.save(update_fields=[
         'payment_status',
         'received_amount',
         'payment_received_date',
-        'payment_notes'
+        'payment_notes',
+        'expected_payment_date',
+        'follow_up_remarks'
     ])
 
     return JsonResponse({
@@ -2618,7 +2662,7 @@ def _validate_customer_region(region):
     return None
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'SALES')
 def customer_details(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -2640,6 +2684,9 @@ def customer_details(request):
             region_error = _validate_customer_region(region)
             if region_error:
                 messages.error(request, region_error)
+                return redirect('customer_details')
+            if not state_code:
+                messages.error(request, 'State Code is required.')
                 return redirect('customer_details')
             if email:
                 try:
@@ -3667,7 +3714,7 @@ def customer_order(request):
         context
     )
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'SALES')
 def add_customer(request):
 
     if request.method == 'POST':
@@ -4577,8 +4624,8 @@ def check_customer_po_number(request):
     return JsonResponse({'exists': qs.exists()})
 
 
-def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qtys=None):
-    from products.models import CustomerProduct
+def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_ids=None, custom_qtys=None):
+    from products.models import CustomerProduct, CustomerInvoice
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     from reportlab.lib.pagesizes import A4
@@ -4596,12 +4643,19 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
     except CustomerProduct.DoesNotExist:
         return None
 
+    target_invoice = None
+    if invoice_id:
+        try:
+            target_invoice = CustomerInvoice.objects.get(pk=invoice_id, customer_product=target_product)
+        except CustomerInvoice.DoesNotExist:
+            target_invoice = None
+
     dpr = target_product.dpr
     customer = dpr.customer
     if selected_product_ids:
         products = list(CustomerProduct.objects.filter(dpr=dpr, id__in=selected_product_ids))
     else:
-        products = list(CustomerProduct.objects.filter(dpr=dpr))
+        products = [target_product]
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -4724,15 +4778,20 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
         Paragraph(cust_info, normal),
     ]
 
-    inv_no_val = (target_product.invoice_dc_number or '').strip()
-    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
-    if match:
-        inv_no = f"MES-F{int(match.group(1)):04d}"
-    elif inv_no_val:
-        inv_no = inv_no_val
+    if target_invoice:
+        inv_no = target_invoice.invoice_number
+        inv_date = target_invoice.invoice_date.strftime('%d/%m/%Y') if target_invoice.invoice_date else timezone.localdate().strftime('%d/%m/%Y')
     else:
-        inv_no = f"MES-F{target_product.id:04d}"
-    inv_date = timezone.localdate().strftime('%d/%m/%Y')
+        inv_no_val = (target_product.invoice_dc_number or '').strip()
+        match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+        if match:
+            inv_no = f"MES-F{int(match.group(1)):04d}"
+        elif inv_no_val:
+            inv_no = inv_no_val
+        else:
+            inv_no = f"MES-F{target_product.id:04d}"
+        inv_date = timezone.localdate().strftime('%d/%m/%Y')
+
     po_no = dpr.po_number or dpr.serial_number or '-'
     po_date_str = dpr.po_date.strftime('%d/%m/%Y') if dpr.po_date else '-'
     raw_terms = str(customer.payment_terms).strip() if customer.payment_terms else ''
@@ -4796,7 +4855,9 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
     subtotal = Decimal('0.00')
 
     for idx, p in enumerate(products, 1):
-        if custom_qtys and p.id in custom_qtys:
+        if target_invoice and p.id == target_invoice.customer_product_id:
+            qty = target_invoice.quantity
+        elif custom_qtys and p.id in custom_qtys:
             qty = custom_qtys[p.id]
         else:
             qty = p.quantity_delivered if p.quantity_delivered > 0 else p.quantity_ordered
@@ -4825,7 +4886,20 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
         ]
         prod_table_data.append(row)
 
-    is_tamilnadu = (customer.gstin or '').startswith('33') or 'tamil' in (customer.region or '').lower()
+    # State code based GST calculation:
+    # Tamil Nadu (State Code 33 / TN): CGST 9%, SGST 9%, IGST 0%
+    # All other states (e.g. 03, 27, 29, etc.): IGST 18%, CGST 0%, SGST 0%
+    state_code_clean = (customer.state_code or '').strip().upper() if customer else ''
+    gstin_clean = (customer.gstin or '').strip().upper() if customer else ''
+    region_clean = (customer.region or '').strip().lower() if customer else ''
+
+    if state_code_clean:
+        is_tamilnadu = (state_code_clean == '33' or state_code_clean in ('TN', 'TAMIL NADU', 'TAMILNADU'))
+    elif gstin_clean and len(gstin_clean) >= 2 and gstin_clean[:2].isdigit():
+        is_tamilnadu = (gstin_clean[:2] == '33')
+    else:
+        is_tamilnadu = (region_clean in ('chennai', 'hosur', 'tamil nadu', 'tamilnadu') or 'tamil' in region_clean)
+
     if is_tamilnadu:
         sgst_rate = Decimal('9.00')
         cgst_rate = Decimal('9.00')
@@ -4836,10 +4910,10 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
 
         tax_rows = [
             ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
-            ["", "", Paragraph("SGST 9%", right_align), "", "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
-            ["", "", Paragraph("CGST 9%", right_align), "", "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
-            ["", "", Paragraph("IGST 0%", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("P & F 0%", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("SGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
+            ["", "", Paragraph("CGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
+            ["", "", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
         ]
     else:
@@ -4851,8 +4925,8 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
 
         tax_rows = [
             ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
-            ["", "", Paragraph("SGST", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("CGST", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("SGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("CGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("IGST", right_align), Paragraph("18%", center_align), "", "", "", Paragraph(f"Rs. {igst_amt:,.2f}", right_align)],
             ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
@@ -4961,7 +5035,7 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
     return buffer
 
 
-@role_required('ADMIN', 'PURCHASE')
+@role_required('ADMIN', 'PURCHASE', 'SALES')
 def customer_invoice_modal_data(request, product_id):
     """Return JSON data for the Generate Invoice modal popup showing only the selected product."""
     from products.models import CustomerProduct
@@ -4994,10 +5068,10 @@ def customer_invoice_modal_data(request, product_id):
     })
 
 
-@role_required('ADMIN', 'PURCHASE')
-def generate_customer_invoice(request, product_id):
+@role_required('ADMIN', 'PURCHASE', 'SALES')
+def generate_customer_invoice(request, product_id, invoice_id=None):
     """Generate a Tax Invoice PDF for a customer product / DPR order."""
-    from products.models import CustomerProduct
+    from products.models import CustomerProduct, CustomerInvoice
     try:
         target_product = CustomerProduct.objects.select_related('dpr').get(pk=product_id)
     except CustomerProduct.DoesNotExist:
@@ -5008,6 +5082,7 @@ def generate_customer_invoice(request, product_id):
 
     selected_product_ids = None
     custom_qtys = {}
+    new_invoice_id = invoice_id
 
     if request.method == 'POST':
         raw_selected = request.POST.getlist('selected_products')
@@ -5022,10 +5097,8 @@ def generate_customer_invoice(request, product_id):
             # Update delivered quantity and status for selected items
             for p in all_products:
                 if p.id in selected_product_ids:
-                    if p.id in custom_qtys:
-                        p.quantity_delivered = (p.quantity_delivered or 0) + custom_qtys[p.id]
-                    else:
-                        p.quantity_delivered = p.quantity_ordered
+                    invoiced_qty = custom_qtys.get(p.id, p.quantity_ordered)
+                    p.quantity_delivered = (p.quantity_delivered or 0) + invoiced_qty
 
                     if p.quantity_delivered >= p.quantity_ordered and p.quantity_delivered > 0:
                         p.status = 'delivered'
@@ -5033,22 +5106,288 @@ def generate_customer_invoice(request, product_id):
                         p.status = 'partially_delivered'
                     p.save()
 
-    pdf_buffer = _build_customer_invoice_pdf(product_id, selected_product_ids=selected_product_ids, custom_qtys=custom_qtys)
+                    existing_invoices = list(p.invoices.all().order_by('id'))
+                    count = len(existing_invoices) + 1
+
+                    inv_no_val = (p.invoice_dc_number or '').strip()
+                    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+                    if match:
+                        base_no = f"MES-F{int(match.group(1)):04d}"
+                    elif inv_no_val:
+                        base_no = inv_no_val
+                    else:
+                        base_no = f"MES-F{p.id:04d}"
+
+                    if count == 1 and p.quantity_delivered >= p.quantity_ordered:
+                        inv_no = base_no
+                    else:
+                        inv_no = f"{base_no}-{count}"
+
+                    if count == 2 and len(existing_invoices) == 1 and existing_invoices[0].invoice_number == base_no:
+                        existing_invoices[0].invoice_number = f"{base_no}-1"
+                        existing_invoices[0].save(update_fields=['invoice_number'])
+
+                    created_inv = CustomerInvoice.objects.create(
+                        customer_product=p,
+                        invoice_number=inv_no,
+                        quantity=invoiced_qty,
+                        invoice_date=timezone.localdate()
+                    )
+                    if p.id == target_product.id:
+                        new_invoice_id = created_inv.id
+
+    pdf_buffer = _build_customer_invoice_pdf(product_id, invoice_id=new_invoice_id, selected_product_ids=selected_product_ids, custom_qtys=custom_qtys)
     if not pdf_buffer:
         raise Http404("Product not found")
 
-    inv_no_val = (target_product.invoice_dc_number or '').strip()
-    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
-    if match:
-        inv_no = f"MES-F{int(match.group(1)):04d}"
-    elif inv_no_val:
-        inv_no = inv_no_val
+    inv_filename = f"Tax_Invoice_{product_id}.pdf"
+    if new_invoice_id:
+        try:
+            inv_obj = CustomerInvoice.objects.get(pk=new_invoice_id)
+            safe_inv_no = re.sub(r'[^a-zA-Z0-9_\-]', '_', inv_obj.invoice_number)
+            inv_filename = f"Tax_Invoice_{safe_inv_no}.pdf"
+        except CustomerInvoice.DoesNotExist:
+            pass
     else:
-        inv_no = f"MES-F{target_product.id:04d}"
-    safe_inv_no = re.sub(r'[^a-zA-Z0-9_\-]', '_', inv_no)
-    filename = f"Tax_Invoice_{safe_inv_no}.pdf"
+        inv_no_val = (target_product.invoice_dc_number or '').strip()
+        match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+        if match:
+            inv_no = f"MES-F{int(match.group(1)):04d}"
+        elif inv_no_val:
+            inv_no = inv_no_val
+        else:
+            inv_no = f"MES-F{target_product.id:04d}"
+        safe_inv_no = re.sub(r'[^a-zA-Z0-9_\-]', '_', inv_no)
+        inv_filename = f"Tax_Invoice_{safe_inv_no}.pdf"
 
     response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    response['Content-Disposition'] = f'inline; filename="{inv_filename}"'
     return response
+
+
+def _build_customer_outstanding_email_html(customer, items, custom_body=None):
+    """Build formatted HTML email body with outstanding payment reminder text and items table."""
+    table_rows = []
+    total_received = Decimal('0.00')
+    total_outstanding = Decimal('0.00')
+
+    for item in items:
+        inv_date = item.invoice_date or item.dpr.po_date or (item.dpr.created_at.date() if item.dpr.created_at else None)
+        if inv_date:
+            date_str = f"{inv_date.day:02d}-{inv_date.month:02d}-{inv_date.year}"
+        else:
+            date_str = "-"
+
+        inv_no_val = (item.invoice_dc_number or '').strip()
+        match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+        if match:
+            inv_no = f"MES-F{int(match.group(1)):04d}"
+        elif inv_no_val:
+            inv_no = inv_no_val
+        else:
+            inv_no = f"MES-F{item.id:04d}"
+
+        cust_name = customer.customer_name if customer else "-"
+        cust_po = (item.dpr.po_number or '').strip() if item.dpr else ''
+        if not cust_po:
+            cust_po = "DIRECT INVOICE"
+
+        desc = (item.product_type or item.product_name or "-").strip()
+
+        po_val = item.value or Decimal('0.00')
+        rec_val = item.received_amount or Decimal('0.00')
+        out_val = max(po_val - rec_val, Decimal('0.00'))
+
+        total_received += rec_val
+        total_outstanding += out_val
+
+        rec_display = f"{rec_val:.2f}" if rec_val > 0 else ""
+        out_display = f"{out_val:.2f}"
+
+        table_rows.append(f"""
+        <tr>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{date_str}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; font-weight: bold; vertical-align: middle;">{inv_no}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{cust_name}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{cust_po}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{desc}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: right; vertical-align: middle;">{rec_display}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: right; font-weight: bold; vertical-align: middle;">{out_display}</td>
+        </tr>
+        """)
+
+    rows_html = "\n".join(table_rows)
+
+    if custom_body and custom_body.strip():
+        paragraphs = [p.strip().replace('\n', '<br>') for p in custom_body.strip().split('\n\n') if p.strip()]
+        body_html = "".join(f'<p style="margin-bottom: 15px;">{p}</p>' for p in paragraphs)
+    else:
+        body_html = """
+  <p style="margin-bottom: 15px;">Dear Sir/Madam,</p>
+  <p style="margin-bottom: 15px;">We would like to bring to your kind attention that the payments for the invoices listed below are currently outstanding.</p>
+  <p style="margin-bottom: 20px;">We kindly request you to review the pending invoices and arrange for the payment at your earliest convenience. Timely settlement of the outstanding amount will help us continue providing uninterrupted support and services.</p>
+"""
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #111111; margin: 0; padding: 15px;">
+  {body_html}
+  
+  <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; border: 1px solid #000000; font-family: Arial, sans-serif; font-size: 13px; margin: 20px 0;">
+    <thead>
+      <tr style="background-color: #000000; color: #ffffff;">
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">DATE</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">INVOICE NO</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">CUSTOMER</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">CUSTOMER PO</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">DESCRIPTION</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">PAY RECEIVED</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">OUTSTANDING</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_html}
+    </tbody>
+  </table>
+  
+  <p style="margin-top: 25px; margin-bottom: 5px;">Thanks & Regards,</p>
+  <p style="margin-top: 0; font-weight: bold; color: #111111;">Metrology Engineering Solutions<br>
+  <span style="font-weight: normal; color: #555555; font-size: 13px;">Hosur, Tamil Nadu</span></p>
+</body>
+</html>"""
+    return html_content, total_outstanding
+
+
+@role_required('ADMIN', 'PURCHASE', 'SALES')
+def send_invoice_email(request):
+    """Send outstanding payment reminder email with formatted table in email body separately to each selected customer."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=400)
+
+    raw_product_ids = request.POST.getlist('product_ids[]') or request.POST.getlist('product_ids')
+    if not raw_product_ids:
+        raw_single = request.POST.get('product_ids', '').strip()
+        if raw_single:
+            raw_product_ids = [pid.strip() for pid in raw_single.split(',') if pid.strip()]
+
+    product_ids = [int(pid) for pid in raw_product_ids if str(pid).isdigit()]
+    if not product_ids:
+        return JsonResponse({'status': 'error', 'message': 'No invoices selected.'}, status=400)
+
+    recipient_email = request.POST.get('recipient_email', '').strip()
+    subject = request.POST.get('email_subject', '').strip()
+    body = request.POST.get('email_body', '').strip()
+    extra_attachment = request.FILES.get('extra_attachment')
+
+    from products.models import CustomerProduct
+    products = list(CustomerProduct.objects.select_related('dpr', 'dpr__customer').filter(id__in=product_ids))
+    if not products:
+        return JsonResponse({'status': 'error', 'message': 'Selected invoice records not found.'}, status=404)
+
+    # Group products by customer
+    from collections import defaultdict
+    import threading
+    import logging
+
+    customer_groups = defaultdict(list)
+    for p in products:
+        cust = p.dpr.customer
+        if cust:
+            customer_groups[cust].append(p)
+
+    sent_details = []
+    missing_email_customers = []
+    messages_to_send = []
+
+    attachment_data = None
+    if extra_attachment:
+        try:
+            attachment_data = (
+                extra_attachment.name,
+                extra_attachment.read(),
+                getattr(extra_attachment, 'content_type', None) or 'application/octet-stream'
+            )
+        except Exception:
+            attachment_data = None
+
+    for cust, items in customer_groups.items():
+        cust_email = (cust.email or '').strip()
+        override_email = request.POST.get(f'email_{cust.id}', '').strip()
+        if override_email:
+            cust_email = override_email
+
+        if not cust_email or len(customer_groups) == 1:
+            if recipient_email:
+                cust_email = recipient_email
+
+        if not cust_email:
+            missing_email_customers.append(cust.customer_name)
+            continue
+
+        to_emails = [email.strip() for email in re.split(r'[;,]', cust_email) if email.strip()]
+        valid_to_emails = []
+        for em in to_emails:
+            try:
+                validate_email(em)
+                valid_to_emails.append(em)
+            except ValidationError:
+                pass
+
+        if not valid_to_emails:
+            missing_email_customers.append(f"{cust.customer_name} (Invalid email: {cust_email})")
+            continue
+
+        html_body, total_out = _build_customer_outstanding_email_html(cust, items, custom_body=body)
+        email_subject = subject or f"Outstanding Payment Reminder - {cust.customer_name} - Metrology Engineering Solutions"
+
+        email = EmailMessage(
+            subject=email_subject,
+            body=html_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=valid_to_emails,
+        )
+        email.content_subtype = "html"
+
+        if attachment_data:
+            email.attach(*attachment_data)
+
+        messages_to_send.append(email)
+        sent_details.append(f"{cust.customer_name} ({', '.join(valid_to_emails)})")
+
+    if not messages_to_send and missing_email_customers:
+        return JsonResponse({
+            'status': 'error',
+            'message': f"Could not send email. Missing or invalid email address for: {', '.join(missing_email_customers)}. Please enter a valid recipient email."
+        }, status=400)
+
+    def _send_emails_worker(msg_list):
+        try:
+            from django.core.mail import get_connection
+            conn = get_connection(timeout=20)
+            conn.open()
+            conn.send_messages(msg_list)
+            conn.close()
+        except Exception as exc:
+            logging.getLogger(__name__).exception("Error in background email worker: %s", exc)
+
+    if messages_to_send:
+        bg_thread = threading.Thread(target=_send_emails_worker, args=(messages_to_send,))
+        bg_thread.daemon = True
+        bg_thread.start()
+
+    msg_parts = []
+    if sent_details:
+        msg_parts.append(f"Outstanding payment reminder email sent successfully to: {', '.join(sent_details)}.")
+    if missing_email_customers:
+        msg_parts.append(f"Skipped customers without email: {', '.join(missing_email_customers)}.")
+
+    return JsonResponse({
+        'status': 'ok' if sent_details else 'error',
+        'message': " ".join(msg_parts),
+        'sent_count': len(sent_details),
+    })
+
 

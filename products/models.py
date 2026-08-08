@@ -90,6 +90,8 @@ class CustomerProduct(models.Model):
     received_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_received_date = models.DateField(blank=True, null=True)
     payment_notes = models.TextField(blank=True, null=True)
+    expected_payment_date = models.DateField(blank=True, null=True)
+    follow_up_remarks = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return self.product_name
@@ -130,3 +132,15 @@ class SupplierProduct(models.Model):
 
     def __str__(self):
         return self.po_number
+
+
+class CustomerInvoice(models.Model):
+    customer_product = models.ForeignKey(CustomerProduct, on_delete=models.CASCADE, related_name='invoices')
+    invoice_number = models.CharField(max_length=100)
+    quantity = models.IntegerField(default=0)
+    invoice_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.invoice_number} (Qty: {self.quantity})"
+

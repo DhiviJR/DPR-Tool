@@ -40,7 +40,7 @@ ALLOWED_HOSTS = [
     host.strip()
     for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
     if host.strip()
-]
+] or ['*']
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()

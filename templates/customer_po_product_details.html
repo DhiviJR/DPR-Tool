@@ -141,21 +141,33 @@
                         </td>
                         <td class="text-nowrap" style="white-space: nowrap;" data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'invoice_pending' %}invoice pending{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
                             <div class="d-inline-flex align-items-center gap-1 text-nowrap">
-                                {% if product.quantity_delivered < product.quantity_ordered and product.status != 'delivered' and product.status != 'cancelled' %}
-                                {% if product.material_status_code == 'pending' %}
-                                <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed;" data-product-id="{{ product.id }}" disabled title="Material not yet received from supplier">
-                                    Generate Invoice
-                                </button>
-                                {% else %}
-                                <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a;" data-product-id="{{ product.id }}">
-                                    Generate Invoice
-                                </button>
-                                {% endif %}
-                                {% elif product.status == 'delivered' or product.quantity_delivered >= product.quantity_ordered %}
-                                <a href="{% url 'generate_customer_invoice' product.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF">
-                                    <i class="bi bi-file-earmark-pdf me-1"></i>{{ product.generated_invoice_number }}
-                                </a>
-                                {% endif %}
+                                <div class="d-inline-flex flex-column gap-1">
+                                    {% if product.status == 'delivered' or product.quantity_delivered >= product.quantity_ordered %}
+                                    <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a; opacity: 0.65; cursor: not-allowed;" disabled title="All items invoiced/delivered">
+                                        Generate Invoice
+                                    </button>
+                                    {% elif product.material_status_code == 'pending' %}
+                                    <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed;" data-product-id="{{ product.id }}" disabled title="Material not yet received from supplier">
+                                        Generate Invoice
+                                    </button>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a;" data-product-id="{{ product.id }}">
+                                        Generate Invoice
+                                    </button>
+                                    {% endif %}
+
+                                    {% if product.generated_invoices %}
+                                        {% for inv in product.generated_invoices %}
+                                        <a href="{% url 'generate_customer_invoice_pdf' product.id inv.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF (Qty: {{ inv.quantity }})">
+                                            <i class="bi bi-file-earmark-pdf me-1"></i>{{ inv.invoice_number }}
+                                        </a>
+                                        {% endfor %}
+                                    {% elif product.quantity_delivered > 0 %}
+                                        <a href="{% url 'generate_customer_invoice' product.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF">
+                                            <i class="bi bi-file-earmark-pdf me-1"></i>{{ product.generated_invoice_number }}
+                                        </a>
+                                    {% endif %}
+                                </div>
                                 <button type="button"
                                         class="btn btn-sm btn-outline-danger btn-cancel-customer-order"
                                         data-product-id="{{ product.id }}"
@@ -691,22 +703,40 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
+                    let totalDelivered = 0;
+                    if (data.products && data.products.length > 0) {
+                        data.products.forEach(p => {
+                            totalDelivered += (p.quantity_delivered || 0);
+                        });
+                    }
+
                     if (headerInfo) {
-                        headerInfo.innerHTML = `<strong>DPR Serial:</strong> ${data.dpr_serial} &nbsp;|&nbsp; <strong>Customer:</strong> ${data.customer_name}`;
+                        let headerText = `<strong>DPR Serial:</strong> ${data.dpr_serial} &nbsp;|&nbsp; <strong>Customer:</strong> ${data.customer_name}`;
+                        if (totalDelivered > 0) {
+                            headerText += `<div class="mt-1 text-primary fw-semibold"><i class="bi bi-info-circle-fill me-1"></i>An invoice has already been generated for ${totalDelivered} quantity.</div>`;
+                        }
+                        headerInfo.innerHTML = headerText;
                     }
 
                     if (productsBody) {
                         let rowsHtml = '';
                         data.products.forEach((p, idx) => {
-                            const remainingQty = (p.remaining_qty !== undefined) ? p.remaining_qty : Math.max(p.quantity_ordered - (p.quantity_delivered || 0), 0);
+                            const deliveredQty = p.quantity_delivered || 0;
+                            const remainingQty = (p.remaining_qty !== undefined) ? p.remaining_qty : Math.max(p.quantity_ordered - deliveredQty, 0);
                             const defaultQty = remainingQty;
+                            const alreadyInvoicedNotice = deliveredQty > 0 
+                                ? `<div class="text-muted small mt-1" style="font-size: 0.8rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>An invoice has already been generated for ${deliveredQty} quantity.</div>` 
+                                : '';
                             rowsHtml += `
                                 <tr>
                                     <td class="text-center">
                                         ${idx + 1}
                                         <input type="hidden" name="selected_products" value="${p.id}">
                                     </td>
-                                    <td><strong>${p.product_name}</strong></td>
+                                    <td>
+                                        <strong>${p.product_name}</strong>
+                                        ${alreadyInvoicedNotice}
+                                    </td>
                                     <td class="text-center">${p.quantity_ordered}</td>
                                     <td class="text-center">
                                         <input type="number" name="qty_${p.id}" value="${defaultQty}" min="${remainingQty > 0 ? 1 : 0}" max="${remainingQty}" class="form-control form-control-sm text-center qty-delivered-input" style="max-width: 75px; margin: 0 auto;" data-prod-id="${p.id}" ${remainingQty <= 0 ? 'disabled' : ''}>
@@ -745,12 +775,67 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (generateInvoiceForm) {
         generateInvoiceForm.addEventListener('submit', function(e) {
-            setTimeout(function() {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitGenerateInvoiceBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+            }
+
+            const formData = new FormData(generateInvoiceForm);
+            const actionUrl = generateInvoiceForm.action;
+
+            fetch(actionUrl, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+                },
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to generate invoice');
+                }
+                const disposition = response.headers.get('Content-Disposition') || '';
+                let filename = 'Tax_Invoice.pdf';
+                const filenameMatch = disposition.match(/filename="?([^";]+)"?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                }
+                return response.blob().then(blob => ({ blob, filename }));
+            })
+            .then(({ blob, filename }) => {
+                const blobUrl = window.URL.createObjectURL(blob);
+                const win = window.open(blobUrl, '_blank');
+                if (!win) {
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                }
+
                 const modalEl = document.getElementById('generateInvoiceModal');
-                const modal = bootstrap.Modal.getInstance(modalEl);
-                if (modal) modal.hide();
-                window.location.reload();
-            }, 1000);
+                if (modalEl && typeof bootstrap !== 'undefined') {
+                    const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                    if (modalInstance) modalInstance.hide();
+                }
+
+                setTimeout(() => {
+                    window.location.reload();
+                }, 400);
+            })
+            .catch(err => {
+                console.error('Invoice generation error:', err);
+                alert('An error occurred while generating the invoice.');
+            })
+            .finally(() => {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-printer me-1"></i> Generate Invoice';
+                }
+            });
         });
     }
 });

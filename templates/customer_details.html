@@ -47,8 +47,8 @@
                 <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
             </div>
             <div class="col-lg">
-                <label class="form-label">State Code</label>
-                <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10">
+                <label class="form-label">State Code *</label>
+                <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10" required>
             </div>
             <div class="col-lg">
                 <label class="form-label">Payment Terms</label>
@@ -132,7 +132,7 @@
                             <input type="text" name="gstin" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field js-gstin-input text-uppercase" value="{{ customer.gstin|default:''|upper }}" maxlength="15" disabled>
                         </td>
                         <td>
-                            <input type="text" name="state_code" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field text-uppercase" value="{{ customer.state_code|default:''|upper }}" maxlength="10" disabled>
+                            <input type="text" name="state_code" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field text-uppercase" value="{{ customer.state_code|default:''|upper }}" maxlength="10" required disabled>
                         </td>
                         <td>
                             <div class="input-group input-group-sm">
