@@ -13,7 +13,8 @@ from customers.models import Customer
 from suppliers.models import Supplier
 from dpr.models import DPR
 from products.models import CustomerProduct, SupplierProduct
-from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation
+from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation, RFQEmailMessage
+from .email_services import send_threaded_rfq_email, sync_rfq_inbox
 from django.http import HttpResponse, JsonResponse, Http404
 from django.db import transaction
 from django.db.models import Sum, Case, When, Value, IntegerField
@@ -909,16 +910,15 @@ def _send_rfq_supplier_price_requests(
         cc_list = normalize_email_list(cc_emails or [])
 
         try:
-            email = EmailMessage(
+            attachments_list = [attachment_payload] if attachment_payload else None
+            send_threaded_rfq_email(
+                rfq=rfq,
                 subject=subject,
                 body=message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=recipient_list,
-                cc=cc_list,
+                to_emails=recipient_list,
+                cc_emails=cc_list,
+                attachments=attachments_list
             )
-            if attachment_payload:
-                email.attach(*attachment_payload)
-            email.send(fail_silently=False)
             sent_count += 1
         except Exception as exc:
             failed_suppliers.append(f'{supplier.supplier_name} ({str(exc)[:180]})')
@@ -3084,12 +3084,7 @@ def rfq_details(request):
                     return redirect('rfq_details')
 
             try:
-                email = EmailMessage(
-                    subject=quotation_email_subject,
-                    body=quotation_email_body,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=customer_emails,
-                )
+                attachments_to_send = []
                 if quotation_products:
                     quotation_record = _find_latest_matching_quotation(
                         rfq,
@@ -3117,14 +3112,21 @@ def rfq_details(request):
                     quote_no = quotation_record.quotation_number
                     pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no)
                     filename = f"{quote_no.replace('/', '_')}.pdf"
-                    email.attach(filename, pdf_buffer.getvalue(), 'application/pdf')
+                    attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
                 if quotation_attachment:
-                    email.attach(
+                    attachments_to_send.append((
                         quotation_attachment.name,
                         quotation_attachment.read(),
                         getattr(quotation_attachment, 'content_type', None) or 'application/octet-stream'
-                    )
-                email.send(fail_silently=False)
+                    ))
+
+                send_threaded_rfq_email(
+                    rfq=rfq,
+                    subject=quotation_email_subject,
+                    body=quotation_email_body,
+                    to_emails=customer_emails,
+                    attachments=attachments_to_send
+                )
 
                 if quotation_products:
                     for qp in quotation_products:
@@ -5051,4 +5053,140 @@ def generate_customer_invoice(request, product_id):
     response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename="{filename}"'
     return response
+
+
+@login_required
+@role_required('ADMIN', 'SALES')
+def get_rfq_email_thread(request, rfq_id):
+    try:
+        rfq = RFQ.objects.get(id=rfq_id)
+    except RFQ.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'RFQ not found.'}, status=404)
+
+    if request.GET.get('sync') == '1':
+        sync_rfq_inbox(rfq)
+
+    email_messages = rfq.email_messages.all().order_by('sent_at')
+    data = []
+    for msg in email_messages:
+        data.append({
+            'id': msg.id,
+            'message_id': msg.message_id,
+            'in_reply_to': msg.in_reply_to,
+            'sender': msg.sender,
+            'recipients': msg.recipients,
+            'cc_recipients': msg.cc_recipients or '',
+            'subject': msg.subject,
+            'body': msg.body or '',
+            'direction': msg.direction,
+            'sent_at': timezone.localtime(msg.sent_at).strftime('%b %d, %Y %I:%M %p') if msg.sent_at else '',
+            'has_attachments': msg.has_attachments,
+            'attachment_names': msg.attachment_names or '',
+        })
+
+    return JsonResponse({
+        'status': 'success',
+        'rfq_id': rfq.id,
+        'rfq_no': rfq.rfq_no,
+        'customer_name': rfq.customer.customer_name,
+        'customer_email': rfq.customer.email or '',
+        'messages': data
+    })
+
+
+@login_required
+@role_required('ADMIN', 'SALES')
+def send_rfq_email_reply(request, rfq_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    try:
+        rfq = RFQ.objects.get(id=rfq_id)
+    except RFQ.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'RFQ not found.'}, status=404)
+
+    to_emails_raw = request.POST.get('to_emails', '').strip()
+    cc_emails_raw = request.POST.get('cc_emails', '').strip()
+    subject = request.POST.get('subject', '').strip()
+    body = request.POST.get('body', '').strip()
+    parent_message_id = request.POST.get('parent_message_id', '').strip()
+    reply_attachment = request.FILES.get('reply_attachment')
+
+    if not to_emails_raw:
+        return JsonResponse({'status': 'error', 'message': 'Recipient email address (To) is required.'}, status=400)
+
+    if not subject or not body:
+        return JsonResponse({'status': 'error', 'message': 'Subject and Body are required.'}, status=400)
+
+    to_emails = [e.strip() for e in re.split(r'[;,]', to_emails_raw) if e.strip()]
+    cc_emails = [e.strip() for e in re.split(r'[;,]', cc_emails_raw) if e.strip()]
+
+    attachments = []
+    if reply_attachment:
+        attachments.append((
+            reply_attachment.name,
+            reply_attachment.read(),
+            getattr(reply_attachment, 'content_type', 'application/octet-stream')
+        ))
+    else:
+        # Automatically attach prepared quotation PDF if available
+        quotation_products = [p for p in rfq.products.all() if p.price_known and p.value and p.value > 0]
+        if quotation_products:
+            try:
+                quotation_record = _find_latest_matching_quotation(
+                    rfq,
+                    [p.id for p in quotation_products],
+                    email_sent=False
+                )
+                if quotation_record is None:
+                    quotation_record = _find_latest_matching_quotation(
+                        rfq,
+                        [p.id for p in quotation_products],
+                        email_sent=None
+                    )
+                if quotation_record is not None:
+                    quotation_products = _deserialize_quotation_products(quotation_record.products_snapshot)
+                    quote_no = quotation_record.quotation_number
+                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no)
+                    filename = f"{quote_no.replace('/', '_')}.pdf"
+                    attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
+            except Exception as e:
+                logger.warning(f"Could not auto-attach quotation PDF to reply: {e}")
+
+    try:
+        msg_record = send_threaded_rfq_email(
+            rfq=rfq,
+            subject=subject,
+            body=body,
+            to_emails=to_emails,
+            cc_emails=cc_emails,
+            attachments=attachments,
+            parent_message_id=parent_message_id or None
+        )
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Reply sent successfully!',
+            'message_id': msg_record.message_id
+        })
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': f'Failed to send reply: {str(exc)}'}, status=500)
+
+
+@login_required
+@role_required('ADMIN', 'SALES')
+def sync_rfq_email_inbox(request, rfq_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    try:
+        rfq = RFQ.objects.get(id=rfq_id)
+    except RFQ.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'RFQ not found.'}, status=404)
+
+    synced_count, err = sync_rfq_inbox(rfq)
+
+    if err:
+        return JsonResponse({'status': 'warning', 'message': f'Sync completed with notice: {err}', 'synced_count': synced_count})
+    return JsonResponse({'status': 'success', 'message': f'Sync successful! {synced_count} new message(s) fetched.', 'synced_count': synced_count})
+
 

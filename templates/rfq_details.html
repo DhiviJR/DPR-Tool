@@ -492,6 +492,15 @@
                                         {% if not rfq.quotation_prepared %}disabled{% endif %}>
                                     <i class="bi bi-send me-1"></i>Send Email
                                 </button>
+                                <button type="button"
+                                        class="btn btn-outline-dark btn-sm rfq-email-chain-btn"
+                                        data-rfq-id="{{ rfq.id }}"
+                                        data-rfq-no="{{ rfq.rfq_no }}">
+                                    <i class="bi bi-chat-left-text me-1"></i>Mail Chain
+                                    {% if rfq.email_messages.count %}
+                                    <span class="badge bg-secondary rounded-pill ms-1">{{ rfq.email_messages.count }}</span>
+                                    {% endif %}
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -629,6 +638,167 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- RFQ Mail Chain & Inbox Modal -->
+<style>
+/* Mail chain modal refined styles */
+#emailChainModal .modal-content { border: none; border-radius: 12px; overflow: hidden; }
+#emailChainModal .modal-body { padding: 0; background: #f1f3f6; }
+
+/* Two-panel layout */
+.ec-layout { display: flex; height: 600px; overflow: hidden; }
+.ec-list-panel { width: 360px; min-width: 300px; max-width: 380px; background: #fff; border-right: 1px solid #e0e4eb; display: flex; flex-direction: column; flex-shrink: 0; }
+.ec-detail-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #f8f9fb; }
+
+/* List panel header */
+.ec-list-header { padding: 14px 16px 10px; border-bottom: 1px solid #e8ebf0; background: #fff; }
+.ec-list-header h6 { font-size: 0.78rem; font-weight: 700; color: #6c757d; letter-spacing: 0.08em; text-transform: uppercase; margin: 0; }
+
+/* Email rows */
+.ec-email-list { flex: 1; overflow-y: auto; }
+.ec-email-row { display: flex; flex-direction: column; padding: 12px 16px; border-bottom: 1px solid #edf0f5; cursor: pointer; transition: background 0.15s; position: relative; }
+.ec-email-row:hover { background: #f0f4ff; }
+.ec-email-row.active { background: #e8eeff; border-left: 3px solid #4361ee; padding-left: 13px; }
+.ec-email-row .ec-row-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 3px; }
+.ec-email-row .ec-from { font-size: 0.82rem; font-weight: 600; color: #1a1d23; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.ec-email-row .ec-date { font-size: 0.72rem; color: #9ca3af; white-space: nowrap; flex-shrink: 0; }
+.ec-email-row .ec-subject { font-size: 0.8rem; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+.ec-email-row .ec-badge { font-size: 0.65rem; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
+.ec-badge-in { background: #e0f2fe; color: #0369a1; }
+.ec-badge-out { background: #dcfce7; color: #16a34a; }
+.ec-unread-dot { width: 7px; height: 7px; border-radius: 50%; background: #4361ee; flex-shrink: 0; margin-right: 4px; }
+
+/* Detail panel */
+.ec-detail-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #b0b8c8; }
+.ec-detail-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.ec-detail-header { padding: 16px 20px 12px; background: #fff; border-bottom: 1px solid #e5e9f0; }
+.ec-detail-header .ec-detail-subject { font-size: 1rem; font-weight: 700; color: #1a1d23; margin: 0 0 6px; }
+.ec-detail-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.8rem; color: #6b7280; }
+.ec-detail-meta span strong { color: #374151; }
+.ec-detail-body { flex: 1; overflow-y: auto; padding: 20px; }
+.ec-body-pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.88rem; line-height: 1.7; color: #1f2937; background: transparent; border: none; margin: 0; padding: 0; }
+.ec-detail-footer { padding: 12px 20px; background: #fff; border-top: 1px solid #e5e9f0; display: flex; justify-content: space-between; align-items: center; }
+.ec-att-info { font-size: 0.8rem; color: #4361ee; }
+
+/* Reply composer inside detail panel */
+.ec-reply-composer { background: #fff; border-top: 2px solid #4361ee; padding: 16px 20px; flex-shrink: 0; max-height: 420px; overflow-y: auto; }
+.ec-reply-composer .composer-title { font-size: 0.82rem; font-weight: 700; color: #4361ee; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+
+/* Spinner animation */
+@keyframes ec-spin { to { transform: rotate(360deg); } }
+.ec-spinning { animation: ec-spin 0.8s linear infinite; display: inline-block; }
+</style>
+
+<div class="modal fade" id="emailChainModal" tabindex="-1" aria-labelledby="emailChainModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width: 960px;">
+        <div class="modal-content">
+
+            <!-- Modal Header -->
+            <div class="modal-header" style="background: linear-gradient(135deg,#1a1d2e 0%,#2d3155 100%); color:#fff; padding: 12px 20px;">
+                <div class="d-flex align-items-center gap-2">
+                    <div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;">
+                        <i class="bi bi-envelope-open-text" style="font-size:15px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;font-size:0.95rem;">Mail Chain</div>
+                        <div style="font-size:0.75rem;opacity:0.7;" id="emailChainRfqNo"></div>
+                    </div>
+                </div>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span id="ecMessageCount" class="badge" style="background:rgba(255,255,255,0.15);font-size:0.75rem;"></span>
+                    <button type="button" id="syncInboxBtn" class="btn btn-sm" style="background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.25);font-size:0.8rem;">
+                        <i class="bi bi-arrow-repeat me-1" id="syncSpinner"></i>Sync Inbox
+                    </button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+
+            <!-- Alert bar -->
+            <div id="emailChainAlert"></div>
+            <input type="hidden" id="emailChainRfqId" value="">
+
+            <!-- Two-panel body -->
+            <div class="modal-body p-0">
+                <div class="ec-layout">
+
+                    <!-- LEFT: Email list panel -->
+                    <div class="ec-list-panel">
+                        <div class="ec-list-header">
+                            <h6><i class="bi bi-list-ul me-1"></i>Messages</h6>
+                        </div>
+                        <div class="ec-email-list" id="ecEmailList">
+                            <div class="text-center py-5 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                <div class="mt-2" style="font-size:0.8rem;">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: Detail panel -->
+                    <div class="ec-detail-panel" id="ecDetailPanel">
+                        <div class="ec-detail-placeholder" id="ecDetailPlaceholder">
+                            <i class="bi bi-envelope" style="font-size:3rem;margin-bottom:12px;"></i>
+                            <div style="font-size:0.9rem;font-weight:600;">Select an email to read</div>
+                            <div style="font-size:0.78rem;margin-top:4px;">Click any message from the list on the left</div>
+                        </div>
+                        <div class="ec-detail-content" id="ecDetailContent" style="display:none;">
+                            <div class="ec-detail-header" id="ecDetailHeader"></div>
+                            <div class="ec-detail-body" id="ecDetailBody"></div>
+                            <div class="ec-detail-footer" id="ecDetailFooter"></div>
+                            <!-- Reply composer -->
+                            <div class="ec-reply-composer" id="emailReplyComposer" style="display:none;">
+                                <div class="composer-title">
+                                    <span><i class="bi bi-reply-fill me-1"></i>Reply</span>
+                                    <button type="button" id="closeReplyComposerBtn" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;">✕ Cancel</button>
+                                </div>
+                                <form id="emailReplyForm" enctype="multipart/form-data">
+                                    {% csrf_token %}
+                                    <input type="hidden" id="replyParentMessageId" name="parent_message_id" value="">
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold" style="font-size:0.8rem;">To <span class="text-danger">*</span></label>
+                                            <input type="text" name="to_emails" id="replyToEmails" class="form-control form-control-sm" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" style="font-size:0.8rem;">CC</label>
+                                            <input type="text" name="cc_emails" id="replyCcEmails" class="form-control form-control-sm" placeholder="Optional">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label fw-semibold" style="font-size:0.8rem;">Subject <span class="text-danger">*</span></label>
+                                            <input type="text" name="subject" id="replySubject" class="form-control form-control-sm" required>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label fw-semibold" style="font-size:0.8rem;">Message <span class="text-danger">*</span></label>
+                                            <textarea name="body" id="replyBody" class="form-control form-control-sm" rows="4" required placeholder="Type your reply..."></textarea>
+                                        </div>
+                                        <div class="col-12">
+                                            <div class="alert alert-info py-1 px-2 mb-1" id="replyAutoAttachmentNote" style="font-size:0.78rem;">
+                                                <i class="bi bi-info-circle me-1"></i>Latest prepared quotation PDF will be attached automatically to this reply.
+                                                <a href="#" id="previewReplyQuotationPdfBtn" target="_blank" class="fw-bold ms-2 text-decoration-none">
+                                                    <i class="bi bi-file-earmark-pdf me-1"></i>Preview Quotation PDF
+                                                </a>
+                                            </div>
+                                            <label class="form-label" style="font-size:0.8rem;">Additional Attachment (Optional)</label>
+                                            <input type="file" name="reply_attachment" id="replyAttachment" class="form-control form-control-sm">
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="cancelReplyBtn">Cancel</button>
+                                        <button type="submit" class="btn btn-sm btn-primary" id="sendReplySubmitBtn">
+                                            <i class="bi bi-send me-1"></i>Send Reply
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- end ec-layout -->
+            </div><!-- end modal-body -->
+
         </div>
     </div>
 </div>
@@ -1721,6 +1891,282 @@ document.addEventListener('change', function (e) {
         updateRowButtons(r, activeRow);
     });
 });
+
+// ============================================================
+// Email Chain Modal - Refined Two-Panel UI
+// ============================================================
+let ecMessages = [];  // cached messages for current RFQ
+
+document.addEventListener('click', function(e) {
+    const chainBtn = e.target.closest('.rfq-email-chain-btn');
+    if (!chainBtn) return;
+
+    const rfqId = chainBtn.getAttribute('data-rfq-id');
+    const rfqNo = chainBtn.getAttribute('data-rfq-no') || ('RFQ #' + rfqId);
+
+    document.getElementById('emailChainRfqId').value = rfqId;
+    document.getElementById('emailChainRfqNo').textContent = rfqNo;
+    document.getElementById('emailChainAlert').innerHTML = '';
+    document.getElementById('emailReplyComposer').style.display = 'none';
+    document.getElementById('ecDetailContent').style.display = 'none';
+    document.getElementById('ecDetailPlaceholder').style.display = 'flex';
+    ecMessages = [];
+
+    const modalEl = document.getElementById('emailChainModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+    loadEmailThread(rfqId);
+});
+
+function loadEmailThread(rfqId) {
+    const listEl = document.getElementById('ecEmailList');
+    listEl.innerHTML = `<div class="text-center py-5 text-muted">
+        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+        <div class="mt-2" style="font-size:0.8rem;">Loading messages...</div></div>`;
+    document.getElementById('ecDetailContent').style.display = 'none';
+    document.getElementById('ecDetailPlaceholder').style.display = 'flex';
+
+    fetch(`/rfq/${rfqId}/email-thread/`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status !== 'success') {
+                listEl.innerHTML = `<div class="alert alert-danger m-2" style="font-size:0.8rem;">${escapeHtml(data.message || 'Failed to load.')}</div>`;
+                return;
+            }
+            ecMessages = data.messages || [];
+            document.getElementById('ecMessageCount').textContent = ecMessages.length + ' message' + (ecMessages.length !== 1 ? 's' : '');
+            renderEmailList(ecMessages);
+        })
+        .catch(err => {
+            listEl.innerHTML = `<div class="alert alert-danger m-2" style="font-size:0.8rem;">Error: ${escapeHtml(err.message)}</div>`;
+        });
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+function formatSenderName(senderStr) {
+    if (!senderStr) return '(Unknown)';
+    // Extract display name from "Name <email>" format
+    const nameMatch = senderStr.match(/^"?([^"<]+)"?\s*</);
+    if (nameMatch) return nameMatch[1].trim();
+    // Just an email address
+    const emailMatch = senderStr.match(/<([^>]+)>/);
+    return emailMatch ? emailMatch[1] : senderStr;
+}
+
+function renderEmailList(messages) {
+    const listEl = document.getElementById('ecEmailList');
+    if (!messages || messages.length === 0) {
+        listEl.innerHTML = `<div class="text-center py-5 text-muted px-3">
+            <i class="bi bi-inbox" style="font-size:2.5rem;opacity:0.35;"></i>
+            <div class="mt-2 fw-semibold" style="font-size:0.85rem;">No emails yet</div>
+            <div style="font-size:0.75rem;margin-top:4px;">Click <strong>Sync Inbox</strong> to fetch incoming replies.</div>
+        </div>`;
+        return;
+    }
+
+    listEl.innerHTML = '';
+    messages.forEach((msg, idx) => {
+        const isIn = msg.direction === 'IN';
+        const row = document.createElement('div');
+        row.className = 'ec-email-row' + (idx === 0 ? ' active' : '');
+        row.dataset.idx = idx;
+
+        const senderName = formatSenderName(msg.sender);
+        const dateStr = msg.sent_at || '';
+        const subject = msg.subject || '(No Subject)';
+
+        row.innerHTML = `
+            <div class="ec-row-top">
+                <div style="display:flex;align-items:center;gap:5px;min-width:0;">
+                    <span class="ec-badge ${isIn ? 'ec-badge-in' : 'ec-badge-out'}">${isIn ? '↙ In' : '↗ Out'}</span>
+                    <span class="ec-from">${escapeHtml(senderName)}</span>
+                </div>
+                <span class="ec-date">${escapeHtml(dateStr.split(' ').slice(0,3).join(' '))}</span>
+            </div>
+            <div class="ec-subject">${escapeHtml(subject)}</div>
+            ${msg.has_attachments ? '<div style="font-size:0.7rem;color:#6b7280;"><i class="bi bi-paperclip"></i> ' + escapeHtml(msg.attachment_names || '') + '</div>' : ''}
+        `;
+
+        row.addEventListener('click', function() {
+            document.querySelectorAll('.ec-email-row').forEach(r => r.classList.remove('active'));
+            row.classList.add('active');
+            showEmailDetail(msg);
+        });
+
+        listEl.appendChild(row);
+    });
+
+    // Auto-open first message
+    if (messages.length > 0) showEmailDetail(messages[0]);
+}
+
+function showEmailDetail(msg) {
+    document.getElementById('ecDetailPlaceholder').style.display = 'none';
+    document.getElementById('ecDetailContent').style.display = 'flex';
+    document.getElementById('emailReplyComposer').style.display = 'none';
+
+    const isIn = msg.direction === 'IN';
+    const badgeHtml = isIn
+        ? '<span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:0.7rem;">↙ Incoming</span>'
+        : '<span class="badge" style="background:#dcfce7;color:#16a34a;font-size:0.7rem;">↗ Outgoing</span>';
+
+    // Header
+    const headerEl = document.getElementById('ecDetailHeader');
+    headerEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;">
+            <p class="ec-detail-subject">${escapeHtml(msg.subject || '(No Subject)')}</p>
+            ${badgeHtml}
+        </div>
+        <div class="ec-detail-meta">
+            <span><strong>From:</strong> ${escapeHtml(msg.sender)}</span>
+            <span><strong>To:</strong> ${escapeHtml(msg.recipients)}</span>
+            ${msg.cc_recipients ? `<span><strong>CC:</strong> ${escapeHtml(msg.cc_recipients)}</span>` : ''}
+            <span style="margin-left:auto;"><i class="bi bi-clock me-1"></i>${escapeHtml(msg.sent_at)}</span>
+        </div>
+    `;
+
+    // Body
+    const bodyEl = document.getElementById('ecDetailBody');
+    bodyEl.innerHTML = '';
+    const pre = document.createElement('pre');
+    pre.className = 'ec-body-pre';
+    pre.textContent = msg.body || '(No message body)';
+    bodyEl.appendChild(pre);
+
+    // Footer
+    const footerEl = document.getElementById('ecDetailFooter');
+    footerEl.innerHTML = '';
+    if (msg.has_attachments && msg.attachment_names) {
+        const attSpan = document.createElement('span');
+        attSpan.className = 'ec-att-info';
+        attSpan.innerHTML = `<i class="bi bi-paperclip me-1"></i><strong>Attachments:</strong> ${escapeHtml(msg.attachment_names)}`;
+        footerEl.appendChild(attSpan);
+    } else {
+        footerEl.appendChild(document.createElement('span'));
+    }
+    const replyBtn = document.createElement('button');
+    replyBtn.type = 'button';
+    replyBtn.className = 'btn btn-primary btn-sm';
+    replyBtn.innerHTML = '<i class="bi bi-reply me-1"></i>Reply to Chain';
+    replyBtn.addEventListener('click', () => openReplyComposer(msg));
+    footerEl.appendChild(replyBtn);
+}
+
+function openReplyComposer(msg) {
+    const rfqId = Number(document.getElementById('emailChainRfqId').value);
+    const rfq = (typeof rfqData !== 'undefined') ? rfqData.find(item => item.id === rfqId) : null;
+
+    const isOut = msg.direction === 'OUT';
+    let replyTo = isOut ? msg.recipients : msg.sender;
+    const emailMatch = replyTo.match(/<([^>]+)>/);
+    if (emailMatch) replyTo = emailMatch[1];
+
+    let replySubj = (msg.subject || '');
+    if (!replySubj.toLowerCase().startsWith('re:')) replySubj = 'Re: ' + replySubj;
+
+    document.getElementById('replyParentMessageId').value = msg.message_id;
+    document.getElementById('replyToEmails').value = replyTo;
+    document.getElementById('replyCcEmails').value = '';
+    document.getElementById('replySubject').value = replySubj;
+
+    // Pre-populate default quotation template body if rfq exists
+    let defaultBody = '';
+    if (rfq && typeof buildQuotationEmailBody === 'function') {
+        defaultBody = buildQuotationEmailBody(rfq, { productIds: [], supplierPriceIds: [] });
+    }
+    const quoteDivider = msg.body ? `\n\n-----------------------------------\nOn ${msg.sent_at}, ${msg.sender} wrote:\n${msg.body}` : '';
+    document.getElementById('replyBody').value = defaultBody + quoteDivider;
+
+    // Update quotation PDF preview link
+    const previewBtn = document.getElementById('previewReplyQuotationPdfBtn');
+    if (previewBtn && rfqId) {
+        previewBtn.href = `/rfq/${rfqId}/quotation/download/`;
+    }
+
+    const composer = document.getElementById('emailReplyComposer');
+    composer.style.display = 'block';
+    composer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('replyBody').focus();
+}
+
+// Sync Inbox
+document.getElementById('syncInboxBtn')?.addEventListener('click', function() {
+    const rfqId = document.getElementById('emailChainRfqId').value;
+    if (!rfqId) return;
+
+    const spinner = document.getElementById('syncSpinner');
+    if (spinner) spinner.classList.add('ec-spinning');
+    const alertDiv = document.getElementById('emailChainAlert');
+    alertDiv.innerHTML = '<div class="alert alert-info py-2 mb-0 rounded-0" style="font-size:0.82rem;"><div class="spinner-border spinner-border-sm me-2"></div>Syncing with Hostinger IMAP...</div>';
+
+    fetch(`/rfq/${rfqId}/sync-inbox/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (spinner) spinner.classList.remove('ec-spinning');
+        const cls = data.status === 'success' ? 'success' : (data.status === 'warning' ? 'warning' : 'danger');
+        alertDiv.innerHTML = `<div class="alert alert-${cls} alert-dismissible py-2 mb-0 rounded-0" style="font-size:0.82rem;">${escapeHtml(data.message || '')}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+        loadEmailThread(rfqId);
+    })
+    .catch(err => {
+        if (spinner) spinner.classList.remove('ec-spinning');
+        alertDiv.innerHTML = `<div class="alert alert-danger py-2 mb-0 rounded-0" style="font-size:0.82rem;">Sync error: ${escapeHtml(err.message)}</div>`;
+    });
+});
+
+// Close reply composer
+document.getElementById('closeReplyComposerBtn')?.addEventListener('click', () => {
+    document.getElementById('emailReplyComposer').style.display = 'none';
+});
+document.getElementById('cancelReplyBtn')?.addEventListener('click', () => {
+    document.getElementById('emailReplyComposer').style.display = 'none';
+});
+
+// Submit Reply
+document.getElementById('emailReplyForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const rfqId = document.getElementById('emailChainRfqId').value;
+    if (!rfqId) return;
+
+    const submitBtn = document.getElementById('sendReplySubmitBtn');
+    const original = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
+
+    fetch(`/rfq/${rfqId}/send-reply/`, {
+        method: 'POST',
+        body: new FormData(this),
+        headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value }
+    })
+    .then(r => r.json())
+    .then(data => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = original;
+        const alertDiv = document.getElementById('emailChainAlert');
+        if (data.status === 'success') {
+            alertDiv.innerHTML = `<div class="alert alert-success alert-dismissible py-2 mb-0 rounded-0" style="font-size:0.82rem;">${escapeHtml(data.message)}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+            document.getElementById('emailReplyComposer').style.display = 'none';
+            document.getElementById('emailReplyForm').reset();
+            loadEmailThread(rfqId);
+        } else {
+            alertDiv.innerHTML = `<div class="alert alert-danger alert-dismissible py-2 mb-0 rounded-0" style="font-size:0.82rem;">${escapeHtml(data.message || 'Failed to send.')}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+        }
+    })
+    .catch(err => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = original;
+        document.getElementById('emailChainAlert').innerHTML = `<div class="alert alert-danger py-2 mb-0 rounded-0" style="font-size:0.82rem;">Error: ${escapeHtml(err.message)}</div>`;
+    });
+});
+// ============================================================
+// End Email Chain Modal
+// ============================================================
 </script>
 {% endblock %}
 

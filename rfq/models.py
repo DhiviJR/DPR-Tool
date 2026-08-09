@@ -129,4 +129,33 @@ class RFQQuotation(models.Model):
         return self.quotation_number
 
 
+class RFQEmailMessage(models.Model):
+    DIRECTION_CHOICES = (
+        ('OUT', 'Outgoing'),
+        ('IN', 'Incoming'),
+    )
+
+    rfq = models.ForeignKey(RFQ, on_delete=models.CASCADE, related_name='email_messages')
+    message_id = models.CharField(max_length=255, unique=True)
+    in_reply_to = models.CharField(max_length=255, blank=True, null=True)
+    references = models.TextField(blank=True, null=True)
+    sender = models.CharField(max_length=255)
+    recipients = models.TextField()
+    cc_recipients = models.TextField(blank=True, null=True)
+    subject = models.CharField(max_length=500)
+    body = models.TextField(blank=True, null=True)
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default='OUT')
+    sent_at = models.DateTimeField()
+    has_attachments = models.BooleanField(default=False)
+    attachment_names = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['sent_at', 'created_at']
+
+    def __str__(self):
+        return f"{self.direction} - {self.rfq.rfq_no} - {self.subject}"
+
+
+
 

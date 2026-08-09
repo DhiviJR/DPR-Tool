@@ -1,11 +1,20 @@
 from django.contrib import admin
 
-from .models import RFQ, RFQProduct
+from .models import RFQ, RFQProduct, RFQEmailMessage
 
 
 class RFQProductInline(admin.TabularInline):
     model = RFQProduct
     extra = 0
+
+
+@admin.register(RFQEmailMessage)
+class RFQEmailMessageAdmin(admin.ModelAdmin):
+    list_display = ('rfq', 'direction', 'sender', 'subject', 'sent_at', 'has_attachments')
+    list_filter = ('direction', 'has_attachments', 'sent_at')
+    search_fields = ('rfq__rfq_no', 'sender', 'recipients', 'subject', 'body', 'message_id')
+    readonly_fields = ('created_at',)
+
 
 
 @admin.register(RFQ)
