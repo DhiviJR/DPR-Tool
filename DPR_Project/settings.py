@@ -172,18 +172,21 @@ EMAIL_BACKEND = os.environ.get(
     'DJANGO_EMAIL_BACKEND',
     'django.core.mail.backends.smtp.EmailBackend'
 )
-EMAIL_FILE_PATH = os.path.join(BASE_DIR, 'sent_emails')
-EMAIL_HOST = os.environ.get('DJANGO_EMAIL_HOST', 'smtp.hostinger.com')
+# EMAIL_FILE_PATH = os.path.join(BASE_DIR, 'sent_emails')
+EMAIL_HOST = os.environ.get('DJANGO_EMAIL_HOST', 'mail.mesinstruments.co.in')
 EMAIL_PORT = int(os.environ.get('DJANGO_EMAIL_PORT', '465'))
-EMAIL_HOST_USER = os.environ.get('DJANGO_EMAIL_HOST_USER', 'info@mbt-corporation.com')
-EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', 'Dhivibe@2013')
+EMAIL_HOST_USER = os.environ.get('DJANGO_EMAIL_HOST_USER', 'info@mesinstruments.co.in')
+EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', 'Info@987654321')
 EMAIL_USE_TLS = os.environ.get('DJANGO_EMAIL_USE_TLS', 'False').lower() == 'true'
 EMAIL_USE_SSL = os.environ.get('DJANGO_EMAIL_USE_SSL', 'True').lower() == 'true'
 EMAIL_TIMEOUT = int(os.environ.get('DJANGO_EMAIL_TIMEOUT', '30'))
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DJANGO_DEFAULT_FROM_EMAIL',
-    'info@mbt-corporation.com'
+    'info@mesinstruments.co.in'
 )
+# IMAP Settings for Inbox Sync
+EMAIL_IMAP_HOST = os.environ.get('DJANGO_EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
+EMAIL_IMAP_PORT = int(os.environ.get('DJANGO_EMAIL_IMAP_PORT', '993'))
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

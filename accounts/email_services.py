@@ -231,6 +231,68 @@ def send_threaded_rfq_email(
     return email_record
 
 
+SPAM_DOMAINS = ['fiverr.com', 'gst.gov.in', 'atlassian.net', 'atlassian.com', 'peopleperhour.com', 'vyaparapp.in']
+
+def _match_email_to_rfq(subject, body, from_str, to_str, in_reply_to=None, references=None, target_rfq=None):
+    """
+    Intelligently matches an incoming or outgoing email to an RFQ.
+    """
+    search_text = f"{subject or ''} {body or ''}"
+    sender_email = parseaddr(from_str or '')[1].lower().strip()
+    recipient_email = parseaddr(to_str or '')[1].lower().strip()
+
+    # Skip generic marketing / spam emails unless explicitly tied to an RFQ
+    if any(domain in sender_email for domain in SPAM_DOMAINS):
+        return None
+
+    # 1. Match RFQ Number (e.g. RFQ-2026-0034)
+    match_rfq = re.search(r'RFQ-\d{4}-\d+', search_text, re.IGNORECASE)
+    if match_rfq:
+        rfq_no = match_rfq.group(0).upper()
+        found = RFQ.objects.filter(rfq_no__iexact=rfq_no).first()
+        if found:
+            return found
+
+    # 2. Match In-Reply-To or References message ID
+    for ref in [in_reply_to, references]:
+        if ref:
+            clean_ref = ref.strip('<> ')
+            parent = RFQEmailMessage.objects.filter(message_id__icontains=clean_ref).exclude(rfq=None).first()
+            if parent and parent.rfq:
+                return parent.rfq
+
+    # 3. Match Quotation Number (e.g. MES_PC... or MES_PO...)
+    match_quote = re.search(r'MES[_\/][A-Za-z0-9_\-]+', search_text, re.IGNORECASE)
+    if match_quote:
+        qno = match_quote.group(0)
+        from rfq.models import RFQQuotation
+        quotation = RFQQuotation.objects.filter(quotation_number__icontains=qno).first()
+        if quotation and quotation.rfq:
+            return quotation.rfq
+
+    # 4. Customer Email Match
+    for email in [sender_email, recipient_email]:
+        if email and 'mbt-corporation' not in email and 'hostinger' not in email:
+            cust_rfqs = RFQ.objects.filter(customer__email__iexact=email).order_by('-created_at')
+            if cust_rfqs.exists():
+                if target_rfq and target_rfq in cust_rfqs:
+                    return target_rfq
+                return cust_rfqs.first()
+
+    # 5. Customer Name Match in Subject/Body
+    for rfq in RFQ.objects.select_related('customer').order_by('-created_at'):
+        if rfq.customer and rfq.customer.customer_name:
+            cname = rfq.customer.customer_name.strip()
+            if len(cname) >= 3 and cname.lower() in search_text.lower():
+                return rfq
+
+    # 6. Target RFQ fallback if subject contains 'RFQ'
+    if target_rfq and 'rfq' in (subject or '').lower():
+        return target_rfq
+
+    return None
+
+
 def sync_rfq_inbox(rfq=None):
     """
     Connects to IMAP server, fetches inbox messages, and matches them to RFQs.
@@ -252,19 +314,12 @@ def sync_rfq_inbox(rfq=None):
         mail.login(imap_user, imap_password)
         mail.select('INBOX')
 
-        if rfq and rfq.rfq_no:
-            search_query = f'OR SUBJECT "{rfq.rfq_no}" BODY "{rfq.rfq_no}"'
-            status, data = mail.search(None, search_query)
-            if status != 'OK' or not data[0]:
-                status, data = mail.search(None, 'ALL')
-        else:
-            status, data = mail.search(None, 'ALL')
-
+        status, data = mail.search(None, 'ALL')
         if status != 'OK' or not data[0]:
             return 0, None
 
         msg_nums = data[0].split()
-        recent_nums = msg_nums[-50:]
+        recent_nums = msg_nums[-250:]
 
         for num in recent_nums:
             status, msg_data = mail.fetch(num, '(RFC822)')
@@ -284,14 +339,25 @@ def sync_rfq_inbox(rfq=None):
             if not message_id.startswith('<'):
                 message_id = f"<{message_id}>"
 
-            if RFQEmailMessage.objects.filter(message_id=message_id).exists():
-                continue
+            # Truncate headers safely to fit MySQL CharField max_lengths
+            if len(message_id) > 250:
+                message_id = message_id[:240] + f"-{num.decode()}@msg>"
 
             subject = _clean_header_str(msg.get('Subject'))
+            if subject and len(subject) > 490:
+                subject = subject[:490]
+
             from_str = _clean_header_str(msg.get('From'))
+            if from_str and len(from_str) > 250:
+                from_str = from_str[:250]
+
             to_str = _clean_header_str(msg.get('To'))
             cc_str = _clean_header_str(msg.get('Cc'))
+
             in_reply_to = _clean_header_str(msg.get('In-Reply-To'))
+            if in_reply_to and len(in_reply_to) > 250:
+                in_reply_to = in_reply_to[:240] + ">"
+
             references = _clean_header_str(msg.get('References'))
 
             date_str = msg.get('Date')
@@ -307,24 +373,25 @@ def sync_rfq_inbox(rfq=None):
 
             body = _extract_email_body(msg)
 
-            matched_rfq = rfq
-            if not matched_rfq:
-                match = re.search(r'RFQ-\d{4}-\d+', f"{subject} {body}", re.IGNORECASE)
-                if match:
-                    rfq_no_found = match.group(0).upper()
-                    matched_rfq = RFQ.objects.filter(rfq_no__iexact=rfq_no_found).first()
-
-            if not matched_rfq and in_reply_to:
-                parent = RFQEmailMessage.objects.filter(message_id=in_reply_to).first()
-                if parent:
-                    matched_rfq = parent.rfq
+            matched_rfq = _match_email_to_rfq(
+                subject=subject,
+                body=body,
+                from_str=from_str,
+                to_str=to_str,
+                in_reply_to=in_reply_to,
+                references=references,
+                target_rfq=rfq
+            )
 
             if not matched_rfq:
-                sender_email = parseaddr(from_str)[1].lower().strip()
-                if sender_email:
-                    matched_rfq = RFQ.objects.filter(customer__email__iexact=sender_email).first()
+                continue
 
-            if not matched_rfq:
+            existing_msg = RFQEmailMessage.objects.filter(message_id=message_id).first()
+            if existing_msg:
+                if existing_msg.rfq != matched_rfq:
+                    existing_msg.rfq = matched_rfq
+                    existing_msg.save(update_fields=['rfq'])
+                    synced_count += 1
                 continue
 
             has_attachments = False

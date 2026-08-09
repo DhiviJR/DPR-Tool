@@ -5066,7 +5066,12 @@ def get_rfq_email_thread(request, rfq_id):
     if request.GET.get('sync') == '1':
         sync_rfq_inbox(rfq)
 
-    email_messages = rfq.email_messages.all().order_by('sent_at')
+    show_all = request.GET.get('all') == '1'
+    if show_all:
+        email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:150]
+    else:
+        email_messages = rfq.email_messages.all().order_by('sent_at')
+
     data = []
     for msg in email_messages:
         data.append({
@@ -5088,8 +5093,9 @@ def get_rfq_email_thread(request, rfq_id):
         'status': 'success',
         'rfq_id': rfq.id,
         'rfq_no': rfq.rfq_no,
-        'customer_name': rfq.customer.customer_name,
-        'customer_email': rfq.customer.email or '',
+        'customer_name': rfq.customer.customer_name if rfq.customer else '',
+        'customer_email': (rfq.customer.email if rfq.customer else '') or '',
+        'show_all': show_all,
         'messages': data
     })
 
@@ -5122,36 +5128,33 @@ def send_rfq_email_reply(request, rfq_id):
     cc_emails = [e.strip() for e in re.split(r'[;,]', cc_emails_raw) if e.strip()]
 
     attachments = []
+
+    # 1. Automatically attach prepared quotation PDF for this RFQ
+    try:
+        latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
+        if latest_quotation and latest_quotation.products_snapshot:
+            products = _deserialize_quotation_products(latest_quotation.products_snapshot)
+            quote_no = latest_quotation.quotation_number
+        else:
+            products, _ = _build_selected_quotation_products(rfq, [], [])
+            if not products:
+                products = list(rfq.products.all())
+            quote_no = _get_mes_quote_no(rfq)
+
+        if products:
+            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+            filename = f"{quote_no.replace('/', '_')}.pdf"
+            attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
+    except Exception as e:
+        logger.warning(f"Could not auto-attach quotation PDF to reply: {e}")
+
+    # 2. Add manual user file attachment if provided
     if reply_attachment:
         attachments.append((
             reply_attachment.name,
             reply_attachment.read(),
             getattr(reply_attachment, 'content_type', 'application/octet-stream')
         ))
-    else:
-        # Automatically attach prepared quotation PDF if available
-        quotation_products = [p for p in rfq.products.all() if p.price_known and p.value and p.value > 0]
-        if quotation_products:
-            try:
-                quotation_record = _find_latest_matching_quotation(
-                    rfq,
-                    [p.id for p in quotation_products],
-                    email_sent=False
-                )
-                if quotation_record is None:
-                    quotation_record = _find_latest_matching_quotation(
-                        rfq,
-                        [p.id for p in quotation_products],
-                        email_sent=None
-                    )
-                if quotation_record is not None:
-                    quotation_products = _deserialize_quotation_products(quotation_record.products_snapshot)
-                    quote_no = quotation_record.quotation_number
-                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no)
-                    filename = f"{quote_no.replace('/', '_')}.pdf"
-                    attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
-            except Exception as e:
-                logger.warning(f"Could not auto-attach quotation PDF to reply: {e}")
 
     try:
         msg_record = send_threaded_rfq_email(
@@ -5174,19 +5177,23 @@ def send_rfq_email_reply(request, rfq_id):
 
 @login_required
 @role_required('ADMIN', 'SALES')
-def sync_rfq_email_inbox(request, rfq_id):
+def sync_rfq_email_inbox(request, rfq_id=0):
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
 
-    try:
-        rfq = RFQ.objects.get(id=rfq_id)
-    except RFQ.DoesNotExist:
-        return JsonResponse({'status': 'error', 'message': 'RFQ not found.'}, status=404)
+    rfq = None
+    if rfq_id and int(rfq_id) > 0:
+        rfq = RFQ.objects.filter(id=rfq_id).first()
 
-    synced_count, err = sync_rfq_inbox(rfq)
+    # Pass rfq=None so sync_rfq_inbox fetches and matches emails globally across ALL RFQs
+    synced_count, err = sync_rfq_inbox(rfq=None)
 
     if err:
-        return JsonResponse({'status': 'warning', 'message': f'Sync completed with notice: {err}', 'synced_count': synced_count})
-    return JsonResponse({'status': 'success', 'message': f'Sync successful! {synced_count} new message(s) fetched.', 'synced_count': synced_count})
+        return JsonResponse({'status': 'warning', 'message': f'Sync notice: {err}', 'synced_count': synced_count})
+    return JsonResponse({
+        'status': 'success',
+        'message': f'Sync successful! {synced_count} new message(s) synchronized across all RFQs.',
+        'synced_count': synced_count
+    })
 
 
