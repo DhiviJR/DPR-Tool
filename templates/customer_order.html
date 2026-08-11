@@ -168,13 +168,16 @@
                         </div>
                     </div>
 
+                    <div id="quotationPreviewContainer" class="mt-1.5 d-flex flex-wrap gap-1.5">
+                        <!-- Preview button(s) for selected quotation(s) -->
+                    </div>
+
                     <input type="text"
                            id="quotationNumberInput"
                            name="quotation_number"
                            value="{% if dpr %}{{ dpr.quotation_number|default:'' }}{% endif %}"
-                           style="opacity: 0; position: absolute; bottom: 0; left: 15px; width: 1px; height: 1px; pointer-events: none;"
+                           style="opacity: 0; position: absolute; bottom: 0; left: 15px; width: 1px; height: 1px;"
                            required>
-
 
                     <div id="quotationEmailWarning"
                          class="alert alert-warning py-2 px-3 mt-2 mb-0 d-none"
@@ -598,19 +601,22 @@ document.getElementById('confirmationType').addEventListener('change', updatePoN
 updatePoNumberVisibility();
 
 let isPoNumberDuplicate = false;
+let poCheckSequence = 0;
 
 async function checkPoNumberUniqueness() {
     const confirmation = document.getElementById('confirmationType')?.value;
     const poInput = document.getElementById('poNumberInput');
     const errorDiv = document.getElementById('poNumberExistsError');
-    if (!poInput) return;
+    if (!poInput) return false;
 
     const poVal = poInput.value.trim();
     if (confirmation === 'Customer PO' && poVal !== '') {
+        const currentSeq = ++poCheckSequence;
         const dprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
         try {
             const resp = await fetch(`/check-customer-po-number/?po_number=${encodeURIComponent(poVal)}&dpr_id=${dprId}`);
             const data = await resp.json();
+            if (currentSeq !== poCheckSequence) return isPoNumberDuplicate;
             if (data.exists) {
                 isPoNumberDuplicate = true;
                 poInput.classList.add('is-invalid');
@@ -618,15 +624,18 @@ async function checkPoNumberUniqueness() {
                     errorDiv.textContent = data.message || 'This customer po number was already exist';
                     errorDiv.classList.remove('d-none');
                 }
+                return true;
             } else {
                 isPoNumberDuplicate = false;
                 poInput.classList.remove('is-invalid');
                 if (errorDiv) {
                     errorDiv.classList.add('d-none');
                 }
+                return false;
             }
         } catch (err) {
             console.error('Error checking PO number uniqueness:', err);
+            return false;
         }
     } else {
         isPoNumberDuplicate = false;
@@ -634,6 +643,7 @@ async function checkPoNumberUniqueness() {
         if (errorDiv) {
             errorDiv.classList.add('d-none');
         }
+        return false;
     }
 }
 
@@ -645,23 +655,6 @@ if (poInputEl) {
 }
 document.getElementById('confirmationType')?.addEventListener('change', function() {
     checkPoNumberUniqueness();
-});
-
-document.getElementById('customerOrderForm')?.addEventListener('submit', function(e) {
-    const confirmation = document.getElementById('confirmationType')?.value;
-    if (confirmation === 'Customer PO' && isPoNumberDuplicate) {
-        e.preventDefault();
-        alert('This customer po number was already exist');
-        if (poInputEl) {
-            poInputEl.focus();
-            poInputEl.classList.add('is-invalid');
-        }
-        const errorDiv = document.getElementById('poNumberExistsError');
-        if (errorDiv) {
-            errorDiv.classList.remove('d-none');
-        }
-        return false;
-    }
 });
 
 const productTypesList = [
@@ -790,9 +783,23 @@ function loadCustomerQuotations() {
     const updateDisplay = () => {
         const checkboxes = menu.querySelectorAll('.quote-checkbox');
         const checkedValues = [];
+        const previewContainer = document.getElementById('quotationPreviewContainer');
+        if (previewContainer) previewContainer.innerHTML = '';
+
         checkboxes.forEach(cb => {
             if (cb.checked) {
                 checkedValues.push(cb.value);
+                if (previewContainer && cb.dataset.previewUrl) {
+                    const previewBadge = document.createElement('a');
+                    previewBadge.href = cb.dataset.previewUrl;
+                    previewBadge.target = '_blank';
+                    previewBadge.className = 'btn btn-sm btn-outline-primary py-0.5 px-2.5 rounded-pill d-inline-flex align-items-center gap-1 text-decoration-none shadow-sm';
+                    previewBadge.style.fontSize = '12px';
+                    previewBadge.style.fontWeight = '500';
+                    previewBadge.innerHTML = `<i class="bi bi-file-earmark-pdf text-danger"></i> Preview ${cb.value}`;
+                    previewBadge.title = `Preview Generated Quotation ${cb.value}`;
+                    previewContainer.appendChild(previewBadge);
+                }
             }
         });
         input.value = checkedValues.join(', ');
@@ -805,29 +812,54 @@ function loadCustomerQuotations() {
         updatePreparedEmailWarning(checkedValues);
     };
 
-    const addCheckbox = (value, labelText, checked, preparedNotEmailed = false) => {
+    const addCheckbox = (value, labelText, checked, preparedNotEmailed = false, previewUrl = null) => {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item d-flex align-items-center justify-content-between py-1 px-2 m-0';
+        item.style.cursor = 'default';
+
         const label = document.createElement('label');
-        label.className = 'dropdown-item d-flex align-items-center gap-2 py-1 m-0';
+        label.className = 'd-flex align-items-center gap-2 flex-grow-1 m-0 text-truncate';
         label.style.cursor = 'pointer';
 
         const cb = document.createElement('input');
         cb.type = 'checkbox';
-        cb.className = 'form-check-input quote-checkbox m-0';
+        cb.className = 'form-check-input quote-checkbox m-0 flex-shrink-0';
         cb.value = value;
         cb.checked = checked;
         cb.dataset.preparedNotEmailed = preparedNotEmailed ? 'true' : 'false';
+        if (previewUrl) {
+            cb.dataset.previewUrl = previewUrl;
+        }
         cb.addEventListener('change', () => {
             updateDisplay();
             populateProductsFromSelectedQuotations();
         });
 
         const span = document.createElement('span');
-        span.className = 'ms-1';
+        span.className = 'ms-1 text-truncate';
         span.textContent = labelText;
+        span.title = labelText;
 
         label.appendChild(cb);
         label.appendChild(span);
-        menu.appendChild(label);
+        item.appendChild(label);
+
+        if (previewUrl) {
+            const previewBtn = document.createElement('a');
+            previewBtn.href = previewUrl;
+            previewBtn.target = '_blank';
+            previewBtn.className = 'btn btn-sm btn-outline-primary py-0 px-2 ms-2 text-nowrap quote-item-preview-btn';
+            previewBtn.style.fontSize = '12px';
+            previewBtn.style.borderRadius = '5px';
+            previewBtn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+            previewBtn.title = 'Preview Generated Quotation PDF';
+            previewBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+            item.appendChild(previewBtn);
+        }
+
+        menu.appendChild(item);
     };
 
     if (!customerId) {
@@ -858,7 +890,8 @@ function loadCustomerQuotations() {
                         q.quotation_number,
                         `${q.quotation_number} (${q.rfq_no})${statusText}`,
                         isChecked,
-                        q.prepared_not_emailed
+                        q.prepared_not_emailed,
+                        q.preview_url
                     );
                 });
 
@@ -960,32 +993,77 @@ function roundAmount(value) {
 function validatePoValueMatch(options = {}) {
     const showError = options.showError === true;
     const poInput = document.getElementById('poValueInput');
-    const totalValue = document.getElementById('totalValue').value;
+    if (!poInput) return true;
+    const totalValueEl = document.getElementById('totalValue');
+    const totalValue = totalValueEl ? totalValueEl.value : '0.00';
     const errorEl = document.getElementById('poValueError');
-    const match = roundAmount(poInput.value) === roundAmount(totalValue);
+    const diff = Math.abs(roundAmount(poInput.value) - roundAmount(totalValue));
+    const match = diff < 0.01;
 
     if (!match) {
-        if (showError || poInput.value.trim() !== '') {
-            errorEl.textContent = `PO Value must equal Total Value (${totalValue || '0.00'}).`;
-            errorEl.style.display = 'block';
+        if (showError || (poInput.value && poInput.value.trim() !== '')) {
+            if (errorEl) {
+                errorEl.textContent = `PO Value must equal Total Value (${totalValue || '0.00'}).`;
+                errorEl.style.display = 'block';
+            }
             poInput.classList.add('is-invalid');
         }
         return false;
     }
 
-    errorEl.style.display = 'none';
+    if (errorEl) {
+        errorEl.style.display = 'none';
+    }
     poInput.classList.remove('is-invalid');
     return true;
 }
 
-document.getElementById('customerOrderForm').addEventListener('submit', function (e) {
-    renumberProductRows();
-    calculateTotals();
-    if (!validatePoValueMatch({ showError: true })) {
-        e.preventDefault();
-        document.getElementById('poValueInput').focus();
-        document.getElementById('poValueInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+const orderForm = document.getElementById('customerOrderForm');
+if (orderForm) {
+    orderForm.addEventListener('submit', function (e) {
+        renumberProductRows();
+        calculateTotals();
+
+        const confirmation = document.getElementById('confirmationType')?.value;
+        const poInput = document.getElementById('poNumberInput');
+        if (confirmation === 'Customer PO' && isPoNumberDuplicate) {
+            e.preventDefault();
+            alert('This customer po number was already exist');
+            if (poInput) {
+                poInput.focus();
+                poInput.classList.add('is-invalid');
+            }
+            const errorDiv = document.getElementById('poNumberExistsError');
+            if (errorDiv) {
+                errorDiv.classList.remove('d-none');
+            }
+            return false;
+        }
+
+        if (!validatePoValueMatch({ showError: true })) {
+            e.preventDefault();
+            const poValInput = document.getElementById('poValueInput');
+            if (poValInput) {
+                poValInput.focus();
+                poValInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            return false;
+        }
+    });
+}
+
+// Ensure submit buttons immediately dismiss any open dropdown without swallowing clicks
+document.querySelectorAll('#customerOrderForm button[type="submit"]').forEach(btn => {
+    btn.addEventListener('mousedown', function() {
+        const dropdownMenu = document.getElementById('quotationDropdownMenu');
+        if (dropdownMenu && dropdownMenu.classList.contains('show')) {
+            const dropdownBtn = document.getElementById('quotationDropdownBtn');
+            if (dropdownBtn && typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+                const dd = bootstrap.Dropdown.getInstance(dropdownBtn);
+                if (dd) dd.hide();
+            }
+        }
+    });
 });
 
 document.getElementById('poValueInput').addEventListener('input', function () {

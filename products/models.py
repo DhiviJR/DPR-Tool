@@ -119,6 +119,13 @@ class SupplierProduct(models.Model):
 
     po_attachment = models.FileField(upload_to='supplier_po/', blank=True, null=True)
     po_email_sent = models.BooleanField(default=False)
+    po_pdf_generated = models.BooleanField(default=False)  # True only after Generate PO & Update is clicked
+    PAYMENT_STATUS_CHOICES = (
+        ('not_received', 'Not Received'),
+        ('partially_received', 'Partially Received'),
+        ('amount_received', 'Amount Received'),
+    )
+
     quantity_received = models.IntegerField(default=0)
     quantity_not_ok = models.IntegerField(default=0)
     not_ok_reason = models.TextField(blank=True, null=True)
@@ -129,6 +136,21 @@ class SupplierProduct(models.Model):
         null=True,
         default=None
     )
+    invoice_dc_number = models.CharField(max_length=150, blank=True, null=True)
+    supplier_invoice_number = models.CharField(max_length=150, blank=True, null=True)
+    supplier_bill_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, blank=True, null=True)
+    bill_attachment = models.FileField(upload_to='supplier_bills/', blank=True, null=True)
+    invoice_date = models.DateField(blank=True, null=True)
+    payment_status = models.CharField(
+        max_length=25,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='not_received'
+    )
+    received_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_received_date = models.DateField(blank=True, null=True)
+    payment_notes = models.TextField(blank=True, null=True)
+    expected_payment_date = models.DateField(blank=True, null=True)
+    follow_up_remarks = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return self.po_number

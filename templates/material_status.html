@@ -141,7 +141,7 @@
                         <td>{{ sp.supplier.supplier_name|default:'-' }}</td>
                         <td>
                             {% if sp.po_number and sp.po_number != '-' %}
-                                <a href="{% url 'generate_supplier_po' sp.customer_product.dpr.id %}?supplier_id={{ sp.supplier.id }}&po_number={{ sp.po_number|urlencode }}&supplier_product_id={{ sp.id }}" target="_blank" class="text-decoration-none text-primary fw-semibold">
+                                <a href="{% url 'generate_supplier_po' sp.customer_product.dpr.id %}?supplier_id={{ sp.supplier.id }}&po_number={{ sp.po_number|urlencode }}" target="_blank" class="text-decoration-none text-primary fw-semibold">
                                     {{ sp.po_number }}
                                 </a>
                             {% else %}

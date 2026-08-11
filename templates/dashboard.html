@@ -98,7 +98,7 @@
             <div class="dpr-action-card dpr-action-success">
                 <i class="bi bi-boxes fs-4 mb-2 d-block"></i>
                 <small>View Customer productStatus</small>
-                <h6 class="mb-0">Customer PO product details</h6>
+                <h6 class="mb-0">Material Status</h6>
             </div>
         </a>
     </div>
@@ -106,8 +106,8 @@
     {% endif %}
     {% if can_view_accounts %}
     <div class="col-md-6 col-xl-3">
-        <a href="{% url 'accounts_details' %}" class="dpr-card-hover">
-            <div class="dpr-action-card dpr-action-primary" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: #fff;">
+        <a href="javascript:void(0)" class="dpr-card-hover text-decoration-none" data-bs-toggle="modal" data-bs-target="#accountsSelectionModal">
+            <div class="dpr-action-card dpr-action-primary" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: #fff; cursor: pointer;">
                 <i class="bi bi-wallet2 fs-4 mb-2 d-block"></i>
                 <small>Financial Tracking</small>
                 <h6 class="mb-0">Accounts</h6>
@@ -494,6 +494,83 @@
     </div>
    
 </div>
+
+<!-- Accounts Selection Modal (Customer vs Supplier) -->
+{% if can_view_accounts %}
+<div class="modal fade" id="accountsSelectionModal" tabindex="-1" aria-labelledby="accountsSelectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+                <div>
+                    <h5 class="modal-title fw-bold text-dark mb-1" id="accountsSelectionModalLabel">
+                        Accounts &amp; Financial Tracking
+                    </h5>
+                    <p class="text-muted small mb-0">Select an account module to manage</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 pt-3">
+                <div class="d-flex flex-column gap-3">
+                    <a href="{% url 'accounts_details' %}" class="account-select-item d-flex align-items-center p-3 rounded-3 text-decoration-none">
+                        <div class="account-icon-box customer me-3">
+                            <i class="bi bi-people-fill fs-5"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-bold text-dark mb-0">Customer Accounts</div>
+                            <div class="text-muted small" style="font-size: 12.5px;">Customer invoices &amp; payments</div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted fs-6 ms-2"></i>
+                    </a>
+
+                    <a href="{% url 'supplier_accounts_details' %}" class="account-select-item d-flex align-items-center p-3 rounded-3 text-decoration-none">
+                        <div class="account-icon-box supplier me-3">
+                            <i class="bi bi-truck fs-5"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-bold text-dark mb-0">Supplier Accounts</div>
+                            <div class="text-muted small" style="font-size: 12.5px;">Supplier POs &amp; payments</div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted fs-6 ms-2"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+.account-select-item {
+    background-color: #ffffff;
+    border: 1.5px solid #e2e8f0 !important;
+    transition: all 0.2s ease-in-out;
+}
+.account-select-item:hover {
+    background-color: #f8fafc;
+    border-color: #8b5cf6 !important;
+    transform: translateX(4px);
+    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.12);
+}
+.account-icon-box {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.account-icon-box.customer {
+    background-color: #ede9fe;
+    color: #7c3aed;
+}
+.account-icon-box.supplier {
+    background-color: #e0e7ff;
+    color: #4f46e5;
+}
+.account-select-item:hover .bi-chevron-right {
+    color: #7c3aed !important;
+}
+</style>
+{% endif %}
 
 {% endblock %}
 

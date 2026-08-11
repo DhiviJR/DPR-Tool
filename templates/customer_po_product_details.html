@@ -4,7 +4,7 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
     <div>
-        <h1 class="dpr-page-title mb-1">Customer PO Product Details</h1>
+        <h1 class="dpr-page-title mb-1">Material Status</h1>
         <p class="dpr-page-subtitle mb-0">Track delivery status, validity, and supplier linkage</p>
     </div>
     <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
@@ -140,13 +140,26 @@
                             </div>
                         </td>
                         <td class="text-nowrap" style="white-space: nowrap;" data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'invoice_pending' %}invoice pending{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
+                            {% if product.status == 'delivered' or product.quantity_delivered >= product.quantity_ordered %}
+                            <div class="d-flex align-items-center justify-content-center gap-1 flex-wrap">
+                                {% if product.generated_invoices %}
+                                    {% for inv in product.generated_invoices %}
+                                    <a href="{% url 'generate_customer_invoice_pdf' product.id inv.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" style="min-width: 140px;" title="Open Generated Invoice PDF (Qty: {{ inv.quantity }})">
+                                        <i class="bi bi-file-earmark-pdf me-1"></i>{{ inv.invoice_number }}
+                                    </a>
+                                    {% endfor %}
+                                {% elif product.quantity_delivered > 0 %}
+                                    <a href="{% url 'generate_customer_invoice' product.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" style="min-width: 140px;" title="Open Generated Invoice PDF">
+                                        <i class="bi bi-file-earmark-pdf me-1"></i>{{ product.generated_invoice_number }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </div>
+                            {% else %}
                             <div class="d-inline-flex align-items-center gap-1 text-nowrap">
                                 <div class="d-inline-flex flex-column gap-1">
-                                    {% if product.status == 'delivered' or product.quantity_delivered >= product.quantity_ordered %}
-                                    <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a; opacity: 0.65; cursor: not-allowed;" disabled title="All items invoiced/delivered">
-                                        Generate Invoice
-                                    </button>
-                                    {% elif product.material_status_code == 'pending' %}
+                                    {% if product.material_status_code == 'pending' %}
                                     <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed;" data-product-id="{{ product.id }}" disabled title="Material not yet received from supplier">
                                         Generate Invoice
                                     </button>
@@ -168,13 +181,16 @@
                                         </a>
                                     {% endif %}
                                 </div>
+                                {% if product.status != 'delivered' and product.quantity_delivered < product.quantity_ordered %}
                                 <button type="button"
                                         class="btn btn-sm btn-outline-danger btn-cancel-customer-order"
                                         data-product-id="{{ product.id }}"
                                         {% if product.status == 'cancelled' %}disabled{% endif %}>
                                     {% if product.status == 'cancelled' %}Cancelled{% else %}Cancel Order{% endif %}
                                 </button>
+                                {% endif %}
                             </div>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}

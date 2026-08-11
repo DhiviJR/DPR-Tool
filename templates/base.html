@@ -43,15 +43,17 @@
                 <li class="nav-item">
                     <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'supplier_po_product_details' %}active{% endif %}" href="{% url 'supplier_po_product_details' %}">Supplier PO</a>
                 </li>
-                {% if not is_purchase %}
-                <li class="nav-item">
-                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'customer_po_product_details' %}active{% endif %}" href="{% url 'customer_po_product_details' %}">Material Status</a>
-                </li>
-                {% endif %}
                 {% endif %}
                 {% if can_view_accounts %}
-                <li class="nav-item">
-                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'accounts_details' %}active{% endif %}" href="{% url 'accounts_details' %}">Accounts</a>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle dpr-nav-link {% if request.resolver_match.url_name == 'accounts_details' or request.resolver_match.url_name == 'supplier_accounts_details' %}active{% endif %}"
+                       href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Accounts
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item {% if request.resolver_match.url_name == 'accounts_details' %}active{% endif %}" href="{% url 'accounts_details' %}"><i class="bi bi-people me-2"></i>Customer Accounts</a></li>
+                        <li><a class="dropdown-item {% if request.resolver_match.url_name == 'supplier_accounts_details' %}active{% endif %}" href="{% url 'supplier_accounts_details' %}"><i class="bi bi-truck me-2"></i>Supplier Accounts</a></li>
+                    </ul>
                 </li>
                 {% endif %}
                 {% if can_view_rfq %}
