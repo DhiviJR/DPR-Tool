@@ -34,6 +34,7 @@
               <th>PO Value</th>
               <th>Validity</th>
               <th>Action</th>
+              <th class="text-center supplier-email-th">Supplier PO Email</th>
             </tr>
           </thead>
           <tbody>
@@ -77,29 +78,25 @@
                   </div>
                 </td>
                 <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" value="{{ sp.po_value }}" readonly required></td>
-                <td><input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" required></td>
                 <td>
-                  <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
-                  {% if is_edit and po_prepared and not all_same_supplier and sp.show_supplier_email_action %}
-                  <button type="button"
-                          class="btn btn-info btn-sm ms-1 rowSendMailBtn"
-                          data-email-index="{{ sp.email_group_index }}"
-                          {% if not sp.supplier.email %}disabled title="Supplier email is missing"{% endif %}>
-                    <i class="bi bi-envelope"></i> Send Email{% if sp.email_group_product_count > 1 %} ({{ sp.email_group_product_count }} Products){% endif %}
-                  </button>
-                  {% endif %}
+                  <input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" min="{{ today_str }}" required>
+                  <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
+                </td>
+                <td class="text-center" style="width: 50px;">
+                  <button type="button" class="btn btn-danger btn-sm removeRow" title="Remove row">X</button>
                 </td>
               </tr>
               {% endfor %}
             {% else %}
+              {% for p in products %}
               <tr>
-                <td>1</td>
+                <td>{{ forloop.counter }}</td>
                 <td>
                   <input type="hidden" name="supplier_product_id[]" value="">
                   <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
                     <option value="">Select</option>
-                    {% for p in products %}
-                    <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" data-rate="{{ p.rate_per_unit }}">{{ p.product_name }}</option>
+                    {% for prod in products %}
+                    <option value="{{ prod.id }}" data-max-qty="{{ prod.quantity_ordered }}" data-rate="{{ prod.rate_per_unit }}" {% if prod.id == p.id %}selected{% endif %}>{{ prod.product_name }}</option>
                     {% endfor %}
                   </select>
                 </td>
@@ -120,6 +117,38 @@
                 <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" required></td>
                 <td>
                   <div class="d-flex align-items-center">
+                    <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" value="{{ p.quantity_ordered }}" required>
+                    <span class="ms-2 quantity-max-label">/({{ p.quantity_ordered }})</span>
+                  </div>
+                </td>
+                <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
+                <td>
+                  <input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ default_supplier_validity|date:'Y-m-d' }}" min="{{ today_str }}" required>
+                  <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
+                </td>
+                <td>
+                  <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td>1</td>
+                <td>
+                  <input type="hidden" name="supplier_product_id[]" value="">
+                  <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
+                    <option value="">Select</option>
+                  </select>
+                </td>
+                <td>
+                  <div class="d-flex">
+                    <select name="supplier[]" class="form-select supplier-dropdown" style="min-width: 250px;" required>
+                      <option value="">Select</option>
+                    </select>
+                  </div>
+                </td>
+                <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" required></td>
+                <td>
+                  <div class="d-flex align-items-center">
                     <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" required>
                     <span class="ms-2 quantity-max-label">/(0)</span>
                   </div>
@@ -130,6 +159,7 @@
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
                 </td>
               </tr>
+              {% endfor %}
             {% endif %}
           </tbody>
         </table>
@@ -149,12 +179,12 @@
           <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO & Update
         </button>
         <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary ms-1">Close</a>
-        {% if po_prepared and all_same_supplier %}
+        {% if po_prepared and supplier_orders|length == 1 %}
         <button type="button"
                 id="sendMailBtn"
                 class="btn btn-info ms-1"
                 {% if not has_supplier_emails %}disabled{% endif %}
-                title="Send the combined Purchase Order PDF to the supplier">
+                title="Send the Purchase Order PDF to the supplier">
           <i class="bi bi-envelope me-1"></i> Send Email
         </button>
         {% endif %}
@@ -246,9 +276,276 @@
 const rfqRateMap = JSON.parse(document.getElementById('rfq-rate-map').textContent);
 const productDefaultRateMap = JSON.parse(document.getElementById('product-default-rate-map').textContent);
 const poEmailData = JSON.parse(document.getElementById('po-email-data').textContent || '[]');
+const targetCustomerDateStr = '{{ target_customer_date|date:"Y-m-d" }}';
+const targetCustomerDateDisplay = '{{ target_customer_date|date:"d-m-Y" }}';
+const defaultSupplierValidityDate = '{{ default_supplier_validity|date:"Y-m-d" }}';
+const todayDateStr = '{{ today_str }}';
+const todayDisplay = '{{ today|date:"d-m-Y" }}';
+
+function validateValidityDateInput(input) {
+  if (!input) return true;
+  let msgEl = input.parentElement.querySelector('.validity-warning-msg');
+  if (!msgEl) {
+    msgEl = document.createElement('div');
+    msgEl.className = 'validity-warning-msg small mt-1';
+    msgEl.style.fontSize = '0.72rem';
+    msgEl.style.lineHeight = '1.2';
+    input.parentElement.appendChild(msgEl);
+  }
+
+  if (!input.value) {
+    msgEl.style.display = 'none';
+    input.classList.remove('is-invalid', 'border-warning');
+    return true;
+  }
+
+  const inputDate = new Date(input.value + 'T00:00:00');
+
+  // Check 1: Cannot be in the past
+  if (todayDateStr) {
+    const todayDate = new Date(todayDateStr + 'T00:00:00');
+    if (inputDate < todayDate) {
+      input.classList.add('is-invalid');
+      input.classList.remove('border-warning');
+      msgEl.style.display = 'block';
+      msgEl.className = 'validity-warning-msg text-danger small mt-1 fw-bold';
+      msgEl.innerHTML = `<i class="bi bi-x-circle-fill me-1"></i>Validity date cannot be in the past (Today is ${todayDisplay}).`;
+      return false;
+    }
+  }
+
+  // Check 2: Must be earlier than Customer PO Date and warning if closer than 1 week
+  if (targetCustomerDateStr) {
+    const customerDate = new Date(targetCustomerDateStr + 'T00:00:00');
+    const diffTime = customerDate - inputDate;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 0) {
+      input.classList.add('is-invalid');
+      input.classList.remove('border-warning');
+      msgEl.style.display = 'block';
+      msgEl.className = 'validity-warning-msg text-danger small mt-1 fw-bold';
+      msgEl.innerHTML = `<i class="bi bi-x-circle-fill me-1"></i>Must be earlier than Customer PO Date (${targetCustomerDateDisplay}).`;
+      return false;
+    } else if (diffDays < 7) {
+      input.classList.remove('is-invalid');
+      input.classList.add('border-warning');
+      msgEl.style.display = 'block';
+      msgEl.className = 'validity-warning-msg text-warning small mt-1 fw-semibold';
+      msgEl.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>Warning: Closer to Customer PO date (${diffDays} day${diffDays === 1 ? '' : 's'} before). Recommended: 1 week before (${targetCustomerDateDisplay}).`;
+      return true;
+    }
+  }
+
+  input.classList.remove('is-invalid', 'border-warning');
+  msgEl.style.display = 'none';
+  return true;
+}
+
+function validateAllValidityDates() {
+  let allValid = true;
+  document.querySelectorAll('.po-validity-input').forEach(input => {
+    const valid = validateValidityDateInput(input);
+    if (!valid) allValid = false;
+  });
+  return allValid;
+}
+
+document.addEventListener('input', function(e) {
+  if (e.target.classList.contains('po-validity-input')) {
+    validateValidityDateInput(e.target);
+  }
+});
+
+document.addEventListener('change', function(e) {
+  if (e.target.classList.contains('po-validity-input')) {
+    validateValidityDateInput(e.target);
+  }
+});
 
 function getNextRowIndex() {
   return document.querySelectorAll('#supplierTable tbody tr').length;
+}
+
+function handleProductChange(row) {
+  const productSelect = row.querySelector('.product-select');
+  if (!productSelect) return;
+  const selectedOption = productSelect.options[productSelect.selectedIndex];
+  const productId = selectedOption ? String(selectedOption.value || '') : '';
+  const supplierDropdown = row.querySelector('.supplier-dropdown');
+  const rateInput = row.querySelector('.rate-input');
+  const quantityInput = row.querySelector('.quantity-input');
+
+  if (!productId) {
+    if (supplierDropdown) supplierDropdown.value = '';
+    if (rateInput) rateInput.value = '';
+    if (quantityInput) quantityInput.value = '';
+    const poVal = row.querySelector('.po-value-input');
+    if (poVal) poVal.value = '';
+    const label = row.querySelector('.quantity-max-label');
+    if (label) label.textContent = '/(0)';
+    updateQuantityLimits();
+    updateSupplierRowValues();
+    updateOverallSupplierQty();
+    return;
+  }
+
+  // 1. Auto-select linked supplier for this product from rfqRateMap
+  const productRates = rfqRateMap[productId] || {};
+  const linkedSupplierIds = Object.keys(productRates);
+  if (supplierDropdown) {
+    if (linkedSupplierIds.length > 0) {
+      supplierDropdown.value = linkedSupplierIds[0];
+    } else {
+      supplierDropdown.value = '';
+    }
+  }
+
+  // 2. Auto-fill Rate Per Unit strictly for this product & supplier from RFQ
+  if (rateInput) {
+    const currentSupplierId = supplierDropdown ? String(supplierDropdown.value) : '';
+    if (currentSupplierId && productRates[currentSupplierId] !== undefined) {
+      rateInput.value = Number(productRates[currentSupplierId]).toFixed(2);
+    } else {
+      rateInput.value = '';
+    }
+  }
+
+  // 3. Auto-fill Quantity to remaining quantity
+  const maxQty = selectedOption
+      ? parseInt(selectedOption.dataset.maxQty || selectedOption.getAttribute('data-max-qty') || '0', 10)
+      : 0;
+  
+  let otherRowsQty = 0;
+  document.querySelectorAll('#supplierTable tbody tr').forEach(r => {
+    if (r !== row) {
+      const pSel = r.querySelector('.product-select');
+      const qIn = r.querySelector('.quantity-input');
+      if (pSel && String(pSel.value) === productId && qIn) {
+        const qVal = parseInt(qIn.value || '0', 10);
+        if (!isNaN(qVal) && qVal > 0) {
+          otherRowsQty += qVal;
+        }
+      }
+    }
+  });
+
+  const remaining = Math.max(0, maxQty - otherRowsQty);
+  if (quantityInput) {
+    quantityInput.value = remaining > 0 ? remaining : '';
+  }
+
+  updateQuantityLimits();
+  updateSupplierRowValues();
+  updateOverallSupplierQty();
+  updateSupplierEmailButtons();
+}
+
+function handleSupplierChange(row) {
+  const productSelect = row.querySelector('.product-select');
+  const supplierDropdown = row.querySelector('.supplier-dropdown');
+  const rateInput = row.querySelector('.rate-input');
+  if (!productSelect || !supplierDropdown || !rateInput) return;
+
+  const productId = String(productSelect.value || '');
+  const supplierId = String(supplierDropdown.value || '');
+  if (!productId || !supplierId) {
+    rateInput.value = '';
+    updateSupplierRowValues();
+    updateSupplierEmailButtons();
+    return;
+  }
+
+  const productRates = rfqRateMap[productId] || {};
+  if (productRates[supplierId] !== undefined) {
+    rateInput.value = Number(productRates[supplierId]).toFixed(2);
+  } else {
+    rateInput.value = '';
+  }
+
+  updateSupplierRowValues();
+  updateSupplierEmailButtons();
+}
+
+function updateSupplierEmailButtons() {
+  const rows = Array.from(document.querySelectorAll('#supplierTable tbody tr'));
+  const theadRow = document.querySelector('#supplierTable thead tr');
+  const bottomSendMailBtn = document.getElementById('sendMailBtn');
+  
+  if (rows.length === 0) return;
+
+  // Remove existing dynamic email cells
+  rows.forEach(r => {
+    r.querySelectorAll('.supplier-email-cell').forEach(td => td.remove());
+  });
+
+  // Ensure header has the Supplier PO Email column if rows > 1
+  let emailTh = document.querySelector('#supplierTable thead .supplier-email-th');
+  if (rows.length > 1) {
+    if (!emailTh && theadRow) {
+      emailTh = document.createElement('th');
+      emailTh.className = 'text-center supplier-email-th';
+      emailTh.textContent = 'Supplier PO Email';
+      theadRow.appendChild(emailTh);
+    }
+    if (bottomSendMailBtn) bottomSendMailBtn.style.display = 'none';
+  } else {
+    if (emailTh) emailTh.remove();
+    if (bottomSendMailBtn) bottomSendMailBtn.style.display = '';
+    return;
+  }
+
+  // Group consecutive rows with the same selected supplier
+  let i = 0;
+  while (i < rows.length) {
+    const sSelect = rows[i].querySelector('.supplier-dropdown');
+    const sId = sSelect ? String(sSelect.value || '') : '';
+    const sOption = sSelect && sSelect.selectedIndex >= 0 ? sSelect.options[sSelect.selectedIndex] : null;
+    const sName = sOption && sOption.value ? sOption.textContent.trim() : 'Supplier';
+
+    let groupCount = 1;
+    while (i + groupCount < rows.length) {
+      const nextSelect = rows[i + groupCount].querySelector('.supplier-dropdown');
+      const nextId = nextSelect ? String(nextSelect.value || '') : '';
+      if (nextId === sId && sId !== '') {
+        groupCount++;
+      } else {
+        break;
+      }
+    }
+
+    const foundPo = poEmailData.find(po => String(po.supplier_id) === sId);
+    const matchingPo = foundPo || {
+      supplier_id: sId,
+      po_number: `SPO-{{ dpr.id|stringformat:"04d" }}-${sId}`,
+      supplier_name: sName,
+      supplier_email: '',
+      combined_supplier: true,
+      default_subject: `Purchase Order for {{ dpr.serial_number }} - Metrology Engineering Solutions`,
+      default_body: `Dear Sir/Madam,\n\nGreetings from Metrology Engineering Solutions.\n\nPlease find attached the Purchase Order for {{ dpr.serial_number }}.\n\nThank you,\nMetrology Engineering Solutions`
+    };
+
+    const emailTd = document.createElement('td');
+    emailTd.rowSpan = groupCount;
+    emailTd.className = 'text-center bg-white supplier-email-cell';
+    emailTd.style.verticalAlign = 'middle';
+    emailTd.style.minWidth = '140px';
+
+    // Only show Send Email button if PO has actually been generated (po_generated flag from backend)
+    if (sId && foundPo && foundPo.po_generated) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-info btn-sm rowSendMailBtn shadow-sm';
+      btn.innerHTML = '<i class="bi bi-envelope me-1"></i> Send Email';
+      btn.addEventListener('click', function() {
+        openSupplierPoEmailModal(matchingPo);
+      });
+      emailTd.appendChild(btn);
+    }
+    
+    rows[i].appendChild(emailTd);
+    i += groupCount;
+  }
 }
 
 document.getElementById('addSupplierRow')?.addEventListener('click', function () {
@@ -259,7 +556,6 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
   }
   const tbody = document.querySelector('#supplierTable tbody');
   const rowCount = tbody.rows.length + 1;
-  const rowIndex = getNextRowIndex();
   const row = document.createElement('tr');
   row.innerHTML = `
     <td>${rowCount}</td>
@@ -294,15 +590,20 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
       </div>
     </td>
     <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
-    <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
     <td>
-      <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+      <input type="date" name="po_validity[]" class="form-control po-validity-input" value="${defaultSupplierValidityDate}" min="${todayDateStr}" required>
+      <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
+    </td>
+    <td class="text-center" style="width: 50px;">
+      <button type="button" class="btn btn-danger btn-sm removeRow" title="Remove row">X</button>
     </td>
   `;
   tbody.appendChild(row);
   updateQuantityLimits();
   updateSupplierRowValues();
   updateOverallSupplierQty();
+  updateSupplierEmailButtons();
+  validateAllValidityDates();
 });
 
 let activeSupplierRow = null;
@@ -311,8 +612,10 @@ document.addEventListener('click', function (e) {
   if (e.target.classList.contains('removeRow')) {
     e.target.closest('tr').remove();
     renumberSupplierRows();
+    updateQuantityLimits();
     updateSupplierRowValues();
     updateOverallSupplierQty();
+    updateSupplierEmailButtons();
   }
   if (e.target.classList.contains('addSupplierBtn')) {
     activeSupplierRow = e.target.closest('tr');
@@ -425,58 +728,10 @@ document.addEventListener('change', function (e) {
   }
 
   const row = e.target.closest('tr');
-  
-    if (productSelect) {
-    const selectedOption = productSelect.options[productSelect.selectedIndex];
-    if (selectedOption && selectedOption.value) {
-      const productId = String(selectedOption.value);
-
-      // 1. Auto-fill Supplier from rfqRateMap (first supplier linked to this product)
-      const supplierDropdown = row.querySelector('.supplier-dropdown');
-      if (supplierDropdown && supplierDropdown.value === '') {
-        const productRates = rfqRateMap[productId] || {};
-        const firstSupplierId = Object.keys(productRates)[0];
-        if (firstSupplierId) {
-          supplierDropdown.value = firstSupplierId;
-        }
-      }
-
-      // 2. Auto-fill Rate (RFQ supplier rate → default rate → data-rate)
-      const rateInput = row.querySelector('.rate-input');
-      if (rateInput) {
-        const supplierDropdown2 = row.querySelector('.supplier-dropdown');
-        const supplierId = supplierDropdown2 ? String(supplierDropdown2.value) : '';
-        const productRates = rfqRateMap[productId] || {};
-        if (supplierId && productRates[supplierId] !== undefined) {
-          rateInput.value = Number(productRates[supplierId]).toFixed(2);
-        } else if (productDefaultRateMap[productId] !== undefined) {
-          rateInput.value = Number(productDefaultRateMap[productId]).toFixed(2);
-        } else {
-          const dataRate = selectedOption.dataset.rate || selectedOption.getAttribute('data-rate') || '';
-          if (dataRate) rateInput.value = Number(dataRate).toFixed(2);
-        }
-      }
-
-      // 3. Auto-fill Quantity (remaining / max qty)
-      const maxQty = parseInt(selectedOption.dataset.maxQty || '0', 10);
-      const usedByProduct = {};
-      document.querySelectorAll('#supplierTable tbody tr').forEach(r => {
-        const pSel = r.querySelector('.product-select');
-        const qIn = r.querySelector('.quantity-input');
-        if (pSel && pSel.value && qIn && r !== row) {
-          const qty = parseInt(qIn.value || '0', 10);
-          usedByProduct[pSel.value] = (usedByProduct[pSel.value] || 0) + qty;
-        }
-      });
-      const remaining = Math.max(0, maxQty - (usedByProduct[productSelect.value] || 0));
-      const quantityInput = row.querySelector('.quantity-input');
-      if (quantityInput) {
-        quantityInput.value = remaining > 0 ? remaining : 1;
-      }
-    }
-  } else {
-    // Supplier changed — update rate based on new supplier selection
-    updateRateFromRfq(row);
+  if (productSelect) {
+    handleProductChange(row);
+  } else if (supplierSelect) {
+    handleSupplierChange(row);
   }
 
   updateQuantityLimits();
@@ -496,28 +751,7 @@ document.addEventListener('input', function (e) {
 });
 
 function updateRateFromRfq(row) {
-  if (!row) return;
-
-  const productSelect = row.querySelector('.product-select');
-  const supplierSelect = row.querySelector('.supplier-dropdown');
-  const rateInput = row.querySelector('.rate-input');
-  if (!productSelect || !supplierSelect || !rateInput) return;
-
-  const productId = String(productSelect.value);
-  if (!productId) return;
-
-  const supplierId = String(supplierSelect.value);
-  if (!supplierId) {
-    rateInput.value = '';
-    return;
-  }
-
-  // First try: supplier-specific rate from RFQ supplier prices
-  const productRates = rfqRateMap[productId] || {};
-  const rfqRate = productRates[supplierId];
-  if (rfqRate !== undefined && rfqRate !== null && rfqRate !== '') {
-    rateInput.value = Number(rfqRate).toFixed(2);
-  }
+  handleSupplierChange(row);
 }
 
 function updateSupplierRowValues() {
@@ -554,7 +788,8 @@ function updateQuantityLimits() {
     const quantityInput = row.querySelector('.quantity-input');
     if (!productSelect || !productSelect.value) return;
     const qty = parseInt(quantityInput.value || '0', 10);
-    usedByProduct[productSelect.value] = (usedByProduct[productSelect.value] || 0) + qty;
+    const pid = String(productSelect.value);
+    usedByProduct[pid] = (usedByProduct[pid] || 0) + (isNaN(qty) ? 0 : qty);
   });
 
   rows.forEach(row => {
@@ -568,8 +803,9 @@ function updateQuantityLimits() {
         ? parseInt(selectedOption.dataset.maxQty || selectedOption.getAttribute('data-max-qty') || '0', 10)
         : 0;
     const currentQty = parseInt(quantityInput.value || '0', 10);
-    const totalUsed = productSelect.value ? usedByProduct[productSelect.value] || 0 : 0;
-    const remaining = Math.max(0, maxQty - (totalUsed - currentQty));
+    const pid = String(productSelect.value || '');
+    const totalUsed = pid ? usedByProduct[pid] || 0 : 0;
+    const remaining = Math.max(0, maxQty - (totalUsed - (isNaN(currentQty) ? 0 : currentQty)));
 
     quantityInput.max = remaining;
     quantityInput.placeholder = remaining ? `Max ${remaining}` : '';
@@ -585,12 +821,15 @@ function updateOverallSupplierQty() {
     const productSelect = row.querySelector('.product-select');
     const qtyInput = row.querySelector('.quantity-input');
     const qty = parseInt(qtyInput.value || '0', 10);
-    if (productSelect.value && qty > 0) {
+    if (productSelect && productSelect.value && !isNaN(qty) && qty > 0) {
       totalSupplierQty += qty;
     }
   });
 
-  document.getElementById('totalSupplierQty').textContent = totalSupplierQty;
+  const totalSupplierQtyEl = document.getElementById('totalSupplierQty');
+  if (totalSupplierQtyEl) {
+    totalSupplierQtyEl.textContent = totalSupplierQty;
+  }
 
   const addRowBtn = document.getElementById('addSupplierRow');
   if (addRowBtn) {
@@ -646,7 +885,14 @@ document.getElementById('supplierOrderForm').addEventListener('submit', function
   }
 });
 
-document.querySelectorAll('#supplierTable tbody tr').forEach(updateRateFromRfq);
+document.querySelectorAll('#supplierTable tbody tr').forEach(row => {
+  const pSelect = row.querySelector('.product-select');
+  const supplierSelect = row.querySelector('.supplier-dropdown');
+  const rateInput = row.querySelector('.rate-input');
+  if (pSelect && pSelect.value && (!supplierSelect?.value || !rateInput?.value)) {
+    handleProductChange(row);
+  }
+});
 updateQuantityLimits();
 updateSupplierRowValues();
 updateOverallSupplierQty();
@@ -669,6 +915,28 @@ document.addEventListener('DOMContentLoaded', function() {
         form.reportValidity();
         return;
       }
+
+      const rows = document.querySelectorAll('#supplierTable tbody tr');
+      let validRows = 0;
+      for (const row of rows) {
+        const pSelect = row.querySelector('.product-select');
+        const sSelect = row.querySelector('.supplier-dropdown');
+        const qInput = row.querySelector('.quantity-input');
+        const rInput = row.querySelector('.rate-input');
+        if (pSelect && pSelect.value && sSelect && sSelect.value && qInput && parseInt(qInput.value || '0', 10) > 0 && rInput && parseFloat(rInput.value || '0') > 0) {
+          validRows++;
+        }
+      }
+      if (validRows === 0) {
+        alert('Please select products, suppliers, rates, and quantities before generating PO.');
+        return;
+      }
+
+      if (!validateAllValidityDates()) {
+        alert(`Please ensure all Supplier PO Validity dates are earlier than Customer PO Date (${targetCustomerDateDisplay}).`);
+        return;
+      }
+
       const modal = bootstrap.Modal.getOrCreateInstance(deliveryAddressModal);
       modal.show();
     });
@@ -701,56 +969,54 @@ document.addEventListener('DOMContentLoaded', function() {
       const form = document.getElementById('supplierOrderForm');
       if (!form) return;
 
-      const newTab = window.open('about:blank', '_blank');
+      const modal = bootstrap.Modal.getInstance(deliveryAddressModal);
+      if (modal) modal.hide();
 
-      modalConfirmGeneratePoBtn.disabled = true;
-      modalConfirmGeneratePoBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processing...';
+      let actionInput = form.querySelector('input[name="action"]');
+      if (!actionInput) {
+        actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        form.appendChild(actionInput);
+      }
+      actionInput.value = 'generate_po';
 
-      const formData = new FormData(form);
-      formData.append('delivery_address', selectedAddress);
+      let addrInput = form.querySelector('input[name="delivery_address"]');
+      if (!addrInput) {
+        addrInput = document.createElement('input');
+        addrInput.type = 'hidden';
+        addrInput.name = 'delivery_address';
+        form.appendChild(addrInput);
+      }
+      addrInput.value = selectedAddress;
 
-      fetch(window.location.href, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest'
-        }
-      }).then(response => {
-        const modal = bootstrap.Modal.getInstance(deliveryAddressModal);
-        if (modal) modal.hide();
+      form.target = '_blank';
+      form.submit();
 
-        const poUrl = "{% url 'generate_supplier_po' dpr.id %}?delivery_address=" + encodeURIComponent(selectedAddress);
-        if (newTab) {
-          newTab.location.href = poUrl;
-        } else {
-          window.open(poUrl, '_blank');
-        }
-        window.location.href = "{% url 'dpr_view' %}";
-      }).catch(err => {
-        console.error('Error updating supplier orders:', err);
-        if (newTab) newTab.close();
-        alert('An error occurred while updating supplier orders.');
-        modalConfirmGeneratePoBtn.disabled = false;
-        modalConfirmGeneratePoBtn.innerHTML = '<i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO';
-      });
+      setTimeout(function() {
+        form.target = '';
+        if (actionInput) actionInput.value = '';
+        window.location.reload();
+      }, 1000);
     });
+  }
+
+  updateSupplierEmailButtons();
+  validateAllValidityDates();
+});
+
+updateSupplierEmailButtons();
+validateAllValidityDates();
+
+document.getElementById('supplierOrderForm')?.addEventListener('submit', function(e) {
+  if (!validateAllValidityDates()) {
+    e.preventDefault();
+    alert(`Please ensure all Supplier PO Validity dates are earlier than Customer PO Date (${targetCustomerDateDisplay}).`);
+    return false;
   }
 });
 
 const sendMailBtn = document.getElementById('sendMailBtn');
-
-if (generatePoBtn && supplierOrderForm) {
-  supplierOrderForm.addEventListener('submit', function(e) {
-    if (e.defaultPrevented || e.submitter !== generatePoBtn) {
-      return;
-    }
-    supplierOrderForm.target = '_blank';
-    // The prepared PDF opens in a new tab; refresh this page with the email actions.
-    setTimeout(function() {
-      window.location.href = window.location.pathname + '?po_generated=1';
-    }, 1000);
-  });
-}
 
 sendMailBtn?.addEventListener('click', function() {
   if (sendMailBtn.disabled) return;

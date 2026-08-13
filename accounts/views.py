@@ -789,7 +789,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         'Dispatch Mode : NIL' if has_amc_service else 'Dispatch Mode : By Courier',
         'Packing & Forwarding : 2%',
         installation_str,
-        'Discount : Negotiable',
+       'Discount : Negotiable',
         f'Quotation Validity : This offer is Valid till {valid_till}',
         'Purchase Order : Purchase Order must be send to info@mesinstruments.co.in',
         'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
@@ -1133,37 +1133,41 @@ def dashboard(request):
             for part in dpr_quote_str.split(','):
                 confirmed_quote_set.add(part.strip())
 
-    rfq_confirmed_count = 0
-    rfq_quotation_sent_count = 0
-    rfq_price_pending_count = 0
-    rfq_overdue_count = 0
-    rfq_quotation_pending_count = 0
+    pending_rfqs = []
+    confirmed_rfqs = []
+    overdue_rfqs = []
 
     for rfq in all_rfqs:
+        rfq.row_class = _get_rfq_row_alert_class(rfq)
+        rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
         rfq_quote_nos = list(rfq.quotations.values_list('quotation_number', flat=True))
-        is_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
-        if is_confirmed:
-            rfq_confirmed_count += 1
-        
-        if rfq.quotation_email_sent:
-            rfq_quotation_sent_count += 1
+        is_po_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
+        is_quote_submitted = (
+            rfq.row_class == 'table-success'
+            or rfq.quotation_email_sent
+            or rfq.quotations.filter(email_sent=True).exists()
+            or is_po_confirmed
+        )
+
+        if is_quote_submitted:
+            confirmed_rfqs.append(rfq)
+        elif rfq.row_class == 'table-danger':
+            overdue_rfqs.append(rfq)
         else:
-            rfq_quotation_pending_count += 1
-            is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
-            if is_overdue and not is_confirmed:
-                rfq_overdue_count += 1
-        
-        products = list(rfq.products.all())
-        if products and any(not p.price_known or p.value == 0 for p in products):
-            rfq_price_pending_count += 1
+            pending_rfqs.append(rfq)
+
+    rfq_confirmed_count = len(confirmed_rfqs)
+    rfq_quotation_sent_count = len(confirmed_rfqs)
+    rfq_overdue_count = len(overdue_rfqs)
+    rfq_quotation_pending_count = len(pending_rfqs)
+    rfq_quotation_not_sent_count = len(pending_rfqs)
 
     rfq_confirmed_pct = _pct(rfq_confirmed_count, total_rfq_count)
     rfq_quotation_sent_pct = _pct(rfq_quotation_sent_count, total_rfq_count)
-    rfq_price_pending_pct = _pct(rfq_price_pending_count, total_rfq_count)
     rfq_overdue_pct = _pct(rfq_overdue_count, total_rfq_count)
+    rfq_price_pending_count = rfq_overdue_count
+    rfq_price_pending_pct = rfq_overdue_pct
     rfq_quotation_pending_pct = _pct(rfq_quotation_pending_count, total_rfq_count)
-
-    rfq_quotation_not_sent_count = RFQ.objects.filter(quotation_email_sent=False).count()
 
     return render(request, 'dashboard.html', {
         'total_dpr_count': total_dpr_count,
@@ -1419,7 +1423,7 @@ def customer_po_product_details(request):
     products = CustomerProduct.objects.select_related(
         'dpr',
         'dpr__customer'
-    ).prefetch_related('supplierproduct_set').annotate(
+    ).prefetch_related('supplierproduct_set', 'invoices').annotate(
         status_rank=Case(
             When(status='delivered', then=Value(2)),
             When(status='partially_delivered', then=Value(1)),
@@ -1472,6 +1476,8 @@ def customer_po_product_details(request):
             product.generated_invoice_number = inv_no_val
         else:
             product.generated_invoice_number = f"MES-F{product.id:04d}"
+
+        product.generated_invoices = list(product.invoices.all().order_by('id'))
 
     # Sort Red (Pending/Expired/Not Delivered) at TOP (0), Yellow (Partial/Due Soon) in MIDDLE (1), Green (Delivered/Closed) at BOTTOM (2)
     def _color_rank(p):
@@ -1834,9 +1840,14 @@ def accounts_details(request):
         item = {
             'product': product,
             'dpr': product.dpr,
+            'customer_id': cust.id if cust else '',
             'customer_name': cust.customer_name if cust else '-',
+            'customer_email': cust.email if cust and cust.email else 'ajayasok008@gmail.com',
+            'customer_po_number': (product.dpr.po_number or '').strip() if product.dpr else '',
+            'product_name': product.product_name or product.product_type or '-',
             'invoice_number': inv_no,
             'invoice_date': inv_date,
+            'invoice_date_formatted': inv_date.strftime('%d-%m-%Y') if inv_date else '-',
             'terms_date': terms_date,
             'po_value': po_val,
             'received_amount': rec_amt,
@@ -1846,21 +1857,14 @@ def accounts_details(request):
             'is_paid': is_paid,
             'is_due_soon': is_due_soon,
             'is_overdue': is_overdue,
+            'expected_payment_date': product.expected_payment_date,
+            'payment_received_date': product.payment_received_date,
+            'follow_up_remarks': product.follow_up_remarks or '',
+            'payment_notes': product.payment_notes or '',
         }
         items.append(item)
 
     items.sort(key=lambda x: x['invoice_date'], reverse=True)
-
-    if case_filter == 'amount_received':
-        items = [x for x in items if x['is_paid']]
-    elif case_filter == 'partially_received':
-        items = [x for x in items if x['payment_status'] == 'partially_received']
-    elif case_filter == 'not_received':
-        items = [x for x in items if x['payment_status'] == 'not_received' and not x['is_paid']]
-    elif case_filter == 'due_soon':
-        items = [x for x in items if x['is_due_soon']]
-    elif case_filter == 'overdue':
-        items = [x for x in items if x['is_overdue']]
 
     total_products = len(products)
     delivery_pct = _pct(received_count, total_products)
@@ -1887,6 +1891,33 @@ def accounts_details(request):
 
 
 @role_required('ADMIN')
+def customer_product_followup_update(request, product_id):
+    if request.method != 'POST':
+        raise Http404
+    try:
+        product = CustomerProduct.objects.get(pk=product_id)
+    except CustomerProduct.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Product not found'}, status=404)
+
+    exp_date_raw = request.POST.get('expected_payment_date', '').strip()
+    remarks = request.POST.get('follow_up_remarks', '').strip()
+
+    if exp_date_raw:
+        try:
+            from datetime import datetime
+            product.expected_payment_date = datetime.strptime(exp_date_raw, '%Y-%m-%d').date()
+        except ValueError:
+            product.expected_payment_date = None
+    else:
+        product.expected_payment_date = None
+
+    product.follow_up_remarks = remarks
+    product.save(update_fields=['expected_payment_date', 'follow_up_remarks'])
+
+    return JsonResponse({'status': 'ok'})
+
+
+@role_required('ADMIN')
 def customer_product_payment_update(request, product_id):
     if request.method != 'POST':
         raise Http404
@@ -1901,27 +1932,26 @@ def customer_product_payment_update(request, product_id):
 
     today = timezone.localdate()
 
-    if payment_status == 'amount_received':
-        product.payment_status = 'amount_received'
-        product.received_amount = product.value or Decimal('0.00')
-        product.payment_received_date = today
-    elif payment_status == 'partially_received':
+    if payment_status in ('amount_received', 'partially_received'):
+        po_val = product.value or Decimal('0.00')
         amount_raw = request.POST.get('received_amount', '').strip()
         try:
             amt = Decimal(amount_raw or '0')
         except InvalidOperation:
-            return JsonResponse({'status': 'error', 'message': 'Received amount must be a valid number'}, status=400)
-        
-        if amt <= 0:
-            return JsonResponse({'status': 'error', 'message': 'Received amount must be greater than 0'}, status=400)
-        
-        po_val = product.value or Decimal('0.00')
-        if amt >= po_val:
+            amt = po_val
+
+        if payment_status == 'amount_received':
             product.payment_status = 'amount_received'
-            product.received_amount = po_val
+            product.received_amount = amt if amt > 0 else po_val
         else:
-            product.payment_status = 'partially_received'
-            product.received_amount = amt
+            if amt >= po_val:
+                product.payment_status = 'amount_received'
+                product.received_amount = po_val
+            elif amt > 0:
+                product.payment_status = 'partially_received'
+                product.received_amount = amt
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Received amount must be greater than 0'}, status=400)
 
         rec_date_raw = request.POST.get('payment_received_date', '').strip()
         if rec_date_raw:
@@ -1932,21 +1962,292 @@ def customer_product_payment_update(request, product_id):
                 product.payment_received_date = today
         else:
             product.payment_received_date = today
-            
+
         notes = request.POST.get('payment_notes', '').strip()
-        if notes:
+        if 'payment_notes' in request.POST:
             product.payment_notes = notes
 
     elif payment_status == 'not_received':
         product.payment_status = 'not_received'
         product.received_amount = Decimal('0.00')
         product.payment_received_date = None
+        product.payment_notes = None
+
+    if 'expected_payment_date' in request.POST:
+        exp_date_raw = request.POST.get('expected_payment_date', '').strip()
+        if exp_date_raw:
+            try:
+                from datetime import datetime
+                product.expected_payment_date = datetime.strptime(exp_date_raw, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        else:
+            product.expected_payment_date = None
+
+    if 'follow_up_remarks' in request.POST:
+        product.follow_up_remarks = request.POST.get('follow_up_remarks', '').strip()
 
     product.save(update_fields=[
         'payment_status',
         'received_amount',
         'payment_received_date',
-        'payment_notes'
+        'payment_notes',
+        'expected_payment_date',
+        'follow_up_remarks'
+    ])
+
+    return JsonResponse({
+        'status': 'ok',
+        'payment_status': product.payment_status,
+        'received_amount': str(product.received_amount),
+        'payment_received_date': product.payment_received_date.strftime('%Y-%m-%d') if product.payment_received_date else '',
+    })
+
+
+@role_required('ADMIN')
+def supplier_accounts_details(request):
+    case_filter = request.GET.get('case', '').strip()
+    today = timezone.localdate()
+
+    products = SupplierProduct.objects.select_related(
+        'supplier',
+        'customer_product',
+        'customer_product__dpr'
+    )
+
+    items = []
+    total_invoice_value = Decimal('0.00')
+    total_received_amount = Decimal('0.00')
+    total_outstanding_amount = Decimal('0.00')
+    overdue_amount = Decimal('0.00')
+
+    received_count = 0
+    partially_received_count = 0
+    not_received_count = 0
+    due_soon_count = 0
+    overdue_count = 0
+
+    for product in products:
+        dpr_created = product.customer_product.dpr.created_at.date() if (product.customer_product and product.customer_product.dpr and product.customer_product.dpr.created_at) else today
+        inv_date = product.invoice_date or product.po_date or dpr_created
+        inv_no = (product.po_number or product.invoice_dc_number or '').strip()
+        if not inv_no:
+            inv_no = f"SUP-PO{product.id:04d}"
+
+        supp = product.supplier
+        terms_str = (supp.payment_terms or '').strip().lower() if supp else ''
+        days = 30
+        match = re.search(r'(\d+)', terms_str)
+        if match:
+            try:
+                val = int(match.group(1))
+                if 'day' in terms_str:
+                    days = val
+                elif 'month' in terms_str:
+                    days = val * 30
+                else:
+                    # Supplier payment terms in Master is entered in Weeks (e.g. 2, 4 weeks)
+                    days = val * 7
+            except ValueError:
+                pass
+
+        terms_date = inv_date + timedelta(days=days)
+
+        po_val = product.po_value or Decimal('0.00')
+        rec_amt = product.received_amount or Decimal('0.00')
+        rem_amt = max(po_val - rec_amt, Decimal('0.00'))
+
+        is_paid = (product.payment_status == 'amount_received' or rec_amt >= po_val)
+        is_due_soon = not is_paid and (today <= terms_date <= today + timedelta(days=7))
+        is_overdue = not is_paid and (today > terms_date)
+
+        if is_paid:
+            color_state = 'green'
+            received_count += 1
+        elif is_due_soon:
+            color_state = 'orange'
+            due_soon_count += 1
+            if product.payment_status == 'partially_received':
+                partially_received_count += 1
+            else:
+                not_received_count += 1
+        elif is_overdue:
+            color_state = 'red'
+            overdue_count += 1
+            overdue_amount += rem_amt
+            if product.payment_status == 'partially_received':
+                partially_received_count += 1
+            else:
+                not_received_count += 1
+        else:
+            color_state = 'orange' if (terms_date - today).days <= 7 else 'red' if today > terms_date else 'normal'
+            if product.payment_status == 'partially_received':
+                partially_received_count += 1
+            else:
+                not_received_count += 1
+
+        total_invoice_value += po_val
+        total_received_amount += rec_amt
+        total_outstanding_amount += rem_amt
+
+        item = {
+            'product': product,
+            'supplier_id': supp.id if supp else '',
+            'supplier_name': supp.supplier_name if supp else '-',
+            'supplier_email': supp.email if supp and supp.email else 'ajayasok008@gmail.com',
+            'supplier_po_number': (product.po_number or '').strip(),
+            'product_name': product.customer_product.product_name if product.customer_product else (product.customer_product.product_type if product.customer_product else '-'),
+            'invoice_number': inv_no,
+            'invoice_date': inv_date,
+            'invoice_date_formatted': inv_date.strftime('%d-%m-%Y') if inv_date else '-',
+            'terms_date': terms_date,
+            'po_value': po_val,
+            'received_amount': rec_amt,
+            'remaining_amount': rem_amt,
+            'payment_status': product.payment_status or 'not_received',
+            'color_state': color_state,
+            'is_paid': is_paid,
+            'is_due_soon': is_due_soon,
+            'is_overdue': is_overdue,
+            'expected_payment_date': product.expected_payment_date,
+            'payment_received_date': product.payment_received_date,
+            'follow_up_remarks': product.follow_up_remarks or '',
+            'payment_notes': product.payment_notes or '',
+            'supplier_invoice_number': product.supplier_invoice_number or '',
+            'bill_attachment_url': product.bill_attachment.url if product.bill_attachment else '',
+        }
+        items.append(item)
+
+    items.sort(key=lambda x: x['invoice_date'] if x['invoice_date'] else today, reverse=True)
+
+    total_products = len(products)
+    delivery_pct = _pct(received_count, total_products)
+
+    return render(
+        request,
+        'supplier_accounts_details.html',
+        {
+            'items': items,
+            'total_products': total_products,
+            'total_invoice_value': total_invoice_value,
+            'total_received_amount': total_received_amount,
+            'total_outstanding_amount': total_outstanding_amount,
+            'overdue_amount': overdue_amount,
+            'received_count': received_count,
+            'partially_received_count': partially_received_count,
+            'not_received_count': not_received_count,
+            'due_soon_count': due_soon_count,
+            'overdue_count': overdue_count,
+            'delivery_pct': delivery_pct,
+            'case_filter': case_filter,
+        }
+    )
+
+
+@role_required('ADMIN')
+def supplier_product_followup_update(request, supplier_product_id):
+    if request.method != 'POST':
+        raise Http404
+    try:
+        product = SupplierProduct.objects.get(pk=supplier_product_id)
+    except SupplierProduct.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Supplier product not found'}, status=404)
+
+    exp_date_raw = request.POST.get('expected_payment_date', '').strip()
+    remarks = request.POST.get('follow_up_remarks', '').strip()
+
+    if exp_date_raw:
+        try:
+            from datetime import datetime
+            product.expected_payment_date = datetime.strptime(exp_date_raw, '%Y-%m-%d').date()
+        except ValueError:
+            product.expected_payment_date = None
+    else:
+        product.expected_payment_date = None
+
+    product.follow_up_remarks = remarks
+    product.save(update_fields=['expected_payment_date', 'follow_up_remarks'])
+
+    return JsonResponse({'status': 'ok'})
+
+
+@role_required('ADMIN')
+def supplier_product_payment_update(request, supplier_product_id):
+    if request.method != 'POST':
+        raise Http404
+    try:
+        product = SupplierProduct.objects.select_related('supplier').get(pk=supplier_product_id)
+    except SupplierProduct.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Supplier product not found'}, status=404)
+
+    payment_status = request.POST.get('payment_status', '').strip()
+    if payment_status not in ('amount_received', 'partially_received', 'not_received'):
+        return JsonResponse({'status': 'error', 'message': 'Invalid payment status'}, status=400)
+
+    today = timezone.localdate()
+
+    if payment_status in ('amount_received', 'partially_received'):
+        po_val = product.po_value or Decimal('0.00')
+        amount_raw = request.POST.get('received_amount', '').strip()
+        try:
+            amt = Decimal(amount_raw or '0')
+        except InvalidOperation:
+            amt = po_val
+
+        if payment_status == 'amount_received':
+            product.payment_status = 'amount_received'
+            product.received_amount = amt if amt > 0 else po_val
+        else:
+            if amt >= po_val:
+                product.payment_status = 'amount_received'
+                product.received_amount = po_val
+            elif amt > 0:
+                product.payment_status = 'partially_received'
+                product.received_amount = amt
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Received amount must be greater than 0'}, status=400)
+
+        rec_date_raw = request.POST.get('payment_received_date', '').strip()
+        if rec_date_raw:
+            try:
+                from datetime import datetime
+                product.payment_received_date = datetime.strptime(rec_date_raw, '%Y-%m-%d').date()
+            except ValueError:
+                product.payment_received_date = today
+        else:
+            product.payment_received_date = today
+
+        notes = request.POST.get('payment_notes', '').strip()
+        if 'payment_notes' in request.POST:
+            product.payment_notes = notes
+
+    elif payment_status == 'not_received':
+        product.payment_status = 'not_received'
+        product.received_amount = Decimal('0.00')
+        product.payment_received_date = None
+        product.payment_notes = None
+
+    if 'expected_payment_date' in request.POST:
+        exp_date_raw = request.POST.get('expected_payment_date', '').strip()
+        if exp_date_raw:
+            try:
+                from datetime import datetime
+                product.expected_payment_date = datetime.strptime(exp_date_raw, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        else:
+            product.expected_payment_date = None
+
+    if 'follow_up_remarks' in request.POST:
+        product.follow_up_remarks = request.POST.get('follow_up_remarks', '').strip()
+
+    product.save(update_fields=[
+        'payment_status',
+        'received_amount',
+        'payment_received_date',
+        'payment_notes',
+        'expected_payment_date',
+        'follow_up_remarks'
     ])
 
     return JsonResponse({
@@ -2025,15 +2326,42 @@ def supplier_product_status_update(request, supplier_product_id):
         else:
             supplier_product.status = None
 
+        supplier_invoice_number = request.POST.get('supplier_invoice_number', '').strip() or None
+        supplier_bill_amount_raw = request.POST.get('supplier_bill_amount', '').strip()
+        bill_attachment = request.FILES.get('bill_attachment')
+
         supplier_product.quantity_received = received_quantity
         supplier_product.quantity_not_ok = not_ok_quantity
         supplier_product.not_ok_reason = not_ok_reason if not_ok_quantity > 0 else None
-        supplier_product.save(update_fields=[
+
+        update_fields = [
             'status',
             'quantity_received',
             'quantity_not_ok',
             'not_ok_reason'
-        ])
+        ]
+
+        if 'supplier_invoice_number' in request.POST:
+            supplier_product.supplier_invoice_number = supplier_invoice_number
+            supplier_product.invoice_dc_number = supplier_invoice_number
+            update_fields.extend(['supplier_invoice_number', 'invoice_dc_number'])
+
+        if 'supplier_bill_amount' in request.POST:
+            try:
+                supplier_product.supplier_bill_amount = Decimal(supplier_bill_amount_raw or '0')
+            except (InvalidOperation, ValueError):
+                supplier_product.supplier_bill_amount = Decimal('0.00')
+            update_fields.append('supplier_bill_amount')
+
+        if bill_attachment:
+            supplier_product.bill_attachment = bill_attachment
+            update_fields.append('bill_attachment')
+
+        if received_quantity > 0 and not supplier_product.invoice_date:
+            supplier_product.invoice_date = timezone.localdate()
+            update_fields.append('invoice_date')
+
+        supplier_product.save(update_fields=update_fields)
         _sync_dpr_supplier_qty_received(supplier_product.customer_product.dpr)
         return JsonResponse({
             'status': 'ok',
@@ -2041,7 +2369,11 @@ def supplier_product_status_update(request, supplier_product_id):
             'quantity_received': supplier_product.quantity_received,
             'quantity_ok': ok_quantity,
             'quantity_not_ok': supplier_product.quantity_not_ok,
-            'not_ok_reason': supplier_product.not_ok_reason or ''
+            'not_ok_reason': supplier_product.not_ok_reason or '',
+            'supplier_invoice_number': supplier_product.supplier_invoice_number or '',
+            'supplier_bill_amount': str(supplier_product.supplier_bill_amount or '0.00'),
+            'bill_attachment_url': supplier_product.bill_attachment.url if supplier_product.bill_attachment else '',
+            'bill_attachment_name': supplier_product.bill_attachment.name.split('/')[-1] if supplier_product.bill_attachment else ''
         })
 
     status = request.POST.get('status', '').strip() or None
@@ -2073,12 +2405,17 @@ def supplier_product_status_update(request, supplier_product_id):
     else:
         supplier_product.quantity_received = 0
 
-    supplier_product.save(update_fields=[
+    update_fields = [
         'status',
         'quantity_received',
         'quantity_not_ok',
         'not_ok_reason'
-    ])
+    ]
+    if supplier_product.quantity_received > 0 and not supplier_product.invoice_date:
+        supplier_product.invoice_date = timezone.localdate()
+        update_fields.append('invoice_date')
+
+    supplier_product.save(update_fields=update_fields)
     _sync_dpr_supplier_qty_received(supplier_product.customer_product.dpr)
     return JsonResponse({'status': 'ok'})
 
@@ -2304,6 +2641,7 @@ def dpr_supplier(request, dpr_id):
         raise Http404
 
     from collections import defaultdict
+    from datetime import timedelta
     from products.models import SupplierProduct
 
     products = CustomerProduct.objects.filter(dpr=dpr)
@@ -2361,6 +2699,47 @@ def dpr_supplier(request, dpr_id):
             continue
         # Known-price products override the supplier-price default
         product_default_rate_map[str(customer_product_id)] = str(rfq_product.rate_per_unit)
+
+    if not supplier_orders.exists() and products.exists() and request.method == 'GET':
+        from datetime import timedelta
+        po_date = timezone.localdate()
+        target_customer_date = dpr.po_validity or dpr.po_date
+        validity_date = (target_customer_date - timedelta(days=7)) if target_customer_date else (po_date + timedelta(days=7))
+
+        for p in products:
+            p_id_str = str(p.id)
+            rates_for_prod = rfq_rate_map.get(p_id_str, {})
+            assigned_supplier = None
+            assigned_rate = Decimal('0.00')
+            if rates_for_prod:
+                for s_id_str, s_price in rates_for_prod.items():
+                    assigned_supplier = suppliers.filter(id=int(s_id_str)).first()
+                    if assigned_supplier:
+                        assigned_rate = Decimal(str(s_price))
+                        break
+            if not assigned_supplier:
+                assigned_supplier = suppliers.first()
+                def_rate = product_default_rate_map.get(p_id_str)
+                assigned_rate = Decimal(str(def_rate)) if def_rate else (p.rate_per_unit or Decimal('0.00'))
+
+            po_val = (p.quantity_ordered or 0) * assigned_rate
+            po_num = f'SPO-{po_date:%Y%m%d}-{dpr.id:04d}-{assigned_supplier.id:04d}' if assigned_supplier else ''
+
+            SupplierProduct.objects.create(
+                customer_product=p,
+                supplier=assigned_supplier,
+                rate_per_unit=assigned_rate,
+                po_value=po_val,
+                po_date=po_date,
+                po_validity=validity_date,
+                quantity=p.quantity_ordered or 0,
+                po_number=po_num,
+            )
+
+        supplier_orders = SupplierProduct.objects.filter(
+            customer_product__dpr=dpr
+        ).select_related('customer_product', 'supplier')
+
     total_supplier_quantity = supplier_orders.aggregate(
         total=Coalesce(Sum('quantity'), 0)
     )['total']
@@ -2401,6 +2780,10 @@ def dpr_supplier(request, dpr_id):
                 sp.customer_product_id,
                 sp.supplier_id,
             )
+            for sp in supplier_orders
+        }
+        existing_pdf_generated = {
+            str(sp.id): sp.po_pdf_generated
             for sp in supplier_orders
         }
 
@@ -2454,12 +2837,27 @@ def dpr_supplier(request, dpr_id):
                 )
                 return redirect('dpr_supplier', dpr_id=dpr.id)
 
-            if dpr.po_validity and po_validities[i] >= dpr.po_validity.strftime('%Y-%m-%d'):
-                messages.warning(
-                    request,
-                    f"Supplier PO validity in row {i + 1} is on/after customer PO validity ({dpr.po_validity})."
-                )
-                return redirect('dpr_supplier', dpr_id=dpr.id)
+            if po_validities[i]:
+                try:
+                    from datetime import datetime
+                    sp_val_dt = datetime.strptime(po_validities[i], '%Y-%m-%d').date()
+                    today = timezone.localdate()
+                    if sp_val_dt < today:
+                        messages.error(
+                            request,
+                            f"Supplier PO validity in row {i + 1} ({sp_val_dt.strftime('%d-%m-%Y')}) cannot be in the past (Today is {today.strftime('%d-%m-%Y')})."
+                        )
+                        return redirect('dpr_supplier', dpr_id=dpr.id)
+
+                    target_customer_date = dpr.po_validity or dpr.po_date
+                    if target_customer_date and sp_val_dt >= target_customer_date:
+                        messages.error(
+                            request,
+                            f"Supplier PO validity in row {i + 1} ({sp_val_dt.strftime('%d-%m-%Y')}) must be earlier than Customer PO date ({target_customer_date.strftime('%d-%m-%Y')})."
+                        )
+                        return redirect('dpr_supplier', dpr_id=dpr.id)
+                except ValueError:
+                    pass
 
         if total_entered_supplier_qty > total_customer_quantity:
             messages.error(
@@ -2499,17 +2897,23 @@ def dpr_supplier(request, dpr_id):
                 and previous_email_state[2] == supplier.id
             )
 
+            po_date = timezone.localdate()
+            po_number = existing_po_numbers.get(existing_id)
+            if not po_number or not po_number.startswith('SPO-'):
+                po_number = f'SPO-{po_date:%Y%m%d}-{dpr.id:04d}-{supplier.id:04d}'
+
             SupplierProduct.objects.create(
                 customer_product=customer_product,
                 supplier=supplier,
                 rate_per_unit=rate,
                 po_value=po_value,
-                po_date=timezone.localdate(),
+                po_date=po_date,
                 po_validity=po_validities[i] or None,
                 quantity=quantity,
-                po_number=existing_po_numbers.get(existing_id, ''),
+                po_number=po_number,
                 po_attachment=po_attachment,
                 po_email_sent=preserve_email_sent,
+                po_pdf_generated=existing_pdf_generated.get(existing_id, False),
             )
 
         _sync_dpr_supplier_qty_ordered(dpr)
@@ -2537,16 +2941,13 @@ def dpr_supplier(request, dpr_id):
     for sp in supplier_orders:
         groups[sp.supplier].append(sp)
 
-    for sp in supplier_orders:
-        sp.show_supplier_email_action = False
-
     po_data_list = []
+    supplier_group_indices = {}
     for group_index, (supplier, items) in enumerate(groups.items()):
-        po_number = items[0].po_number or 'PO'
-        first_item = items[0]
-        first_item.show_supplier_email_action = True
-        first_item.email_group_index = group_index
-        first_item.email_group_product_count = len(items)
+        supplier_group_indices[supplier.id] = group_index
+        po_number = items[0].po_number or f'SPO-{timezone.localdate():%Y%m%d}-{dpr.id:04d}-{supplier.id:04d}'
+        # po_pdf_generated is True only when the Generate PO & Update button was clicked
+        supplier_po_generated = any(sp.po_pdf_generated for sp in items)
         po_data_list.append({
             'supplier_id': supplier.id,
             'po_number': po_number,
@@ -2554,6 +2955,7 @@ def dpr_supplier(request, dpr_id):
             'supplier_email': supplier.email or '',
             'combined_supplier': True,
             'product_count': len(items),
+            'po_generated': supplier_po_generated,
             'default_subject': f"Purchase Order - {po_number} from Metrology Engineering Solutions",
             'default_body': (
                 f"Dear Sir/Madam,\n\n"
@@ -2565,13 +2967,25 @@ def dpr_supplier(request, dpr_id):
             )
         })
 
+    seen_suppliers_for_email = set()
+    for sp in supplier_orders:
+        if sp.supplier_id not in seen_suppliers_for_email:
+            sp.show_supplier_email_action = True
+            seen_suppliers_for_email.add(sp.supplier_id)
+        else:
+            sp.show_supplier_email_action = False
+        sp.email_group_index = supplier_group_indices.get(sp.supplier_id, 0)
+        sp.email_group_product_count = len(groups.get(sp.supplier, []))
+
     supplier_ids = {sp.supplier_id for sp in supplier_orders}
     all_same_supplier = bool(supplier_orders) and len(supplier_ids) == 1
-    po_prepared = bool(supplier_orders) and all(
-        (sp.po_number or '').startswith('SPO-')
-        for sp in supplier_orders
-    )
+    # po_prepared is True only when at least one supplier order had its PO PDF generated
+    po_prepared = any(sp.po_pdf_generated for sp in supplier_orders)
 
+    target_customer_date = dpr.po_validity or dpr.po_date
+    default_supplier_validity = (target_customer_date - timedelta(days=7)) if target_customer_date else (timezone.localdate() + timedelta(days=7))
+
+    today = timezone.localdate()
     context = {
         'dpr': dpr,
         'products': products,
@@ -2588,6 +3002,12 @@ def dpr_supplier(request, dpr_id):
         'po_data_list': po_data_list,
         'all_same_supplier': all_same_supplier,
         'po_prepared': po_prepared,
+        'customer_po_date': dpr.po_date,
+        'customer_po_validity': dpr.po_validity,
+        'target_customer_date': target_customer_date,
+        'default_supplier_validity': default_supplier_validity,
+        'today': today,
+        'today_str': today.strftime('%Y-%m-%d'),
     }
     return render(request, 'supplier_order.html', context)
 
@@ -2618,7 +3038,7 @@ def _validate_customer_region(region):
     return None
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'SALES')
 def customer_details(request):
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -2640,6 +3060,9 @@ def customer_details(request):
             region_error = _validate_customer_region(region)
             if region_error:
                 messages.error(request, region_error)
+                return redirect('customer_details')
+            if not state_code:
+                messages.error(request, 'State Code is required.')
                 return redirect('customer_details')
             if email:
                 try:
@@ -3403,6 +3826,7 @@ def supplier_details(request):
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
+        payment_terms = request.POST.get('payment_terms', '').strip()
 
 
         if action in ('add', 'edit'):
@@ -3420,7 +3844,8 @@ def supplier_details(request):
                 email=email or None,
                 phone_number=phone_number or None,
                 address=address or None,
-                gstin=gstin or None
+                gstin=gstin or None,
+                payment_terms=payment_terms or None
             )
             messages.success(request, 'Supplier added successfully.')
         elif action == 'edit':
@@ -3433,7 +3858,8 @@ def supplier_details(request):
             supplier.phone_number = phone_number or None
             supplier.address = address or None
             supplier.gstin = gstin or None
-            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'address', 'gstin'])
+            supplier.payment_terms = payment_terms or None
+            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'address', 'gstin', 'payment_terms'])
             messages.success(request, 'Supplier updated successfully.')
         elif action == 'delete':
             try:
@@ -3669,7 +4095,7 @@ def customer_order(request):
         context
     )
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'SALES')
 def add_customer(request):
 
     if request.method == 'POST':
@@ -3836,9 +4262,12 @@ def get_customer_quotations(request):
 
                 if products_list:
                     quotations.append({
+                        'rfq_id': rfq.id,
+                        'quotation_id': quotation.id,
                         'rfq_no': rfq.rfq_no,
                         'quotation_number': quotation.quotation_number,
                         'revision_number': quotation.revision_number,
+                        'preview_url': f'/rfq/{rfq.id}/quotation/download/?quotation_id={quotation.id}',
                         'status_label': 'Prepared - Email not sent' if prepared_not_emailed else 'Email sent',
                         'prepared_not_emailed': prepared_not_emailed,
                         'products': products_list,
@@ -3867,9 +4296,12 @@ def get_customer_quotations(request):
 
         if products_list:
             quotations.append({
+                'rfq_id': rfq.id,
+                'quotation_id': None,
                 'rfq_no': rfq.rfq_no,
                 'quotation_number': quote_no,
                 'revision_number': 0,
+                'preview_url': f'/rfq/{rfq.id}/quotation/download/',
                 'status_label': 'Prepared - Email not sent' if has_prepared_not_emailed else 'Email sent',
                 'prepared_not_emailed': has_prepared_not_emailed,
                 'products': products_list,
@@ -3951,25 +4383,14 @@ def _number_to_words(num):
     return words
 
 
-def _build_single_po_pdf_buffer(dpr, supplier, items):
+def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
     import os
     from xml.sax.saxutils import escape as xml_escape
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-    from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=14 * mm,
-        leftMargin=14 * mm,
-        topMargin=10 * mm,
-        bottomMargin=10 * mm,
-    )
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, Image
 
     styles = getSampleStyleSheet()
     
@@ -4044,9 +4465,7 @@ def _build_single_po_pdf_buffer(dpr, supplier, items):
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ('LEFTPADDING', (0, 0), (0, 0), 1),
-        ('RIGHTPADDING', (0, 0), (0, 0), 1),
-        ('LEFTPADDING', (1, 0), (1, 0), 6),
-        ('RIGHTPADDING', (1, 0), (1, 0), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
     ]))
     story.append(header_table)
     story.append(Spacer(1, 2 * mm))
@@ -4061,73 +4480,64 @@ def _build_single_po_pdf_buffer(dpr, supplier, items):
     story.append(po_title_table)
     story.append(Spacer(1, 2 * mm))
 
-    # 3. BUYER / VENDOR / META Table
-    addr = supplier.address or ""
-    supplier_gst_no = (getattr(supplier, 'gstin', None) or '').strip()
-    if not supplier_gst_no:
-        gst_match = re.search(r'GST(?:IN)?\s*[:\-]?\s*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1})', addr, re.IGNORECASE)
-        if gst_match:
-            supplier_gst_no = gst_match.group(1)
-        else:
-            gst_match_alt = re.search(r'\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}\b', addr)
-            if gst_match_alt:
-                supplier_gst_no = gst_match_alt.group(0)
+    # 3. Buyer & Vendor Details Table
+    effective_po_no = items[0].po_number or 'PO'
+    po_date_str = items[0].po_date.strftime('%d-%m-%Y') if items[0].po_date else timezone.localdate().strftime('%d-%m-%Y')
+    po_validity_str = items[0].po_validity.strftime('%d-%m-%Y') if items[0].po_validity else (dpr.po_validity.strftime('%d-%m-%Y') if dpr.po_validity else '-')
 
-    buyer_para = Paragraph(
-        '<b>Metrology Engineering Solutions</b>,<br/>'
-        'NO.684/9, Sri Sai Jayalakshmi Complex,<br/>'
-        'Maruthi Nagar , 2nd Cross,Dharga,<br/>'
-        'Opposite to Sathya mess,Hosur,Krishnagiri,<br/>'
-        'Tamilnadu-635109.<br/>'
-        'cell : +91 9655778807<br/>'
-        'Email: info@mesinstruments.co.in<br/>'
-        'GST NO : 33ABKFM1033E1ZS',
-        normal_style
+    buyer_text = (
+        '<b>NAME : METROLOGY ENGINEERING SOLUTIONS</b><br/>'
+        'NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br/>'
+        '2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri,<br/>'
+        'Tamilnadu-635109.     Phone : +91-965-577-8807<br/>'
+        'GSTIN : 33BIKPG0091L1ZU'
     )
+    buyer_para = Paragraph(buyer_text, normal_style)
 
-    clean_addr = pdf_text(addr).replace('\n', '<br/>')
-    vendor_para = Paragraph(
-        f'<b>{pdf_text(supplier.supplier_name)}</b>,<br/>'
-        f'{clean_addr}<br/>'
-        f'cell : {pdf_text(supplier.phone_number or "-")}<br/>'
-        f'GST NO : {pdf_text(supplier_gst_no or "-")}<br/>'
-        f'EMAIL ID: {pdf_text(supplier.email or "-")}',
-        normal_style
-    )
-
-    po_number = items[0].po_number if items else '-'
-    po_date_val = items[0].po_date.strftime('%d/%m/%Y') if items and items[0].po_date else '-'
-    
-    due_date_str = "-"
-    if items[0].expected_date:
-        due_date_str = items[0].expected_date.strftime('%d/%m/%Y')
-    elif items[0].po_validity:
-        due_date_str = items[0].po_validity.strftime('%d/%m/%Y')
-    else:
-        due_date_str = "1 Week"
-
-    meta_para = Paragraph(
-        f'Date :{po_date_val}<br/>'
-        f'PO No: {po_number}<br/>'
-        f'Due Date : {due_date_str}<br/>'
-        f'Ref Quote no : -<br/>'
-        f'Quote Dated on : -<br/>'
-        f'Payment terms : 60 Days',
-        normal_style
-    )
-
-    buyer_vendor_data = [
-        [Paragraph('<b>BUYER :</b>', bold_style), Paragraph('<b>VENDOR DETAIL :</b>', bold_style), ''],
-        [buyer_para, vendor_para, meta_para]
+    vendor_lines = [
+        f'<b>NAME : {pdf_text(supplier.supplier_name.upper())}</b>'
     ]
-    
-    buyer_vendor_table = Table(buyer_vendor_data, colWidths=[60 * mm, 60 * mm, 60 * mm])
+    if supplier.address:
+        vendor_lines.append(pdf_text(supplier.address).replace('\n', '<br/>'))
+    if supplier.phone_number:
+        vendor_lines.append(f'PH : {pdf_text(supplier.phone_number)}')
+    if supplier.email:
+        vendor_lines.append(f'Email : {pdf_text(supplier.email)}')
+
+    supplier_gstin = (getattr(supplier, 'gstin', None) or '').strip()
+    if not supplier_gstin and supplier.address:
+        gst_match = re.search(r'GST(?:IN)?\s*[:\-]?\s*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1})', supplier.address, re.IGNORECASE)
+        if gst_match:
+            supplier_gstin = gst_match.group(1)
+        else:
+            gst_match_alt = re.search(r'\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}\b', supplier.address)
+            if gst_match_alt:
+                supplier_gstin = gst_match_alt.group(0)
+
+    if supplier_gstin:
+        vendor_lines.append(f'GSTIN : {pdf_text(supplier_gstin)}')
+    vendor_para = Paragraph('<br/>'.join(vendor_lines), normal_style)
+
+    meta_lines = [
+        f'<b>PO NO</b> : {effective_po_no}',
+        f'<b>DATE</b> : {po_date_str}',
+        f'<b>PO Validity</b> : {po_validity_str}',
+        f'<b>Quotation No</b> : {pdf_text(dpr.quotation_number or "-")}',
+    ]
+    meta_para = Paragraph('<br/>'.join(meta_lines), normal_style)
+
+    buyer_vendor_table = Table(
+        [
+            [Paragraph('<b>BUYER</b>', bold_style), meta_para],
+            [buyer_para, Paragraph(f'<b>VENDOR : {pdf_text(supplier.supplier_name.upper())}</b><br/>' + '<br/>'.join(vendor_lines[1:]), normal_style)],
+        ],
+        colWidths=[90 * mm, 90 * mm]
+    )
     buyer_vendor_table.setStyle(TableStyle([
         ('BOX', (0, 0), (-1, -1), 1, colors.black),
-        ('SPAN', (1, 0), (2, 0)),
-        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
         ('LINEBEFORE', (1, 0), (1, -1), 1, colors.black),
-        ('LINEBEFORE', (2, 1), (2, 1), 1, colors.black),
+        ('LINEBELOW', (0, 0), (0, 0), 1, colors.black),
+        ('LINEBELOW', (1, 0), (1, 0), 1, colors.black),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('TOPPADDING', (0, 0), (-1, -1), 4),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
@@ -4199,26 +4609,42 @@ def _build_single_po_pdf_buffer(dpr, supplier, items):
     story.append(prod_table)
     story.append(Spacer(1, 2 * mm))
 
-    # 6. Remarks and Totals Table
-    gst_value = (basic_total * Decimal('0.18')).quantize(Decimal('0.01'))
-    grand_total_raw = basic_total + gst_value
-    grand_total = Decimal(int(grand_total_raw + Decimal('0.50')))
-    round_off = grand_total - grand_total_raw
-    
-    if abs(round_off) < Decimal('0.01'):
-        round_off = Decimal('0.00')
+    # 6. Remarks & Totals Table
+    is_igst = False
+    if supplier_gstin and len(supplier_gstin) >= 2 and supplier_gstin[:2].isdigit():
+        is_igst = (supplier_gstin[:2] != '33')
+    elif supplier.address:
+        addr_lower = supplier.address.lower()
+        if 'tamil nadu' not in addr_lower and 'tamilnadu' not in addr_lower and 'hosur' not in addr_lower and 'chennai' not in addr_lower and ('karnataka' in addr_lower or 'bangalore' in addr_lower or 'bengaluru' in addr_lower or 'maharashtra' in addr_lower or 'mumbai' in addr_lower or 'pune' in addr_lower or 'delhi' in addr_lower or 'gujarat' in addr_lower or 'andhra' in addr_lower or 'telangana' in addr_lower or 'kerala' in addr_lower):
+            is_igst = True
+    gst_rate = Decimal('18.00')
+    gst_amount = (basic_total * gst_rate / Decimal('100.00')).quantize(Decimal('0.01'))
+    grand_total = basic_total + gst_amount
 
-    remarks_data = [
-        [Paragraph('<b>REMARKS :</b>', bold_style), Paragraph('TOTAL', center_bold_style), Paragraph(f'{basic_total:,.2f}', right_bold_style)],
-        ['', Paragraph('GST  18 %', center_bold_style), Paragraph(f'{gst_value:,.2f}', right_bold_style)],
-        ['', Paragraph('ROUND OFF', center_bold_style), Paragraph(f'{round_off:,.2f}', right_bold_style)],
-        ['', Paragraph('GRAND TOTAL', center_bold_style), Paragraph(f'{grand_total:,.2f}', right_bold_style)]
+    remarks_col = Paragraph(
+        '<b>REMARKS :</b><br/>'
+        '1. Please return the duplicate copy of this order duly signed in as a token of your acceptance.<br/>'
+        '2. Mention our Purchase Order number in all your Delivery challans, Invoices & other correspondence documents.<br/>'
+        '3. Test Certificate (calibration Certificate) is Mandatory where ever applicable.',
+        normal_style
+    )
+
+    totals_data = [
+        [remarks_col, Paragraph('<b>BASIC</b>', bold_style), Paragraph(f'{basic_total:,.2f}', right_bold_style)],
     ]
-    
-    remarks_table = Table(remarks_data, colWidths=[124 * mm, 32 * mm, 24 * mm])
+    if is_igst:
+        totals_data.append(['', Paragraph('<b>IGST 18%</b>', bold_style), Paragraph(f'{gst_amount:,.2f}', right_bold_style)])
+    else:
+        half_gst = (gst_amount / Decimal('2.00')).quantize(Decimal('0.01'))
+        totals_data.append(['', Paragraph('<b>CGST 9%</b>', bold_style), Paragraph(f'{half_gst:,.2f}', right_bold_style)])
+        totals_data.append(['', Paragraph('<b>SGST 9%</b>', bold_style), Paragraph(f'{half_gst:,.2f}', right_bold_style)])
+        
+    totals_data.append(['', Paragraph('<b>GRAND TOTAL</b>', bold_style), Paragraph(f'{grand_total:,.2f}', right_bold_style)])
+
+    remarks_table = Table(totals_data, colWidths=[100 * mm, 40 * mm, 40 * mm])
     remarks_table.setStyle(TableStyle([
         ('BOX', (0, 0), (-1, -1), 1, colors.black),
-        ('SPAN', (0, 0), (0, 3)),
+        ('SPAN', (0, 0), (0, -1)),
         ('LINEBEFORE', (1, 0), (1, -1), 1, colors.black),
         ('LINEBEFORE', (2, 0), (2, -1), 1, colors.black),
         ('LINEBELOW', (1, 0), (-1, 0), 1, colors.black),
@@ -4253,13 +4679,22 @@ def _build_single_po_pdf_buffer(dpr, supplier, items):
         'Tamilnadu-635109.     Phone : +91-965-577-8807',
         normal_style
     )
-    delivery_addr = Paragraph(
-        '<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>'
-        '14/65, 6th Street, Kamaraj Nagar, Korratur,<br/>'
-        'Chennai, Tamil Nadu, India-600 080<br/>'
-        'Phone : +91-965-577-8807',
-        normal_style
-    )
+    if str(delivery_address).lower() == 'chennai':
+        delivery_addr = Paragraph(
+            '<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>'
+            '14/65, 6th Street, Kamaraj Nagar, Korratur,<br/>'
+            'Chennai, Tamil Nadu, India-600 080<br/>'
+            'Phone : +91-965-577-8807',
+            normal_style
+        )
+    else:
+        delivery_addr = Paragraph(
+            '<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>'
+            'NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br/>'
+            '2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri,<br/>'
+            'Tamilnadu-635109.     Phone : +91-965-577-8807',
+            normal_style
+        )
     
     addr_data = [
         [Paragraph('<b>INVOICE ADDRESS :</b>', bold_style), Paragraph('<b>DELIVERY ADDRESS :</b>', bold_style)],
@@ -4277,7 +4712,49 @@ def _build_single_po_pdf_buffer(dpr, supplier, items):
         ('RIGHTPADDING', (0, 0), (-1, -1), 6),
     ]))
     story.append(addr_table)
+    return story
 
+
+def _build_single_po_pdf_buffer(dpr, supplier, items, delivery_address='hosur'):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+    story = _build_single_po_story(dpr, supplier, items, delivery_address=delivery_address)
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+def _build_multi_supplier_po_pdf_buffer(dpr, groups, delivery_address='hosur'):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, PageBreak
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+    story = []
+    supplier_list = list(groups.items())
+    for idx, (supplier, items) in enumerate(supplier_list):
+        if idx > 0:
+            story.append(PageBreak())
+        story.extend(_build_single_po_story(dpr, supplier, items, delivery_address=delivery_address))
     doc.build(story)
     buffer.seek(0)
     return buffer
@@ -4286,7 +4763,6 @@ def _build_single_po_pdf_buffer(dpr, supplier, items):
 @role_required('ADMIN', 'PURCHASE')
 def generate_supplier_po(request, dpr_id):
     """Generate a PDF Purchase Order for all supplier products linked to a DPR."""
-    from zipfile import ZipFile, ZIP_DEFLATED
     try:
         dpr = DPR.objects.get(pk=dpr_id)
     except DPR.DoesNotExist:
@@ -4301,15 +4777,18 @@ def generate_supplier_po(request, dpr_id):
         messages.error(request, 'No supplier orders found for this DPR to generate a PO.')
         return redirect('dpr_supplier', dpr_id=dpr_id)
 
-    if dpr.po_validity:
+    delivery_address = request.POST.get('delivery_address') or request.GET.get('delivery_address') or 'hosur'
+
+    target_customer_date = dpr.po_validity or dpr.po_date
+    if target_customer_date:
         invalid_supplier_order = supplier_products.filter(
-            po_validity__gte=dpr.po_validity
+            po_validity__gte=target_customer_date
         ).select_related('supplier').first()
         if invalid_supplier_order:
             messages.warning(
                 request,
-                'PO was not generated because supplier PO validity must be '
-                f'before customer PO validity ({dpr.po_validity}).'
+                f'PO was not generated because supplier PO validity ({invalid_supplier_order.po_validity.strftime("%d-%m-%Y")}) must be '
+                f'before Customer PO date ({target_customer_date.strftime("%d-%m-%Y")}).'
             )
             return redirect('dpr_supplier', dpr_id=dpr_id)
 
@@ -4320,10 +4799,6 @@ def generate_supplier_po(request, dpr_id):
         request.POST.get('supplier_product_id')
         or request.GET.get('supplier_product_id')
     )
-    preview_combined_supplier = (
-        request.POST.get('combined_supplier') == '1'
-        or request.GET.get('combined_supplier') == '1'
-    )
     if preview_supplier_id or preview_po_number or preview_supplier_product_id:
         preview_items = supplier_products
         if preview_supplier_id:
@@ -4332,23 +4807,25 @@ def generate_supplier_po(request, dpr_id):
                 preview_items = preview_items.filter(supplier=supplier)
             except Supplier.DoesNotExist:
                 raise Http404
-        if preview_supplier_product_id and not preview_combined_supplier:
-            preview_items = preview_items.filter(pk=preview_supplier_product_id)
-        elif preview_po_number and not preview_combined_supplier:
+        elif preview_po_number:
             preview_items = preview_items.filter(po_number=preview_po_number)
+        elif preview_supplier_product_id:
+            sp_obj = supplier_products.filter(pk=preview_supplier_product_id).first()
+            if sp_obj:
+                if sp_obj.supplier_id:
+                    preview_items = preview_items.filter(supplier_id=sp_obj.supplier_id)
+                elif sp_obj.po_number:
+                    preview_items = preview_items.filter(po_number=sp_obj.po_number)
+                else:
+                    preview_items = preview_items.filter(pk=sp_obj.id)
 
         items = list(preview_items)
         if items:
             supplier = items[0].supplier
-            effective_po_number = preview_po_number or items[0].po_number or 'PO'
-            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+            effective_po_number = items[0].po_number or preview_po_number or 'PO'
+            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items, delivery_address=delivery_address)
             safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', effective_po_number)
-            item_suffix = (
-                f"_item_{preview_supplier_product_id}"
-                if (preview_supplier_product_id and len(items) == 1)
-                else ''
-            )
-            filename = f"{safe_po_num}{item_suffix}.pdf"
+            filename = f"{safe_po_num}.pdf"
             response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             return response
@@ -4371,6 +4848,8 @@ def generate_supplier_po(request, dpr_id):
             po_number=generated_po_number,
             po_date=po_date,
         )
+        # Mark that the PO PDF has been generated for all rows of this supplier
+        supplier_products.filter(supplier_id=supplier_id).update(po_pdf_generated=True)
 
     supplier_products = SupplierProduct.objects.filter(
         customer_product__dpr=dpr
@@ -4386,7 +4865,7 @@ def generate_supplier_po(request, dpr_id):
         # Only one supplier PO, return it directly as a PDF.
         supplier, items = list(groups.items())[0]
         po_number = items[0].po_number or 'PO'
-        pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+        pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items, delivery_address=delivery_address)
         
         safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
         filename = f"{safe_po_num}.pdf"
@@ -4394,20 +4873,11 @@ def generate_supplier_po(request, dpr_id):
         response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
     else:
-        # Multiple POs, package into a ZIP
-        archive = BytesIO()
-        with ZipFile(archive, 'w', ZIP_DEFLATED) as zip_file:
-            for supplier, items in groups.items():
-                po_number = items[0].po_number or 'PO'
-                pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
-                safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
-                safe_supplier_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', supplier.supplier_name)
-                filename = f"PO_{safe_supplier_name}_{safe_po_num}.pdf"
-                zip_file.writestr(filename, pdf_buffer.getvalue())
-        
-        archive.seek(0)
-        response = HttpResponse(archive.getvalue(), content_type='application/zip')
-        response['Content-Disposition'] = f'attachment; filename="{dpr.serial_number}_POs.zip"'
+        # Multiple POs -> Combined multi-page PDF for all suppliers
+        pdf_buffer = _build_multi_supplier_po_pdf_buffer(dpr, groups, delivery_address=delivery_address)
+        filename = f"{dpr.serial_number}_Supplier_POs.pdf"
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
 
@@ -4504,6 +4974,12 @@ def send_supplier_po_email(request, dpr_id):
         except Exception as exc:
             messages.error(request, f"Failed to send email for {supplier.supplier_name}: {exc}")
 
+        remaining_unsent = SupplierProduct.objects.filter(
+            customer_product__dpr=dpr,
+            po_email_sent=False
+        ).exists()
+        if not remaining_unsent:
+            return redirect('dpr_view')
         return redirect('dpr_supplier', dpr_id=dpr_id)
 
     # Group all products into one email attachment per supplier.
@@ -4560,6 +5036,12 @@ def send_supplier_po_email(request, dpr_id):
     if failed_emails:
         messages.error(request, f"Failed to send email for: {', '.join(failed_emails)}")
 
+    remaining_unsent = SupplierProduct.objects.filter(
+        customer_product__dpr=dpr,
+        po_email_sent=False
+    ).exists()
+    if not remaining_unsent:
+        return redirect('dpr_view')
     return redirect('dpr_supplier', dpr_id=dpr_id)
 
 
@@ -4579,8 +5061,8 @@ def check_customer_po_number(request):
     return JsonResponse({'exists': qs.exists()})
 
 
-def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qtys=None):
-    from products.models import CustomerProduct
+def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_ids=None, custom_qtys=None):
+    from products.models import CustomerProduct, CustomerInvoice
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     from reportlab.lib.pagesizes import A4
@@ -4598,12 +5080,19 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
     except CustomerProduct.DoesNotExist:
         return None
 
+    target_invoice = None
+    if invoice_id:
+        try:
+            target_invoice = CustomerInvoice.objects.get(pk=invoice_id, customer_product=target_product)
+        except CustomerInvoice.DoesNotExist:
+            target_invoice = None
+
     dpr = target_product.dpr
     customer = dpr.customer
     if selected_product_ids:
         products = list(CustomerProduct.objects.filter(dpr=dpr, id__in=selected_product_ids))
     else:
-        products = list(CustomerProduct.objects.filter(dpr=dpr))
+        products = [target_product]
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -4726,15 +5215,20 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
         Paragraph(cust_info, normal),
     ]
 
-    inv_no_val = (target_product.invoice_dc_number or '').strip()
-    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
-    if match:
-        inv_no = f"MES-F{int(match.group(1)):04d}"
-    elif inv_no_val:
-        inv_no = inv_no_val
+    if target_invoice:
+        inv_no = target_invoice.invoice_number
+        inv_date = target_invoice.invoice_date.strftime('%d/%m/%Y') if target_invoice.invoice_date else timezone.localdate().strftime('%d/%m/%Y')
     else:
-        inv_no = f"MES-F{target_product.id:04d}"
-    inv_date = timezone.localdate().strftime('%d/%m/%Y')
+        inv_no_val = (target_product.invoice_dc_number or '').strip()
+        match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+        if match:
+            inv_no = f"MES-F{int(match.group(1)):04d}"
+        elif inv_no_val:
+            inv_no = inv_no_val
+        else:
+            inv_no = f"MES-F{target_product.id:04d}"
+        inv_date = timezone.localdate().strftime('%d/%m/%Y')
+
     po_no = dpr.po_number or dpr.serial_number or '-'
     po_date_str = dpr.po_date.strftime('%d/%m/%Y') if dpr.po_date else '-'
     raw_terms = str(customer.payment_terms).strip() if customer.payment_terms else ''
@@ -4798,7 +5292,9 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
     subtotal = Decimal('0.00')
 
     for idx, p in enumerate(products, 1):
-        if custom_qtys and p.id in custom_qtys:
+        if target_invoice and p.id == target_invoice.customer_product_id:
+            qty = target_invoice.quantity
+        elif custom_qtys and p.id in custom_qtys:
             qty = custom_qtys[p.id]
         else:
             qty = p.quantity_delivered if p.quantity_delivered > 0 else p.quantity_ordered
@@ -4827,7 +5323,20 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
         ]
         prod_table_data.append(row)
 
-    is_tamilnadu = (customer.gstin or '').startswith('33') or 'tamil' in (customer.region or '').lower()
+    # State code based GST calculation:
+    # Tamil Nadu (State Code 33 / TN): CGST 9%, SGST 9%, IGST 0%
+    # All other states (e.g. 03, 27, 29, etc.): IGST 18%, CGST 0%, SGST 0%
+    state_code_clean = (customer.state_code or '').strip().upper() if customer else ''
+    gstin_clean = (customer.gstin or '').strip().upper() if customer else ''
+    region_clean = (customer.region or '').strip().lower() if customer else ''
+
+    if state_code_clean:
+        is_tamilnadu = (state_code_clean == '33' or state_code_clean in ('TN', 'TAMIL NADU', 'TAMILNADU'))
+    elif gstin_clean and len(gstin_clean) >= 2 and gstin_clean[:2].isdigit():
+        is_tamilnadu = (gstin_clean[:2] == '33')
+    else:
+        is_tamilnadu = (region_clean in ('chennai', 'hosur', 'tamil nadu', 'tamilnadu') or 'tamil' in region_clean)
+
     if is_tamilnadu:
         sgst_rate = Decimal('9.00')
         cgst_rate = Decimal('9.00')
@@ -4838,10 +5347,10 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
 
         tax_rows = [
             ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
-            ["", "", Paragraph("SGST 9%", right_align), "", "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
-            ["", "", Paragraph("CGST 9%", right_align), "", "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
-            ["", "", Paragraph("IGST 0%", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("P & F 0%", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("SGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
+            ["", "", Paragraph("CGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
+            ["", "", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
         ]
     else:
@@ -4853,8 +5362,8 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
 
         tax_rows = [
             ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
-            ["", "", Paragraph("SGST", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("CGST", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("SGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", "", Paragraph("CGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("IGST", right_align), Paragraph("18%", center_align), "", "", "", Paragraph(f"Rs. {igst_amt:,.2f}", right_align)],
             ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
@@ -4963,7 +5472,7 @@ def _build_customer_invoice_pdf(product_id, selected_product_ids=None, custom_qt
     return buffer
 
 
-@role_required('ADMIN', 'PURCHASE')
+@role_required('ADMIN', 'PURCHASE', 'SALES')
 def customer_invoice_modal_data(request, product_id):
     """Return JSON data for the Generate Invoice modal popup showing only the selected product."""
     from products.models import CustomerProduct
@@ -4996,10 +5505,10 @@ def customer_invoice_modal_data(request, product_id):
     })
 
 
-@role_required('ADMIN', 'PURCHASE')
-def generate_customer_invoice(request, product_id):
+@role_required('ADMIN', 'PURCHASE', 'SALES')
+def generate_customer_invoice(request, product_id, invoice_id=None):
     """Generate a Tax Invoice PDF for a customer product / DPR order."""
-    from products.models import CustomerProduct
+    from products.models import CustomerProduct, CustomerInvoice
     try:
         target_product = CustomerProduct.objects.select_related('dpr').get(pk=product_id)
     except CustomerProduct.DoesNotExist:
@@ -5010,6 +5519,7 @@ def generate_customer_invoice(request, product_id):
 
     selected_product_ids = None
     custom_qtys = {}
+    new_invoice_id = invoice_id
 
     if request.method == 'POST':
         raw_selected = request.POST.getlist('selected_products')
@@ -5024,10 +5534,10 @@ def generate_customer_invoice(request, product_id):
             # Update delivered quantity and status for selected items
             for p in all_products:
                 if p.id in selected_product_ids:
-                    if p.id in custom_qtys:
-                        p.quantity_delivered = (p.quantity_delivered or 0) + custom_qtys[p.id]
-                    else:
-                        p.quantity_delivered = p.quantity_ordered
+                    rem_qty = max(p.quantity_ordered - (p.quantity_delivered or 0), 0)
+                    raw_invoiced_qty = custom_qtys.get(p.id, p.quantity_ordered)
+                    invoiced_qty = min(raw_invoiced_qty, rem_qty) if rem_qty > 0 else raw_invoiced_qty
+                    p.quantity_delivered = min((p.quantity_delivered or 0) + invoiced_qty, p.quantity_ordered)
 
                     if p.quantity_delivered >= p.quantity_ordered and p.quantity_delivered > 0:
                         p.status = 'delivered'
@@ -5035,23 +5545,62 @@ def generate_customer_invoice(request, product_id):
                         p.status = 'partially_delivered'
                     p.save()
 
-    pdf_buffer = _build_customer_invoice_pdf(product_id, selected_product_ids=selected_product_ids, custom_qtys=custom_qtys)
+                    existing_invoices = list(p.invoices.all().order_by('id'))
+                    count = len(existing_invoices) + 1
+
+                    inv_no_val = (p.invoice_dc_number or '').strip()
+                    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+                    if match:
+                        base_no = f"MES-F{int(match.group(1)):04d}"
+                    elif inv_no_val:
+                        base_no = inv_no_val
+                    else:
+                        base_no = f"MES-F{p.id:04d}"
+
+                    if count == 1 and p.quantity_delivered >= p.quantity_ordered:
+                        inv_no = base_no
+                    else:
+                        inv_no = f"{base_no}-{count}"
+
+                    if count == 2 and len(existing_invoices) == 1 and existing_invoices[0].invoice_number == base_no:
+                        existing_invoices[0].invoice_number = f"{base_no}-1"
+                        existing_invoices[0].save(update_fields=['invoice_number'])
+
+                    created_inv = CustomerInvoice.objects.create(
+                        customer_product=p,
+                        invoice_number=inv_no,
+                        quantity=invoiced_qty,
+                        invoice_date=timezone.localdate()
+                    )
+                    if p.id == target_product.id:
+                        new_invoice_id = created_inv.id
+
+    pdf_buffer = _build_customer_invoice_pdf(product_id, invoice_id=new_invoice_id, selected_product_ids=selected_product_ids, custom_qtys=custom_qtys)
     if not pdf_buffer:
         raise Http404("Product not found")
 
-    inv_no_val = (target_product.invoice_dc_number or '').strip()
-    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
-    if match:
-        inv_no = f"MES-F{int(match.group(1)):04d}"
-    elif inv_no_val:
-        inv_no = inv_no_val
+    inv_filename = f"Tax_Invoice_{product_id}.pdf"
+    if new_invoice_id:
+        try:
+            inv_obj = CustomerInvoice.objects.get(pk=new_invoice_id)
+            safe_inv_no = re.sub(r'[^a-zA-Z0-9_\-]', '_', inv_obj.invoice_number)
+            inv_filename = f"Tax_Invoice_{safe_inv_no}.pdf"
+        except CustomerInvoice.DoesNotExist:
+            pass
     else:
-        inv_no = f"MES-F{target_product.id:04d}"
-    safe_inv_no = re.sub(r'[^a-zA-Z0-9_\-]', '_', inv_no)
-    filename = f"Tax_Invoice_{safe_inv_no}.pdf"
+        inv_no_val = (target_product.invoice_dc_number or '').strip()
+        match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+        if match:
+            inv_no = f"MES-F{int(match.group(1)):04d}"
+        elif inv_no_val:
+            inv_no = inv_no_val
+        else:
+            inv_no = f"MES-F{target_product.id:04d}"
+        safe_inv_no = re.sub(r'[^a-zA-Z0-9_\-]', '_', inv_no)
+        inv_filename = f"Tax_Invoice_{safe_inv_no}.pdf"
 
     response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    response['Content-Disposition'] = f'inline; filename="{inv_filename}"'
     return response
 
 
@@ -5194,6 +5743,450 @@ def sync_rfq_email_inbox(request, rfq_id=0):
         'status': 'success',
         'message': f'Sync successful! {synced_count} new message(s) synchronized across all RFQs.',
         'synced_count': synced_count
+    })
+
+
+
+def _build_customer_outstanding_email_html(customer, items, custom_body=None):
+    """Build formatted HTML email body with outstanding payment reminder text and items table."""
+    table_rows = []
+    total_received = Decimal('0.00')
+    total_outstanding = Decimal('0.00')
+
+    for item in items:
+        inv_date = item.invoice_date or item.dpr.po_date or (item.dpr.created_at.date() if item.dpr.created_at else None)
+        if inv_date:
+            date_str = f"{inv_date.day:02d}-{inv_date.month:02d}-{inv_date.year}"
+        else:
+            date_str = "-"
+
+        inv_no_val = (item.invoice_dc_number or '').strip()
+        match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+        if match:
+            inv_no = f"MES-F{int(match.group(1)):04d}"
+        elif inv_no_val:
+            inv_no = inv_no_val
+        else:
+            inv_no = f"MES-F{item.id:04d}"
+
+        cust_name = customer.customer_name if customer else "-"
+        cust_po = (item.dpr.po_number or '').strip() if item.dpr else ''
+        if not cust_po:
+            cust_po = "DIRECT INVOICE"
+
+        desc = (item.product_type or item.product_name or "-").strip()
+
+        po_val = item.value or Decimal('0.00')
+        rec_val = item.received_amount or Decimal('0.00')
+        out_val = max(po_val - rec_val, Decimal('0.00'))
+
+        total_received += rec_val
+        total_outstanding += out_val
+
+        rec_display = f"{rec_val:.2f}" if rec_val > 0 else ""
+        out_display = f"{out_val:.2f}"
+
+        table_rows.append(f"""
+        <tr>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{date_str}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; font-weight: bold; vertical-align: middle;">{inv_no}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{cust_name}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{cust_po}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{desc}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: right; vertical-align: middle;">{rec_display}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: right; font-weight: bold; vertical-align: middle;">{out_display}</td>
+        </tr>
+        """)
+
+    rows_html = "\n".join(table_rows)
+
+    if custom_body and custom_body.strip():
+        paragraphs = [p.strip().replace('\n', '<br>') for p in custom_body.strip().split('\n\n') if p.strip()]
+        body_html = "".join(f'<p style="margin-bottom: 15px;">{p}</p>' for p in paragraphs)
+    else:
+        body_html = """
+  <p style="margin-bottom: 15px;">Dear Sir/Madam,</p>
+  <p style="margin-bottom: 15px;">We would like to bring to your kind attention that the payments for the invoices listed below are currently outstanding.</p>
+  <p style="margin-bottom: 20px;">We kindly request you to review the pending invoices and arrange for the payment at your earliest convenience. Timely settlement of the outstanding amount will help us continue providing uninterrupted support and services.</p>
+"""
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #111111; margin: 0; padding: 15px;">
+  {body_html}
+  
+  <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; border: 1px solid #000000; font-family: Arial, sans-serif; font-size: 13px; margin: 20px 0;">
+    <thead>
+      <tr style="background-color: #000000; color: #ffffff;">
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">DATE</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">INVOICE NO</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">CUSTOMER</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">CUSTOMER PO</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">DESCRIPTION</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">PAY RECEIVED</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">OUTSTANDING</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_html}
+    </tbody>
+  </table>
+  
+  <p style="margin-top: 25px; margin-bottom: 5px;">Thanks & Regards,</p>
+  <p style="margin-top: 0; font-weight: bold; color: #111111;">Metrology Engineering Solutions<br>
+  <span style="font-weight: normal; color: #555555; font-size: 13px;">Hosur, Tamil Nadu</span></p>
+</body>
+</html>"""
+    return html_content, total_outstanding
+
+
+@role_required('ADMIN', 'PURCHASE', 'SALES')
+def send_invoice_email(request):
+    """Send outstanding payment reminder email with formatted table in email body separately to each selected customer."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=400)
+
+    raw_product_ids = request.POST.getlist('product_ids[]') or request.POST.getlist('product_ids')
+    if not raw_product_ids:
+        raw_single = request.POST.get('product_ids', '').strip()
+        if raw_single:
+            raw_product_ids = [pid.strip() for pid in raw_single.split(',') if pid.strip()]
+
+    product_ids = [int(pid) for pid in raw_product_ids if str(pid).isdigit()]
+    if not product_ids:
+        return JsonResponse({'status': 'error', 'message': 'No invoices selected.'}, status=400)
+
+    recipient_email = request.POST.get('recipient_email', '').strip()
+    subject = request.POST.get('email_subject', '').strip()
+    body = request.POST.get('email_body', '').strip()
+    extra_attachment = request.FILES.get('extra_attachment')
+
+    from products.models import CustomerProduct
+    products = list(CustomerProduct.objects.select_related('dpr', 'dpr__customer').filter(id__in=product_ids))
+    if not products:
+        return JsonResponse({'status': 'error', 'message': 'Selected invoice records not found.'}, status=404)
+
+    # Group products by customer
+    from collections import defaultdict
+    import threading
+    import logging
+
+    customer_groups = defaultdict(list)
+    for p in products:
+        cust = p.dpr.customer
+        if cust:
+            customer_groups[cust].append(p)
+
+    sent_details = []
+    missing_email_customers = []
+    messages_to_send = []
+
+    attachment_data = None
+    if extra_attachment:
+        try:
+            attachment_data = (
+                extra_attachment.name,
+                extra_attachment.read(),
+                getattr(extra_attachment, 'content_type', None) or 'application/octet-stream'
+            )
+        except Exception:
+            attachment_data = None
+
+    for cust, items in customer_groups.items():
+        cust_email = (cust.email or '').strip()
+        override_email = request.POST.get(f'email_{cust.id}', '').strip()
+        if override_email:
+            cust_email = override_email
+
+        if not cust_email or len(customer_groups) == 1:
+            if recipient_email:
+                cust_email = recipient_email
+
+        if not cust_email:
+            missing_email_customers.append(cust.customer_name)
+            continue
+
+        to_emails = [email.strip() for email in re.split(r'[;,]', cust_email) if email.strip()]
+        valid_to_emails = []
+        for em in to_emails:
+            try:
+                validate_email(em)
+                valid_to_emails.append(em)
+            except ValidationError:
+                pass
+
+        if not valid_to_emails:
+            missing_email_customers.append(f"{cust.customer_name} (Invalid email: {cust_email})")
+            continue
+
+        html_body, total_out = _build_customer_outstanding_email_html(cust, items, custom_body=body)
+        email_subject = subject or f"Outstanding Payment Reminder - {cust.customer_name} - Metrology Engineering Solutions"
+
+        email = EmailMessage(
+            subject=email_subject,
+            body=html_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=valid_to_emails,
+        )
+        email.content_subtype = "html"
+
+        if attachment_data:
+            email.attach(*attachment_data)
+
+        messages_to_send.append(email)
+        sent_details.append(f"{cust.customer_name} ({', '.join(valid_to_emails)})")
+
+    if not messages_to_send and missing_email_customers:
+        return JsonResponse({
+            'status': 'error',
+            'message': f"Could not send email. Missing or invalid email address for: {', '.join(missing_email_customers)}. Please enter a valid recipient email."
+        }, status=400)
+
+    def _send_emails_worker(msg_list):
+        try:
+            from django.core.mail import get_connection
+            conn = get_connection(timeout=20)
+            conn.open()
+            conn.send_messages(msg_list)
+            conn.close()
+        except Exception as exc:
+            logging.getLogger(__name__).exception("Error in background email worker: %s", exc)
+
+    if messages_to_send:
+        bg_thread = threading.Thread(target=_send_emails_worker, args=(messages_to_send,))
+        bg_thread.daemon = True
+        bg_thread.start()
+
+    msg_parts = []
+    if sent_details:
+        msg_parts.append(f"Outstanding payment reminder email sent successfully to: {', '.join(sent_details)}.")
+    if missing_email_customers:
+        msg_parts.append(f"Skipped customers without email: {', '.join(missing_email_customers)}.")
+
+    return JsonResponse({
+        'status': 'ok' if sent_details else 'error',
+        'message': " ".join(msg_parts),
+        'sent_count': len(sent_details),
+    })
+
+
+def _build_supplier_outstanding_email_html(supplier, items, custom_body=None):
+    total_received = Decimal('0.00')
+    total_outstanding = Decimal('0.00')
+
+    table_rows = []
+    for item in items:
+        inv_date = item.invoice_date or item.po_date
+        if inv_date:
+            date_str = inv_date.strftime('%d-%m-%Y')
+        else:
+            date_str = "-"
+
+        inv_no = (item.po_number or item.invoice_dc_number or f"SUP-PO{item.id:04d}").strip()
+        supp_name = supplier.supplier_name if supplier else "-"
+        supp_po = (item.po_number or '').strip()
+        if not supp_po:
+            supp_po = "DIRECT PO"
+
+        desc = "-"
+        if item.customer_product:
+            desc = (item.customer_product.product_name or item.customer_product.product_type or "-").strip()
+
+        po_val = item.po_value or Decimal('0.00')
+        rec_val = item.received_amount or Decimal('0.00')
+        out_val = max(po_val - rec_val, Decimal('0.00'))
+
+        total_received += rec_val
+        total_outstanding += out_val
+
+        rec_display = f"{rec_val:.2f}" if rec_val > 0 else ""
+        out_display = f"{out_val:.2f}"
+
+        table_rows.append(f"""
+        <tr>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{date_str}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; font-weight: bold; vertical-align: middle;">{inv_no}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{supp_name}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{supp_po}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: center; vertical-align: middle;">{desc}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: right; vertical-align: middle;">{rec_display}</td>
+          <td style="border: 1px solid #000000; padding: 8px 10px; text-align: right; font-weight: bold; vertical-align: middle;">{out_display}</td>
+        </tr>
+        """)
+
+    rows_html = "\n".join(table_rows)
+
+    if custom_body and custom_body.strip():
+        paragraphs = [p.strip().replace('\n', '<br>') for p in custom_body.strip().split('\n\n') if p.strip()]
+        body_html = "".join(f'<p style="margin-bottom: 15px;">{p}</p>' for p in paragraphs)
+    else:
+        body_html = """
+  <p style="margin-bottom: 15px;">Dear Sir/Madam,</p>
+  <p style="margin-bottom: 15px;">Please find below the payment details and status for purchase orders with your company.</p>
+  <p style="margin-bottom: 20px;">Please review the payment details and feel free to reach out if you have any questions.</p>
+"""
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #111111; margin: 0; padding: 15px;">
+  {body_html}
+  
+  <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; border: 1px solid #000000; font-family: Arial, sans-serif; font-size: 13px; margin: 20px 0;">
+    <thead>
+      <tr style="background-color: #000000; color: #ffffff;">
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">DATE</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">PO / INVOICE NO</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">SUPPLIER</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">SUPPLIER PO</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">DESCRIPTION</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">AMOUNT PAID</th>
+        <th style="border: 1px solid #000000; padding: 10px 8px; text-align: center; font-weight: bold; background-color: #000000; color: #ffffff;">OUTSTANDING</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_html}
+    </tbody>
+  </table>
+  
+  <p style="margin-top: 25px; margin-bottom: 5px;">Thanks & Regards,</p>
+  <p style="margin-top: 0; font-weight: bold; color: #111111;">Metrology Engineering Solutions<br>
+  <span style="font-weight: normal; color: #555555; font-size: 13px;">Hosur, Tamil Nadu</span></p>
+</body>
+</html>"""
+    return html_content, total_outstanding
+
+
+@role_required('ADMIN', 'PURCHASE')
+def send_supplier_invoice_email(request):
+    """Send payment status statement email with formatted table in email body separately to each selected supplier."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=400)
+
+    raw_product_ids = request.POST.getlist('product_ids[]') or request.POST.getlist('product_ids')
+    if not raw_product_ids:
+        raw_single = request.POST.get('product_ids', '').strip()
+        if raw_single:
+            raw_product_ids = [pid.strip() for pid in raw_single.split(',') if pid.strip()]
+
+    product_ids = [int(pid) for pid in raw_product_ids if str(pid).isdigit()]
+    if not product_ids:
+        return JsonResponse({'status': 'error', 'message': 'No records selected.'}, status=400)
+
+    recipient_email = request.POST.get('recipient_email', '').strip()
+    subject = request.POST.get('email_subject', '').strip()
+    body = request.POST.get('email_body', '').strip()
+    extra_attachment = request.FILES.get('extra_attachment')
+
+    products = list(SupplierProduct.objects.select_related('supplier', 'customer_product', 'customer_product__dpr').filter(id__in=product_ids))
+    if not products:
+        return JsonResponse({'status': 'error', 'message': 'Selected supplier records not found.'}, status=404)
+
+    from collections import defaultdict
+    import threading
+    import logging
+
+    supplier_groups = defaultdict(list)
+    for p in products:
+        supp = p.supplier
+        if supp:
+            supplier_groups[supp].append(p)
+
+    sent_details = []
+    missing_email_suppliers = []
+    messages_to_send = []
+
+    attachment_data = None
+    if extra_attachment:
+        try:
+            attachment_data = (
+                extra_attachment.name,
+                extra_attachment.read(),
+                getattr(extra_attachment, 'content_type', None) or 'application/octet-stream'
+            )
+        except Exception:
+            attachment_data = None
+
+    for supp, items in supplier_groups.items():
+        supp_email = (supp.email or '').strip()
+        override_email = request.POST.get(f'email_{supp.id}', '').strip()
+        if override_email:
+            supp_email = override_email
+
+        if not supp_email or len(supplier_groups) == 1:
+            if recipient_email:
+                supp_email = recipient_email
+
+        if not supp_email:
+            missing_email_suppliers.append(supp.supplier_name)
+            continue
+
+        to_emails = [email.strip() for email in re.split(r'[;,]', supp_email) if email.strip()]
+        valid_to_emails = []
+        for em in to_emails:
+            try:
+                validate_email(em)
+                valid_to_emails.append(em)
+            except ValidationError:
+                pass
+
+        if not valid_to_emails:
+            missing_email_suppliers.append(f"{supp.supplier_name} (Invalid email: {supp_email})")
+            continue
+
+        html_body, total_out = _build_supplier_outstanding_email_html(supp, items, custom_body=body)
+        email_subject = subject or f"Supplier Payment Statement - {supp.supplier_name} - Metrology Engineering Solutions"
+
+        email = EmailMessage(
+            subject=email_subject,
+            body=html_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=valid_to_emails,
+        )
+        email.content_subtype = "html"
+
+        if attachment_data:
+            email.attach(*attachment_data)
+
+        messages_to_send.append(email)
+        sent_details.append(f"{supp.supplier_name} ({', '.join(valid_to_emails)})")
+
+    if not messages_to_send and missing_email_suppliers:
+        return JsonResponse({
+            'status': 'error',
+            'message': f"Could not send email. Missing or invalid email address for: {', '.join(missing_email_suppliers)}. Please enter a valid recipient email."
+        }, status=400)
+
+    def _send_emails_worker(msg_list):
+        try:
+            from django.core.mail import get_connection
+            conn = get_connection(timeout=20)
+            conn.open()
+            conn.send_messages(msg_list)
+            conn.close()
+        except Exception as exc:
+            logging.getLogger(__name__).exception("Error in background supplier email worker: %s", exc)
+
+    if messages_to_send:
+        bg_thread = threading.Thread(target=_send_emails_worker, args=(messages_to_send,))
+        bg_thread.daemon = True
+        bg_thread.start()
+
+    msg_parts = []
+    if sent_details:
+        msg_parts.append(f"Supplier payment statement email sent successfully to: {', '.join(sent_details)}.")
+    if missing_email_suppliers:
+        msg_parts.append(f"Skipped suppliers without email: {', '.join(missing_email_suppliers)}.")
+
+    return JsonResponse({
+        'status': 'ok' if sent_details else 'error',
+        'message': " ".join(msg_parts),
+        'sent_count': len(sent_details),
     })
 
 
