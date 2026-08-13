@@ -31,6 +31,14 @@ class RBACTestCase(TestCase):
         self.purchase_user.profile.role = UserProfile.ROLE_PURCHASE
         self.purchase_user.profile.save()
 
+        # Accounts user
+        self.accounts_user = CustomUser.objects.create_user(
+            username='accounts_test',
+            password='Password123!',
+        )
+        self.accounts_user.profile.role = UserProfile.ROLE_ACCOUNTS
+        self.accounts_user.profile.save()
+
     def test_user_role_properties(self):
         self.assertEqual(self.admin_user.role, 'ADMIN')
         self.assertTrue(self.admin_user.is_admin)
@@ -43,6 +51,10 @@ class RBACTestCase(TestCase):
         self.assertEqual(self.purchase_user.role, 'PURCHASE')
         self.assertTrue(self.purchase_user.is_purchase)
         self.assertFalse(self.purchase_user.is_sales)
+
+        self.assertEqual(self.accounts_user.role, 'ACCOUNTS')
+        self.assertTrue(self.accounts_user.is_accounts)
+        self.assertFalse(self.accounts_user.is_admin)
 
     def test_unauthenticated_redirect(self):
         response = self.client.get(reverse('dashboard'))
@@ -57,12 +69,12 @@ class RBACTestCase(TestCase):
     def test_sales_access_permissions(self):
         self.client.force_login(self.sales_user)
         # Allowed views
-        for url_name in ['dashboard', 'rfq_details', 'customer_po_product_details']:
+        for url_name in ['dashboard', 'rfq_details', 'customer_po_product_details', 'customer_details']:
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 200, f"Sales failed to access allowed view {url_name}")
 
         # Restricted views (403 Forbidden)
-        for url_name in ['dpr_view', 'customer_order', 'supplier_po_product_details', 'material_status', 'accounts_details', 'customer_details', 'supplier_details', 'register']:
+        for url_name in ['dpr_view', 'customer_order', 'supplier_po_product_details', 'material_status', 'accounts_details', 'supplier_details', 'register']:
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 403, f"Sales was not blocked from accessing {url_name}")
 
@@ -77,6 +89,18 @@ class RBACTestCase(TestCase):
         for url_name in ['accounts_details', 'rfq_details', 'customer_details', 'supplier_details', 'register']:
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 403, f"Purchase was not blocked from accessing {url_name}")
+
+    def test_accounts_access_permissions(self):
+        self.client.force_login(self.accounts_user)
+        # Allowed views (Only Accounts views & Dashboard)
+        for url_name in ['dashboard', 'accounts_details', 'supplier_accounts_details']:
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 200, f"Accounts user failed to access allowed view {url_name}")
+
+        # Restricted views (403 Forbidden for all other modules)
+        for url_name in ['dpr_view', 'customer_order', 'customer_po_product_details', 'supplier_po_product_details', 'material_status', 'rfq_details', 'customer_details', 'supplier_details', 'register']:
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 403, f"Accounts user was not blocked from accessing {url_name}")
 
     def test_create_user_profile_no_duplicate_error(self):
         new_user = CustomUser.objects.create_user(username='new_unique_user', password='password123')

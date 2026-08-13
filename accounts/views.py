@@ -16,7 +16,7 @@ from products.models import CustomerProduct, SupplierProduct
 from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation
 from django.http import HttpResponse, JsonResponse, Http404
 from django.db import transaction
-from django.db.models import Sum, Case, When, Value, IntegerField
+from django.db.models import Sum, Case, When, Value, IntegerField, Q
 from django.db.models.functions import Coalesce
 from decimal import Decimal, InvalidOperation
 from django.utils import timezone
@@ -1169,6 +1169,127 @@ def dashboard(request):
     rfq_price_pending_pct = rfq_overdue_pct
     rfq_quotation_pending_pct = _pct(rfq_quotation_pending_count, total_rfq_count)
 
+    # Accounts financial metrics calculations
+    cust_products = list(CustomerProduct.objects.select_related('dpr', 'dpr__customer').all())
+    supp_products = list(SupplierProduct.objects.filter(
+        Q(quantity_received__gt=0) |
+        Q(quantity_not_ok__gt=0) |
+        Q(status__in=['delivered', 'partially_delivered']) |
+        (Q(supplier_invoice_number__isnull=False) & ~Q(supplier_invoice_number='')) |
+        Q(supplier_bill_amount__gt=0) |
+        (Q(bill_attachment__isnull=False) & ~Q(bill_attachment=''))
+    ).select_related('supplier', 'customer_product', 'customer_product__dpr').distinct())
+
+    total_cust_invoice_val = Decimal('0.00')
+    total_cust_received_val = Decimal('0.00')
+    total_cust_outstanding_val = Decimal('0.00')
+    total_cust_overdue_val = Decimal('0.00')
+
+    cust_paid_count = 0
+    cust_partially_paid_count = 0
+    cust_not_received_count = 0
+    cust_overdue_count = 0
+    cust_due_soon_count = 0
+
+    for p in cust_products:
+        inv_date = p.invoice_date or (p.dpr.po_date if p.dpr else None) or (p.dpr.created_at.date() if p.dpr and p.dpr.created_at else today)
+        cust = p.dpr.customer if p.dpr else None
+        terms_str = (cust.payment_terms or '').lower() if cust else ''
+        days = 30
+        match = re.search(r'(\d+)', terms_str)
+        if match:
+            try:
+                days = int(match.group(1))
+            except ValueError:
+                pass
+        terms_date = inv_date + timedelta(days=days) if inv_date else today
+
+        po_val = p.value or Decimal('0.00')
+        rec_amt = p.received_amount or Decimal('0.00')
+        rem_amt = max(po_val - rec_amt, Decimal('0.00'))
+
+        total_cust_invoice_val += po_val
+        total_cust_received_val += rec_amt
+        total_cust_outstanding_val += rem_amt
+
+        is_paid = (p.payment_status == 'amount_received' or rec_amt >= po_val)
+        is_due_soon = not is_paid and (today <= terms_date <= today + timedelta(days=7))
+        is_overdue = not is_paid and (today > terms_date)
+
+        if is_paid:
+            cust_paid_count += 1
+        else:
+            if p.payment_status == 'partially_received':
+                cust_partially_paid_count += 1
+            else:
+                cust_not_received_count += 1
+
+            if is_due_soon:
+                cust_due_soon_count += 1
+            if is_overdue:
+                cust_overdue_count += 1
+                total_cust_overdue_val += rem_amt
+
+    total_supp_invoice_val = Decimal('0.00')
+    total_supp_received_val = Decimal('0.00')
+    total_supp_outstanding_val = Decimal('0.00')
+    total_supp_overdue_val = Decimal('0.00')
+
+    supp_paid_count = 0
+    supp_partially_paid_count = 0
+    supp_not_received_count = 0
+    supp_overdue_count = 0
+    supp_due_soon_count = 0
+
+    for p in supp_products:
+        dpr_created = p.customer_product.dpr.created_at.date() if (p.customer_product and p.customer_product.dpr and p.customer_product.dpr.created_at) else today
+        inv_date = p.invoice_date or p.po_date or dpr_created
+        supp = p.supplier
+        terms_str = (supp.payment_terms or '').strip().lower() if supp else ''
+        days = 30
+        match = re.search(r'(\d+)', terms_str)
+        if match:
+            try:
+                val = int(match.group(1))
+                if 'day' in terms_str:
+                    days = val
+                elif 'month' in terms_str:
+                    days = val * 30
+                else:
+                    days = val * 7
+            except ValueError:
+                pass
+        terms_date = inv_date + timedelta(days=days) if inv_date else today
+
+        po_val = p.supplier_bill_amount if (p.supplier_bill_amount is not None and p.supplier_bill_amount > Decimal('0.00')) else (p.po_value or Decimal('0.00'))
+        rec_amt = p.received_amount or Decimal('0.00')
+        rem_amt = max(po_val - rec_amt, Decimal('0.00'))
+
+        total_supp_invoice_val += po_val
+        total_supp_received_val += rec_amt
+        total_supp_outstanding_val += rem_amt
+
+        is_paid = (p.payment_status == 'amount_received' or rec_amt >= po_val)
+        is_due_soon = not is_paid and (today <= terms_date <= today + timedelta(days=7))
+        is_overdue = not is_paid and (today > terms_date)
+
+        if is_paid:
+            supp_paid_count += 1
+        else:
+            if p.payment_status == 'partially_received':
+                supp_partially_paid_count += 1
+            else:
+                supp_not_received_count += 1
+
+            if is_due_soon:
+                supp_due_soon_count += 1
+            if is_overdue:
+                supp_overdue_count += 1
+                total_supp_overdue_val += rem_amt
+
+    cust_collection_pct = _pct(float(total_cust_received_val), float(total_cust_invoice_val))
+    supp_payment_pct = _pct(float(total_supp_received_val), float(total_supp_invoice_val))
+
     return render(request, 'dashboard.html', {
         'total_dpr_count': total_dpr_count,
         'total_rfq_count': total_rfq_count,
@@ -1205,6 +1326,28 @@ def dashboard(request):
         'rfq_price_pending_pct': rfq_price_pending_pct,
         'rfq_overdue_pct': rfq_overdue_pct,
         'rfq_quotation_pending_pct': rfq_quotation_pending_pct,
+
+        # Financial accounts context variables
+        'total_cust_invoice_val': float(total_cust_invoice_val),
+        'total_cust_received_val': float(total_cust_received_val),
+        'total_cust_outstanding_val': float(total_cust_outstanding_val),
+        'total_cust_overdue_val': float(total_cust_overdue_val),
+        'cust_paid_count': cust_paid_count,
+        'cust_partially_paid_count': cust_partially_paid_count,
+        'cust_not_received_count': cust_not_received_count,
+        'cust_due_soon_count': cust_due_soon_count,
+        'cust_overdue_count': cust_overdue_count,
+        'cust_collection_pct': cust_collection_pct,
+        'total_supp_invoice_val': float(total_supp_invoice_val),
+        'total_supp_received_val': float(total_supp_received_val),
+        'total_supp_outstanding_val': float(total_supp_outstanding_val),
+        'total_supp_overdue_val': float(total_supp_overdue_val),
+        'supp_paid_count': supp_paid_count,
+        'supp_partially_paid_count': supp_partially_paid_count,
+        'supp_not_received_count': supp_not_received_count,
+        'supp_due_soon_count': supp_due_soon_count,
+        'supp_overdue_count': supp_overdue_count,
+        'supp_payment_pct': supp_payment_pct,
     })
 
 
@@ -1760,7 +1903,7 @@ def material_status(request):
     )
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def accounts_details(request):
     case_filter = request.GET.get('case', '').strip()
     today = timezone.localdate()
@@ -1890,7 +2033,7 @@ def accounts_details(request):
     )
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def customer_product_followup_update(request, product_id):
     if request.method != 'POST':
         raise Http404
@@ -1917,7 +2060,7 @@ def customer_product_followup_update(request, product_id):
     return JsonResponse({'status': 'ok'})
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def customer_product_payment_update(request, product_id):
     if request.method != 'POST':
         raise Http404
@@ -2004,16 +2147,23 @@ def customer_product_payment_update(request, product_id):
     })
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def supplier_accounts_details(request):
     case_filter = request.GET.get('case', '').strip()
     today = timezone.localdate()
 
-    products = SupplierProduct.objects.select_related(
+    products = SupplierProduct.objects.filter(
+        Q(quantity_received__gt=0) |
+        Q(quantity_not_ok__gt=0) |
+        Q(status__in=['delivered', 'partially_delivered']) |
+        (Q(supplier_invoice_number__isnull=False) & ~Q(supplier_invoice_number='')) |
+        Q(supplier_bill_amount__gt=0) |
+        (Q(bill_attachment__isnull=False) & ~Q(bill_attachment=''))
+    ).select_related(
         'supplier',
         'customer_product',
         'customer_product__dpr'
-    )
+    ).distinct()
 
     items = []
     total_invoice_value = Decimal('0.00')
@@ -2053,7 +2203,7 @@ def supplier_accounts_details(request):
 
         terms_date = inv_date + timedelta(days=days)
 
-        po_val = product.po_value or Decimal('0.00')
+        po_val = product.supplier_bill_amount if (product.supplier_bill_amount is not None and product.supplier_bill_amount > Decimal('0.00')) else (product.po_value or Decimal('0.00'))
         rec_amt = product.received_amount or Decimal('0.00')
         rem_amt = max(po_val - rec_amt, Decimal('0.00'))
 
@@ -2115,6 +2265,7 @@ def supplier_accounts_details(request):
             'payment_notes': product.payment_notes or '',
             'supplier_invoice_number': product.supplier_invoice_number or '',
             'bill_attachment_url': product.bill_attachment.url if product.bill_attachment else '',
+            'bill_attachment_name': re.split(r'[/\\]', product.bill_attachment.name)[-1] if product.bill_attachment else '',
         }
         items.append(item)
 
@@ -2144,7 +2295,7 @@ def supplier_accounts_details(request):
     )
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def supplier_product_followup_update(request, supplier_product_id):
     if request.method != 'POST':
         raise Http404
@@ -2171,7 +2322,7 @@ def supplier_product_followup_update(request, supplier_product_id):
     return JsonResponse({'status': 'ok'})
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def supplier_product_payment_update(request, supplier_product_id):
     if request.method != 'POST':
         raise Http404
@@ -2329,6 +2480,21 @@ def supplier_product_status_update(request, supplier_product_id):
         supplier_invoice_number = request.POST.get('supplier_invoice_number', '').strip() or None
         supplier_bill_amount_raw = request.POST.get('supplier_bill_amount', '').strip()
         bill_attachment = request.FILES.get('bill_attachment')
+
+        if 'supplier_invoice_number' in request.POST:
+            if not supplier_invoice_number:
+                return JsonResponse({'status': 'error', 'message': 'Supplier Invoice Number is required.'}, status=400)
+
+            try:
+                bill_amt = Decimal(supplier_bill_amount_raw or '0')
+            except (InvalidOperation, ValueError):
+                bill_amt = Decimal('0.00')
+
+            if bill_amt <= Decimal('0.00'):
+                return JsonResponse({'status': 'error', 'message': 'Supplier Bill Amount is required and must be greater than 0.'}, status=400)
+
+            if not bill_attachment and not supplier_product.bill_attachment:
+                return JsonResponse({'status': 'error', 'message': 'Bill Attachment is required.'}, status=400)
 
         supplier_product.quantity_received = received_quantity
         supplier_product.quantity_not_ok = not_ok_quantity
@@ -5470,7 +5636,7 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
     return buffer
 
 
-@role_required('ADMIN', 'PURCHASE', 'SALES')
+@role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
 def customer_invoice_modal_data(request, product_id):
     """Return JSON data for the Generate Invoice modal popup showing only the selected product."""
     from products.models import CustomerProduct
@@ -5503,7 +5669,7 @@ def customer_invoice_modal_data(request, product_id):
     })
 
 
-@role_required('ADMIN', 'PURCHASE', 'SALES')
+@role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
 def generate_customer_invoice(request, product_id, invoice_id=None):
     """Generate a Tax Invoice PDF for a customer product / DPR order."""
     from products.models import CustomerProduct, CustomerInvoice
@@ -5698,7 +5864,7 @@ def _build_customer_outstanding_email_html(customer, items, custom_body=None):
     return html_content, total_outstanding
 
 
-@role_required('ADMIN', 'PURCHASE', 'SALES')
+@role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
 def send_invoice_email(request):
     """Send outstanding payment reminder email with formatted table in email body separately to each selected customer."""
     if request.method != 'POST':
@@ -5917,7 +6083,7 @@ def _build_supplier_outstanding_email_html(supplier, items, custom_body=None):
     return html_content, total_outstanding
 
 
-@role_required('ADMIN', 'PURCHASE')
+@role_required('ADMIN', 'PURCHASE', 'ACCOUNTS')
 def send_supplier_invoice_email(request):
     """Send payment status statement email with formatted table in email body separately to each selected supplier."""
     if request.method != 'POST':

@@ -118,118 +118,278 @@
 </div>
 
 <!-- KPI summary cards (clickable) -->
-<div class="row g-3 mb-4">
-    {% if can_view_dpr %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'dpr_view' %}" class="dpr-card-hover">
-            <div class="dpr-card p-3 h-100">
+{% if is_accounts %}
+<div class="row g-3 mb-3">
+    <!-- Customer Invoiced Value -->
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'accounts_details' %}" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
                 <div class="d-flex align-items-center gap-3">
-                    <div class="dpr-kpi-icon blue"><i class="bi bi-journal-text"></i></div>
+                    <div class="dpr-kpi-icon blue"><i class="bi bi-cash-stack"></i></div>
                     <div>
-                        <div class="dpr-kpi-value">{{ total_dpr_count }}</div>
-                        <div class="dpr-kpi-label">Total DPRs</div>
+                        <div class="dpr-kpi-value text-dark fs-5">₹{{ total_cust_invoice_val|floatformat:2 }}</div>
+                        <div class="dpr-kpi-label">Customer Invoiced Value</div>
                     </div>
                 </div>
             </div>
         </a>
     </div>
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'dpr_view' %}?confirmation=mail" class="dpr-card-hover">
-            <div class="dpr-card p-3 h-100">
+    <!-- Customer Amount Received -->
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'accounts_details' %}" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon green"><i class="bi bi-check-circle-fill"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value text-success fs-5">₹{{ total_cust_received_val|floatformat:2 }}</div>
+                        <div class="dpr-kpi-label">Customer Amount Received</div>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <!-- Customer Overdue Balance -->
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'accounts_details' %}?case=overdue" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="dpr-kpi-icon red"><i class="bi bi-envelope-exclamation"></i></div>
+                        <div class="dpr-kpi-icon red"><i class="bi bi-exclamation-triangle-fill"></i></div>
                         <div>
-                            <div class="dpr-kpi-value">{{ pending_mail_confirmation_count }}</div>
-                            <div class="dpr-kpi-label">Pending Confirmation</div>
+                            <div class="dpr-kpi-value text-danger fs-5">₹{{ total_cust_overdue_val|floatformat:2 }}</div>
+                            <div class="dpr-kpi-label">Customer Overdue Balance</div>
                         </div>
                     </div>
-                    {% if pending_mail_confirmation_count %}
-                    <span class="dpr-badge-pending">Pending</span>
+                    {% if cust_overdue_count %}
+                    <span class="badge bg-danger rounded-pill">{{ cust_overdue_count }} Overdue</span>
                     {% endif %}
                 </div>
             </div>
         </a>
     </div>
-    {% endif %}
-    {% if can_view_rfq %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
-            <div class="dpr-card p-3 h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="dpr-kpi-icon green"><i class="bi bi-envelope-paper"></i></div>
-                    <div>
-                        <div class="dpr-kpi-value">{{ total_rfq_count }}</div>
-                        <div class="dpr-kpi-label">Total RFQs</div>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    {% endif %}
-    {% if can_view_customer_po %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
-            <div class="dpr-card p-3 h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="dpr-kpi-icon blue"><i class="bi bi-bag-check"></i></div>
-                    <div>
-                        <div class="dpr-kpi-value">{{ total_customer_products }}</div>
-                        <div class="dpr-kpi-label">Customer PO Products</div>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    {% endif %}
-
-    {% if can_view_supplier_po %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'supplier_po_product_details' %}" class="dpr-card-hover">
-            <div class="dpr-card p-3 h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="dpr-kpi-icon amber"><i class="bi bi-building"></i></div>
-                    <div>
-                        <div class="dpr-kpi-value">{{ total_supplier_products }}</div>
-                        <div class="dpr-kpi-label">Supplier Products</div>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    {% if not is_purchase %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
-            <div class="dpr-card p-3 h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="dpr-kpi-icon green"><i class="bi bi-boxes"></i></div>
-                    <div>
-                        <div class="dpr-kpi-value"><span class="text-success">{{ supplier_delivered_count }}</span> <span class="fs-6 text-muted fw-normal">/ {{ supplier_not_delivered_count }} Not Del.</span></div>
-                        <div class="dpr-kpi-label">Material Status (Del / Not Del)</div>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    {% endif %}
-    {% endif %}
-    {% if can_view_dpr or can_view_supplier_po %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'dpr_view' %}?case=supplier_order_pending" class="dpr-card-hover">
-            <div class="dpr-card p-3 h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="dpr-kpi-icon purple"><i class="bi bi-diagram-3"></i></div>
-                    <div>
-                        <div class="dpr-kpi-value">{{ supplier_order_pending_difference }}</div>
-                        <div class="dpr-kpi-label">Supplier Order Pending</div>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    {% endif %}
 </div>
 
+<div class="row g-3 mb-4">
+    <!-- Supplier Total Bill Amount -->
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'supplier_accounts_details' %}" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon blue"><i class="bi bi-receipt"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value text-dark fs-5">₹{{ total_supp_invoice_val|floatformat:2 }}</div>
+                        <div class="dpr-kpi-label">Supplier Total Bill Value</div>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <!-- Supplier Amount Paid -->
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'supplier_accounts_details' %}" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon green"><i class="bi bi-patch-check-fill"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value text-success fs-5">₹{{ total_supp_received_val|floatformat:2 }}</div>
+                        <div class="dpr-kpi-label">Supplier Amount Paid</div>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <!-- Supplier Outstanding & Overdue -->
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'supplier_accounts_details' %}?case=overdue" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="dpr-kpi-icon amber"><i class="bi bi-truck"></i></div>
+                        <div>
+                            <div class="dpr-kpi-value text-warning fs-5">₹{{ total_supp_outstanding_val|floatformat:2 }}</div>
+                            <div class="dpr-kpi-label">Supplier Outstanding</div>
+                        </div>
+                    </div>
+                    {% if supp_overdue_count %}
+                    <span class="badge bg-danger rounded-pill">{{ supp_overdue_count }} Overdue</span>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Financial Overview Panel: Customer Collection & Supplier Payment Rates -->
+<div class="dpr-card dpr-insight-panel mb-4 shadow-sm border-0">
+    <div class="panel-head d-flex justify-content-between align-items-center px-3 py-2">
+        <span class="fw-bold"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>Financial Tracking &amp; Payment Overview</span>
+        <span class="badge bg-primary px-3 py-1 rounded-pill">Accounts Analytics</span>
+    </div>
+    <div class="row g-0 align-items-center px-3 pb-3">
+        <!-- Customer Receivables Side -->
+        <div class="col-lg-6 py-3 px-lg-3">
+            <h6 class="fw-bold text-primary mb-3 text-uppercase" style="letter-spacing:0.5px; font-size: 13px;">
+                <i class="bi bi-people-fill me-2"></i>Customer Receivables Breakdown
+            </h6>
+            <div class="row align-items-center mb-3">
+                <div class="col-sm-5 text-center mb-2 mb-sm-0">
+                    <div class="dpr-gauge-wrap">
+                        <canvas id="accountsCollectionGauge" height="110"></canvas>
+                        <div class="dpr-gauge-value" style="font-size:1.1rem; bottom:6px;">{{ cust_collection_pct }}%</div>
+                    </div>
+                    <div class="small fw-bold text-dark mt-1">Collection Rate</div>
+                    <div class="text-muted" style="font-size: 11px;">₹{{ total_cust_received_val|floatformat:0 }} of ₹{{ total_cust_invoice_val|floatformat:0 }}</div>
+                </div>
+                <div class="col-sm-7">
+                    <div class="dpr-progress-row mb-2">
+                        <div class="dpr-progress-label small">
+                            <span><i class="bi bi-check2-circle text-success me-1"></i> Received</span>
+                            <span class="fw-bold text-success">₹{{ total_cust_received_val|floatformat:2 }}</span>
+                        </div>
+                        <div class="dpr-progress-track" style="height:6px;">
+                            <div class="dpr-progress-fill" style="width: {{ cust_collection_pct }}%; background: #22c55e;"></div>
+                        </div>
+                    </div>
+                    <div class="dpr-progress-row mb-2">
+                        <div class="dpr-progress-label small">
+                            <span><i class="bi bi-clock-history text-warning me-1"></i> Due Soon (7 Days)</span>
+                            <span class="fw-bold text-warning">{{ cust_due_soon_count }} Invoices</span>
+                        </div>
+                        <div class="dpr-progress-track" style="height:6px;">
+                            <div class="dpr-progress-fill" style="width: {% if total_customer_products %}{% widthratio cust_due_soon_count total_customer_products 100 %}{% else %}0{% endif %}%; background: #f59e0b;"></div>
+                        </div>
+                    </div>
+                    <div class="dpr-progress-row">
+                        <div class="dpr-progress-label small">
+                            <span><i class="bi bi-exclamation-octagon text-danger me-1"></i> Overdue Balance</span>
+                            <span class="fw-bold text-danger">₹{{ total_cust_overdue_val|floatformat:2 }}</span>
+                        </div>
+                        <div class="dpr-progress-track" style="height:6px;">
+                            <div class="dpr-progress-fill" style="width: {% if total_cust_invoice_val %}{% widthratio total_cust_overdue_val total_cust_invoice_val 100 %}{% else %}0{% endif %}%; background: #ef4444;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Supplier Payables Side -->
+        <div class="col-lg-6 py-3 px-lg-3">
+            <h6 class="fw-bold text-info mb-3 text-uppercase" style="letter-spacing:0.5px; font-size: 13px;">
+                <i class="bi bi-truck me-2"></i>Supplier Payables Breakdown
+            </h6>
+            <div class="row align-items-center mb-3">
+                <div class="col-sm-5 text-center mb-2 mb-sm-0">
+                    <div class="dpr-gauge-wrap">
+                        <canvas id="supplierPaymentGauge" height="110"></canvas>
+                        <div class="dpr-gauge-value" style="font-size:1.1rem; bottom:6px;">{{ supp_payment_pct }}%</div>
+                    </div>
+                    <div class="small fw-bold text-dark mt-1">Payment Rate</div>
+                    <div class="text-muted" style="font-size: 11px;">₹{{ total_supp_received_val|floatformat:0 }} of ₹{{ total_supp_invoice_val|floatformat:0 }}</div>
+                </div>
+                <div class="col-sm-7">
+                    <div class="dpr-progress-row mb-2">
+                        <div class="dpr-progress-label small">
+                            <span><i class="bi bi-check2-circle text-success me-1"></i> Amount Paid</span>
+                            <span class="fw-bold text-success">₹{{ total_supp_received_val|floatformat:2 }}</span>
+                        </div>
+                        <div class="dpr-progress-track" style="height:6px;">
+                            <div class="dpr-progress-fill" style="width: {{ supp_payment_pct }}%; background: #22c55e;"></div>
+                        </div>
+                    </div>
+                    <div class="dpr-progress-row mb-2">
+                        <div class="dpr-progress-label small">
+                            <span><i class="bi bi-clock-history text-warning me-1"></i> Due Soon (7 Days)</span>
+                            <span class="fw-bold text-warning">{{ supp_due_soon_count }} Bills</span>
+                        </div>
+                        <div class="dpr-progress-track" style="height:6px;">
+                            <div class="dpr-progress-fill" style="width: {% if total_supplier_products %}{% widthratio supp_due_soon_count total_supplier_products 100 %}{% else %}0{% endif %}%; background: #f59e0b;"></div>
+                        </div>
+                    </div>
+                    <div class="dpr-progress-row">
+                        <div class="dpr-progress-label small">
+                            <span><i class="bi bi-exclamation-octagon text-danger me-1"></i> Overdue Payables</span>
+                            <span class="fw-bold text-danger">₹{{ total_supp_overdue_val|floatformat:2 }}</span>
+                        </div>
+                        <div class="dpr-progress-track" style="height:6px;">
+                            <div class="dpr-progress-fill" style="width: {% if total_supp_invoice_val %}{% widthratio total_supp_overdue_val total_supp_invoice_val 100 %}{% else %}0{% endif %}%; background: #ef4444;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="dpr-insight-footer bg-light px-3 py-2 d-flex flex-wrap gap-4 align-items-center justify-content-between">
+        <div>
+            <span class="stat-item text-dark me-3"><i class="bi bi-people-fill me-1 text-primary"></i> Customer Invoices: <strong>{{ total_customer_products }}</strong></span>
+            <span class="stat-item text-dark me-3"><i class="bi bi-truck me-1 text-info"></i> Supplier Bills: <strong>{{ total_supplier_products }}</strong></span>
+        </div>
+        <div>
+            <span class="stat-item text-dark me-3"><i class="bi bi-exclamation-circle me-1 text-danger"></i> Cust. Overdue: <strong>₹{{ total_cust_overdue_val|floatformat:2 }}</strong></span>
+            <span class="stat-item text-dark"><i class="bi bi-exclamation-triangle me-1 text-danger"></i> Supp. Overdue: <strong>₹{{ total_supp_overdue_val|floatformat:2 }}</strong></span>
+        </div>
+    </div>
+</div>
+
+<!-- Accounts Financial Comparison & Status Charts -->
+<div class="row g-3 mb-4">
+    <!-- Comparison Bar Chart -->
+    <div class="col-lg-6">
+        <div class="dpr-card dpr-chart-card h-100 d-flex flex-column shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-2 px-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-dark"><i class="bi bi-bar-chart-line-fill me-2 text-primary"></i>Receivables vs Payables Comparison (₹)</span>
+                <span class="small text-muted">Customer vs Supplier</span>
+            </div>
+            <div class="card-body flex-grow-1 p-3">
+                <div style="height: 250px; position: relative;">
+                    <canvas id="accountsComparisonBarChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Status Donut Chart -->
+    <div class="col-lg-3">
+        <div class="dpr-card dpr-chart-card h-100 d-flex flex-column shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-2 px-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-dark"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>Customer Payment Status</span>
+            </div>
+            <div class="card-body flex-grow-1 p-3 d-flex flex-column justify-content-center">
+                <div style="height: 160px; position: relative;" class="mb-2">
+                    <canvas id="accountsStatusDonutChart"></canvas>
+                </div>
+                <ul class="dpr-chart-legend list-unstyled mb-0" style="font-size: 11.5px;">
+                    <li class="mb-1"><span class="dot me-1" style="background:#22c55e; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Paid ({{ cust_paid_count }})</li>
+                    <li class="mb-1"><span class="dot me-1" style="background:#8b5cf6; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Partial ({{ cust_partially_paid_count }})</li>
+                    <li class="mb-1"><span class="dot me-1" style="background:#f59e0b; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Due Soon ({{ cust_due_soon_count }})</li>
+                    <li class="mb-1"><span class="dot me-1" style="background:#ef4444; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Overdue ({{ cust_overdue_count }})</li>
+                    <li><span class="dot me-1" style="background:#94a3b8; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Unpaid ({{ cust_not_received_count }})</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supplier Status Donut Chart -->
+    <div class="col-lg-3">
+        <div class="dpr-card dpr-chart-card h-100 d-flex flex-column shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-2 px-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-dark"><i class="bi bi-pie-chart-fill me-2 text-info"></i>Supplier Payment Status</span>
+            </div>
+            <div class="card-body flex-grow-1 p-3 d-flex flex-column justify-content-center">
+                <div style="height: 160px; position: relative;" class="mb-2">
+                    <canvas id="supplierStatusDonutChart"></canvas>
+                </div>
+                <ul class="dpr-chart-legend list-unstyled mb-0" style="font-size: 11.5px;">
+                    <li class="mb-1"><span class="dot me-1" style="background:#22c55e; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Paid ({{ supp_paid_count }})</li>
+                    <li class="mb-1"><span class="dot me-1" style="background:#8b5cf6; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Partial ({{ supp_partially_paid_count }})</li>
+                    <li class="mb-1"><span class="dot me-1" style="background:#f59e0b; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Due Soon ({{ supp_due_soon_count }})</li>
+                    <li class="mb-1"><span class="dot me-1" style="background:#ef4444; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Overdue ({{ supp_overdue_count }})</li>
+                    <li><span class="dot me-1" style="background:#94a3b8; display:inline-block; width:8px; height:8px; border-radius:50%;"></span> Unpaid ({{ supp_not_received_count }})</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
 <!-- Insight panel: gauge + progress + mini output -->
 <div class="dpr-card dpr-insight-panel mb-4">
     <div class="panel-head">Order Progress &amp; Performance</div>
@@ -476,6 +636,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <!-- Footer action bar -->
 <div class="dpr-footer-bar d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -577,6 +738,169 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+{% if is_accounts %}
+const collectionPct = {{ cust_collection_pct|default:0 }};
+const collectionCtx = document.getElementById('accountsCollectionGauge');
+if (collectionCtx) {
+    new Chart(collectionCtx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [collectionPct, Math.max(0, 100 - collectionPct)],
+                backgroundColor: ['#22c55e', '#e2e8f0'],
+                borderWidth: 0,
+                circumference: 180,
+                rotation: 270
+            }]
+        },
+        options: {
+            responsive: true,
+            cutout: '74%',
+            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        }
+    });
+}
+
+const comparisonBarCtx = document.getElementById('accountsComparisonBarChart');
+if (comparisonBarCtx) {
+    new Chart(comparisonBarCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Total Invoiced', 'Received / Paid', 'Outstanding', 'Overdue'],
+            datasets: [
+                {
+                    label: 'Customer Receivables (₹)',
+                    data: [
+                        {{ total_cust_invoice_val|default:0 }},
+                        {{ total_cust_received_val|default:0 }},
+                        {{ total_cust_outstanding_val|default:0 }},
+                        {{ total_cust_overdue_val|default:0 }}
+                    ],
+                    backgroundColor: '#8b5cf6',
+                    borderRadius: 6
+                },
+                {
+                    label: 'Supplier Payables (₹)',
+                    data: [
+                        {{ total_supp_invoice_val|default:0 }},
+                        {{ total_supp_received_val|default:0 }},
+                        {{ total_supp_outstanding_val|default:0 }},
+                        {{ total_supp_overdue_val|default:0 }}
+                    ],
+                    backgroundColor: '#3b82f6',
+                    borderRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) label += ': ';
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '₹' + (value / 1000).toFixed(0) + 'k';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+const accountsStatusDonutCtx = document.getElementById('accountsStatusDonutChart');
+if (accountsStatusDonutCtx) {
+    new Chart(accountsStatusDonutCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Paid', 'Partial', 'Due Soon', 'Overdue', 'Unpaid'],
+            datasets: [{
+                data: [
+                    {{ cust_paid_count|default:0 }},
+                    {{ cust_partially_paid_count|default:0 }},
+                    {{ cust_due_soon_count|default:0 }},
+                    {{ cust_overdue_count|default:0 }},
+                    {{ cust_not_received_count|default:0 }}
+                ],
+                backgroundColor: ['#22c55e', '#8b5cf6', '#f59e0b', '#ef4444', '#94a3b8'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+const suppPaymentPct = {{ supp_payment_pct|default:0 }};
+const suppGaugeCtx = document.getElementById('supplierPaymentGauge');
+if (suppGaugeCtx) {
+    new Chart(suppGaugeCtx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [suppPaymentPct, Math.max(0, 100 - suppPaymentPct)],
+                backgroundColor: ['#22c55e', '#e2e8f0'],
+                borderWidth: 0,
+                circumference: 180,
+                rotation: 270
+            }]
+        },
+        options: {
+            responsive: true,
+            cutout: '74%',
+            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        }
+    });
+}
+
+const suppStatusCtx = document.getElementById('supplierStatusDonutChart');
+if (suppStatusCtx) {
+    new Chart(suppStatusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Paid', 'Partial', 'Due Soon', 'Overdue', 'Unpaid'],
+            datasets: [{
+                data: [
+                    {{ supp_paid_count|default:0 }},
+                    {{ supp_partially_paid_count|default:0 }},
+                    {{ supp_due_soon_count|default:0 }},
+                    {{ supp_overdue_count|default:0 }},
+                    {{ supp_not_received_count|default:0 }}
+                ],
+                backgroundColor: ['#22c55e', '#8b5cf6', '#f59e0b', '#ef4444', '#94a3b8'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+{% endif %}
+
 const chartColors = {
     pending: '#64748b',
     partial: '#8b5cf6',
@@ -584,7 +908,7 @@ const chartColors = {
     cancelled: '#38bdf8'
 };
 
-const deliveryPct = {{ overall_delivery_pct }};
+const deliveryPct = {{ overall_delivery_pct|default:0 }};
 const gaugeCtx = document.getElementById('deliveryGauge');
 if (gaugeCtx) {
     new Chart(gaugeCtx, {
@@ -614,12 +938,12 @@ if (sparkCtx) {
             labels: ['', '', '', '', '', ''],
             datasets: [{
                 data: [
-                    {{ customer_pending_count }},
-                    {{ customer_partial_count }},
-                    {{ customer_delivered_count }},
-                    {{ supplier_pending_count }},
-                    {{ supplier_partial_count }},
-                    {{ supplier_delivered_count }}
+                    {{ customer_pending_count|default:0 }},
+                    {{ customer_partial_count|default:0 }},
+                    {{ customer_delivered_count|default:0 }},
+                    {{ supplier_pending_count|default:0 }},
+                    {{ supplier_partial_count|default:0 }},
+                    {{ supplier_delivered_count|default:0 }}
                 ],
                 borderColor: '#2563eb',
                 backgroundColor: 'rgba(37, 99, 235, 0.15)',
@@ -647,10 +971,10 @@ if (customerChartCtx) {
             labels: ['Pending', 'Partially Delivered', 'Delivered', 'Cancelled'],
             datasets: [{
                 data: [
-                    {{ customer_pending_count }},
-                    {{ customer_partial_count }},
-                    {{ customer_delivered_count }},
-                    {{ customer_cancelled_count }}
+                    {{ customer_pending_count|default:0 }},
+                    {{ customer_partial_count|default:0 }},
+                    {{ customer_delivered_count|default:0 }},
+                    {{ customer_cancelled_count|default:0 }}
                 ],
                 backgroundColor: [
                     chartColors.pending,
@@ -678,10 +1002,10 @@ if (supplierChartCtx) {
             labels: ['Pending', 'Partially Delivered', 'Delivered', 'Cancelled'],
             datasets: [{
                 data: [
-                    {{ supplier_pending_count }},
-                    {{ supplier_partial_count }},
-                    {{ supplier_delivered_count }},
-                    {{ supplier_cancelled_count }}
+                    {{ supplier_pending_count|default:0 }},
+                    {{ supplier_partial_count|default:0 }},
+                    {{ supplier_delivered_count|default:0 }},
+                    {{ supplier_cancelled_count|default:0 }}
                 ],
                 backgroundColor: [
                     chartColors.pending,

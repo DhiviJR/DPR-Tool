@@ -146,33 +146,33 @@
                     <input type="number" id="supplierInwardOrderedQty" class="form-control" readonly>
                 </div>
                 <div class="mb-3">
-                    <label for="supplierInwardReceivedQty" class="form-label">Received Quantity</label>
-                    <input type="number" min="0" step="1" required id="supplierInwardReceivedQty" class="form-control">
+                    <label for="supplierInwardReceivedQty" class="form-label">Received Quantity <span class="text-danger">*</span></label>
+                    <input type="number" min="0" step="1" id="supplierInwardReceivedQty" class="form-control" tabindex="1">
                 </div>
                 <div class="mb-3">
-                    <label for="supplierInwardOkQty" class="form-label">OK Quantity</label>
-                    <input type="number" min="0" step="1" required id="supplierInwardOkQty" class="form-control">
+                    <label for="supplierInwardOkQty" class="form-label">OK Quantity <span class="text-danger">*</span></label>
+                    <input type="number" min="0" step="1" id="supplierInwardOkQty" class="form-control" tabindex="2">
                 </div>
                 <div class="mb-3">
-                    <label for="supplierInwardNotOkQty" class="form-label">NOT OK Quantity</label>
-                    <input type="number" min="0" step="1" required id="supplierInwardNotOkQty" class="form-control">
+                    <label for="supplierInwardNotOkQty" class="form-label">NOT OK Quantity <span class="text-danger">*</span></label>
+                    <input type="number" min="0" step="1" id="supplierInwardNotOkQty" class="form-control" tabindex="3">
                 </div>
                 <div class="mb-3" id="supplierInwardReasonGroup" style="display:none;">
-                    <label for="supplierInwardNotOkReason" class="form-label">Reason</label>
-                    <textarea id="supplierInwardNotOkReason" class="form-control" rows="3"></textarea>
+                    <label for="supplierInwardNotOkReason" class="form-label">Reason <span class="text-danger">*</span></label>
+                    <textarea id="supplierInwardNotOkReason" class="form-control" rows="3" tabindex="4"></textarea>
                 </div>
                 <hr>
                 <div class="mb-3">
-                    <label for="supplierInwardInvoiceNumber" class="form-label">Supplier Invoice Number</label>
-                    <input type="text" id="supplierInwardInvoiceNumber" class="form-control" placeholder="Enter invoice number">
+                    <label for="supplierInwardInvoiceNumber" class="form-label">Supplier Invoice Number <span class="text-danger">*</span></label>
+                    <input type="text" id="supplierInwardInvoiceNumber" class="form-control" placeholder="Enter invoice number" tabindex="5">
                 </div>
                 <div class="mb-3">
-                    <label for="supplierInwardBillAmount" class="form-label">Supplier Bill Amount</label>
-                    <input type="number" id="supplierInwardBillAmount" class="form-control" step="0.01" min="0" placeholder="0.00">
+                    <label for="supplierInwardBillAmount" class="form-label">Supplier Bill Amount (₹) <span class="text-danger">*</span></label>
+                    <input type="number" id="supplierInwardBillAmount" class="form-control" step="0.01" min="0.01" placeholder="0.00" tabindex="6">
                 </div>
                 <div class="mb-3">
-                    <label for="supplierInwardBillAttachment" class="form-label">Bill Attachment</label>
-                    <input type="file" id="supplierInwardBillAttachment" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx">
+                    <label for="supplierInwardBillAttachment" class="form-label">Bill Attachment <span class="text-danger">*</span></label>
+                    <input type="file" id="supplierInwardBillAttachment" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" tabindex="7">
                     <div class="form-text" id="supplierInwardBillAttachmentExisting"></div>
                 </div>
                 <div class="text-danger small mb-2" id="supplierInwardValidationError" style="display:none;"></div>
@@ -331,6 +331,10 @@ function getSupplierInwardValues() {
     const okValue = document.getElementById('supplierInwardOkQty').value.trim();
     const notOkValue = document.getElementById('supplierInwardNotOkQty').value.trim();
     const reason = document.getElementById('supplierInwardNotOkReason').value.trim();
+    const invoiceNumber = document.getElementById('supplierInwardInvoiceNumber').value.trim();
+    const billAmountValue = document.getElementById('supplierInwardBillAmount').value.trim();
+    const billAttachmentInput = document.getElementById('supplierInwardBillAttachment');
+    const billFile = billAttachmentInput ? billAttachmentInput.files[0] : null;
 
     return {
         receivedValue: receivedValue,
@@ -339,7 +343,11 @@ function getSupplierInwardValues() {
         receivedQuantity: parseInt(receivedValue || '0', 10),
         okQuantity: parseInt(okValue || '0', 10),
         notOkQuantity: parseInt(notOkValue || '0', 10),
-        reason: reason
+        reason: reason,
+        invoiceNumber: invoiceNumber,
+        billAmountValue: billAmountValue,
+        billAmount: parseFloat(billAmountValue || '0'),
+        billFile: billFile
     };
 }
 
@@ -350,14 +358,18 @@ function validateSupplierInwardLive(isSubmit = false) {
     const okInput = document.getElementById('supplierInwardOkQty');
     const notOkInput = document.getElementById('supplierInwardNotOkQty');
     const reasonInput = document.getElementById('supplierInwardNotOkReason');
+    const invoiceInput = document.getElementById('supplierInwardInvoiceNumber');
+    const billAmountInput = document.getElementById('supplierInwardBillAmount');
+    const billAttachmentInput = document.getElementById('supplierInwardBillAttachment');
     const errorEl = document.getElementById('supplierInwardValidationError');
     const saveBtn = document.getElementById('saveSupplierInwardBtn');
     const values = getSupplierInwardValues();
 
-    [receivedInput, okInput, notOkInput, reasonInput].forEach(input => {
-        input.classList.remove('is-invalid');
-        input.setCustomValidity('');
-        input.removeAttribute('aria-invalid');
+    [receivedInput, okInput, notOkInput, reasonInput, invoiceInput, billAmountInput, billAttachmentInput].forEach(input => {
+        if (input) {
+            input.classList.remove('is-invalid');
+            input.removeAttribute('aria-invalid');
+        }
     });
 
     let message = '';
@@ -398,7 +410,13 @@ function validateSupplierInwardLive(isSubmit = false) {
         invalidInputs = [reasonInput];
     }
 
-    // 5. Check empty fields on submit
+    // 5. Check bill amount non-negative if entered live
+    if (!message && values.billAmountValue !== '' && (isNaN(values.billAmount) || values.billAmount <= 0)) {
+        message = 'Supplier Bill Amount must be greater than 0.';
+        invalidInputs = [billAmountInput];
+    }
+
+    // 6. Check empty fields on submit
     if (!message && isSubmit) {
         if (!values.receivedValue || !values.okValue || !values.notOkValue) {
             message = 'Received, OK and NOT OK quantities are required.';
@@ -407,18 +425,30 @@ function validateSupplierInwardLive(isSubmit = false) {
                 ...(!values.okValue ? [okInput] : []),
                 ...(!values.notOkValue ? [notOkInput] : [])
             ];
+        } else if (!values.invoiceNumber) {
+            message = 'Supplier Invoice Number is required.';
+            invalidInputs = [invoiceInput];
+        } else if (!values.billAmountValue || isNaN(values.billAmount) || values.billAmount <= 0) {
+            message = 'Supplier Bill Amount is required and must be greater than 0.';
+            invalidInputs = [billAmountInput];
+        } else if (!values.billFile && !pendingSupplierInward.billAttachmentName && !pendingSupplierInward.billAttachmentUrl) {
+            message = 'Bill Attachment is required.';
+            invalidInputs = [billAttachmentInput];
         }
     }
 
     if (message) {
         invalidInputs.forEach(input => {
-            input.classList.add('is-invalid');
-            input.setCustomValidity(message);
-            input.setAttribute('aria-invalid', 'true');
+            if (input) {
+                input.classList.add('is-invalid');
+                input.setAttribute('aria-invalid', 'true');
+            }
         });
         errorEl.textContent = message;
         errorEl.style.display = 'block';
-        if (saveBtn) saveBtn.disabled = true;
+        if (isSubmit && invalidInputs.length > 0 && invalidInputs[0]) {
+            invalidInputs[0].focus();
+        }
         return false;
     }
 
@@ -488,7 +518,15 @@ function postSupplierInwardUpdate(row, buttonElement, receivedQuantity, okQuanti
         body: formData
     }).then(response => response.json()).then(data => {
         if (data.status !== 'ok') {
-            alert(data.message || 'Unable to update status');
+            const errorEl = fromModal === 'inward' 
+                ? document.getElementById('supplierInwardValidationError')
+                : (fromModal === 'rework' ? document.getElementById('reworkValidationError') : document.getElementById('remainingInwardValidationError'));
+            if (errorEl) {
+                errorEl.textContent = data.message || 'Unable to update status';
+                errorEl.style.display = 'block';
+            } else {
+                alert(data.message || 'Unable to update status');
+            }
             return;
         }
         // Update button dataset so reopening modal shows latest values
@@ -852,16 +890,22 @@ function updateReworkFieldsState() {
     'supplierInwardReceivedQty',
     'supplierInwardOkQty',
     'supplierInwardNotOkQty',
-    'supplierInwardNotOkReason'
+    'supplierInwardNotOkReason',
+    'supplierInwardInvoiceNumber',
+    'supplierInwardBillAmount',
+    'supplierInwardBillAttachment'
 ].forEach(id => {
     ['input', 'change'].forEach(eventName => {
-        document.getElementById(id).addEventListener(eventName, function () {
-            if (id === 'supplierInwardReceivedQty') {
-                updateInwardFieldsState();
-            }
-            toggleSupplierInwardReason();
-            validateSupplierInwardLive();
-        });
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener(eventName, function () {
+                if (id === 'supplierInwardReceivedQty') {
+                    updateInwardFieldsState();
+                }
+                toggleSupplierInwardReason();
+                validateSupplierInwardLive();
+            });
+        }
     });
 });
 
