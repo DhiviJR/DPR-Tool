@@ -39,6 +39,17 @@
                 <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
             </div>
             <div class="col-lg">
+                <label class="form-label">State Code</label>
+                <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10">
+            </div>
+            <div class="col-lg">
+                <label class="form-label">SEZ</label>
+                <select name="is_sez" class="form-select">
+                    <option value="No" selected>No</option>
+                    <option value="Yes">Yes</option>
+                </select>
+            </div>
+            <div class="col-lg">
                 <label class="form-label">Payment Terms</label>
                 <div class="input-group">
                     <input type="number" name="payment_terms" class="form-control" min="0">
@@ -84,6 +95,8 @@
                         <th>Email</th>
                         <th>Phone Number</th>
                         <th>GSTIN</th>
+                        <th>State Code</th>
+                        <th>SEZ</th>
                         <th>Payment Terms</th>
                         <th>Address</th>
                         <th>Created At</th>
@@ -109,6 +122,15 @@
                         </td>
                         <td>
                             <input type="text" name="gstin" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field js-gstin-input text-uppercase" value="{{ supplier.gstin|default:''|upper }}" maxlength="15" disabled>
+                        </td>
+                        <td>
+                            <input type="text" name="state_code" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field text-uppercase" value="{{ supplier.state_code|default:''|upper }}" maxlength="10" disabled>
+                        </td>
+                        <td>
+                            <select name="is_sez" form="form-{{ supplier.id }}" class="form-select form-select-sm master-edit-field" disabled>
+                                <option value="No" {% if supplier.is_sez != 'Yes' %}selected{% endif %}>No</option>
+                                <option value="Yes" {% if supplier.is_sez == 'Yes' %}selected{% endif %}>Yes</option>
+                            </select>
                         </td>
                         <td>
                             <div class="input-group input-group-sm">
@@ -142,7 +164,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="9" class="text-center">No supplier records found.</td>
+                        <td colspan="11" class="text-center">No supplier records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

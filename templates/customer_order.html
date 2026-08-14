@@ -4,9 +4,11 @@
 
 <div class="card shadow">
 
-    <div class="card-header bg-primary text-white">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
 
-        <h4>Customer Order Details</h4>
+        <h4 class="mb-0">Customer Order Details</h4>
+
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-light btn-sm">Back to Dashboard</a>
 
     </div>
 
@@ -279,13 +281,14 @@
 
                 <div class="col-md-4 mb-3">
 
-                    <label class="form-label">
+                    <label class="form-label" id="poDateLabel">
                         PO Date
                     </label>
 
                     <input type="date"
                            class="form-control"
                            name="po_date"
+                           id="poDateInput"
                            value="{% if dpr and dpr.po_date %}{{ dpr.po_date|date:'Y-m-d' }}{% endif %}">
 
                 </div>
@@ -584,6 +587,15 @@ function updatePoNumberVisibility() {
     const confirmation = document.getElementById('confirmationType').value;
     const poField = document.getElementById('poNumberField');
     const poInput = document.getElementById('poNumberInput');
+    const poDateLabel = document.getElementById('poDateLabel');
+
+    if (poDateLabel) {
+        if (confirmation === 'Mail Confirmation') {
+            poDateLabel.textContent = 'Mail Date';
+        } else {
+            poDateLabel.textContent = 'PO Date';
+        }
+    }
 
     if (confirmation === 'Customer PO') {
         poField.style.display = '';

@@ -51,6 +51,13 @@
                 <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10" required>
             </div>
             <div class="col-lg">
+                <label class="form-label">SEZ</label>
+                <select name="is_sez" class="form-select">
+                    <option value="No" selected>No</option>
+                    <option value="Yes">Yes</option>
+                </select>
+            </div>
+            <div class="col-lg">
                 <label class="form-label">Payment Terms</label>
                 <div class="input-group">
                     <input type="number" name="payment_terms" class="form-control" min="0">
@@ -98,6 +105,7 @@
                         <th>Phone Number</th>
                         <th>GSTIN</th>
                         <th>State Code</th>
+                        <th>SEZ</th>
                         <th>Payment Terms</th>
                         <th>Address</th>
                         <th>Created At</th>
@@ -135,6 +143,12 @@
                             <input type="text" name="state_code" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field text-uppercase" value="{{ customer.state_code|default:''|upper }}" maxlength="10" required disabled>
                         </td>
                         <td>
+                            <select name="is_sez" form="form-{{ customer.id }}" class="form-select form-select-sm master-edit-field" disabled>
+                                <option value="No" {% if customer.is_sez != 'Yes' %}selected{% endif %}>No</option>
+                                <option value="Yes" {% if customer.is_sez == 'Yes' %}selected{% endif %}>Yes</option>
+                            </select>
+                        </td>
+                        <td>
                             <div class="input-group input-group-sm">
                                 <input type="number" name="payment_terms" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.payment_terms|default:'' }}" min="0" disabled>
                                 <span class="input-group-text">Weeks</span>
@@ -166,7 +180,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="11" class="text-center">No customer records found.</td>
+                        <td colspan="12" class="text-center">No customer records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

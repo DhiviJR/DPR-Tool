@@ -80,6 +80,11 @@ class CustomerProduct(models.Model):
         blank=True,
         null=True
     )
+    address_attachment = models.FileField(
+        upload_to='address_attachments/',
+        blank=True,
+        null=True
+    )
 
     invoice_date = models.DateField(blank=True, null=True)
     payment_status = models.CharField(
