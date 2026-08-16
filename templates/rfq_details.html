@@ -118,6 +118,7 @@
                                             <th>Supplier</th>
                                             <th>Value</th>
                                             <th>Remarks</th>
+                                            <th class="text-center">Send Mail</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
@@ -171,6 +172,7 @@
                                             </td>
                                             <td><input type="number" step="0.01" name="value[]" class="form-control rfq-value" readonly disabled><div class="rfq-supplier-value-list small mt-1 d-none"></div></td>
                                             <td><input type="text" name="product_remarks[]" class="form-control"></td>
+                                            <td class="rfq-send-mail-cell text-center align-middle"></td>
                                             <td>
                                                 <button type="button" class="btn btn-outline-danger btn-sm rfq-remove-product">
                                                     <i class="bi bi-trash"></i>
@@ -188,13 +190,13 @@
                             <h5 class="mb-3">Supplier Email Content</h5>
                             <div class="row g-3">
                                 <div class="col-lg-6">
-                                    <label class="form-label">To</label>
+                                    <label class="form-label" id="supplierEmailToLabel">To</label>
                                     <input type="text"
                                            name="supplier_email_to"
                                            id="supplierEmailTo"
                                            class="form-control text-lowercase js-lowercase-input"
                                            placeholder="supplier@example.com, team@example.com">
-                                    <div class="form-text">Selected supplier email will be included automatically. Add extra To emails separated by comma or semicolon.</div>
+                                    <div class="form-text" id="supplierEmailToFormText">Selected supplier email will be included automatically. Add extra To emails separated by comma or semicolon.</div>
                                 </div>
                                 <div class="col-lg-6">
                                     <label class="form-label">CC</label>
@@ -235,11 +237,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit"
-                            class="btn btn-outline-success d-none"
-                            id="rfqSendEmailBtn"
-                            name="send_supplier_email"
-                            value="1">
+                    <button type="submit" class="btn btn-outline-success me-1" id="rfqSendEmailBtn">
                         <i class="bi bi-send me-1"></i>Add & Send Email
                     </button>
                     <button type="submit" class="btn btn-success" id="rfqSubmitBtn">
@@ -1353,6 +1351,135 @@ function renumberRfqProductRows() {
             if (priceInput) priceInput.name = `supplier_price_${index}[]`;
         });
     });
+    updateRfqSendMailColumn();
+}
+
+function updateRfqSendMailColumn() {
+    const table = document.getElementById('rfqProductTable');
+    if (!table) return;
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    if (!rows.length) return;
+
+    const hasAnyNotKnown = rows.some(row => {
+        const priceKnownSelect = row.querySelector('.rfq-price-known');
+        return priceKnownSelect && priceKnownSelect.value === 'no';
+    });
+
+    const headers = table.querySelectorAll('thead th');
+    headers.forEach(th => {
+        if (th.textContent.trim() === 'Send Mail') {
+            th.classList.toggle('d-none', !hasAnyNotKnown);
+        }
+    });
+
+    rows.forEach(row => {
+        const cell = row.querySelector('.rfq-send-mail-cell');
+        if (cell) {
+            cell.removeAttribute('rowspan');
+            cell.classList.toggle('d-none', !hasAnyNotKnown);
+            cell.innerHTML = '';
+        }
+    });
+
+    if (!hasAnyNotKnown) return;
+
+    const rowInfo = rows.map((row, index) => {
+        const priceKnownSelect = row.querySelector('.rfq-price-known');
+        const isNotKnown = priceKnownSelect && priceKnownSelect.value === 'no';
+        const supplierSelect = row.querySelector('.rfq-supplier');
+        const selectedOptions = supplierSelect
+            ? Array.from(supplierSelect.selectedOptions || []).filter(o => o.value)
+            : [];
+        const supplierIds = selectedOptions.map(o => o.value).sort();
+        const key = isNotKnown ? (supplierIds.length ? supplierIds.join(',') : '__none__') : '__known__';
+        return {
+            index,
+            row,
+            isNotKnown,
+            supplierIds,
+            key
+        };
+    });
+
+    let i = 0;
+    while (i < rowInfo.length) {
+        const current = rowInfo[i];
+
+        if (!current.isNotKnown) {
+            const cell = current.row.querySelector('.rfq-send-mail-cell');
+            if (cell) {
+                cell.classList.add('d-none');
+            }
+            i++;
+            continue;
+        }
+
+        if (current.key === '__none__') {
+            const cell = current.row.querySelector('.rfq-send-mail-cell');
+            if (cell) {
+                cell.innerHTML = `
+                    <button type="button" class="btn btn-sm btn-outline-secondary disabled text-nowrap" title="Select supplier first" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                        <i class="bi bi-envelope me-1"></i>Send Mail
+                    </button>
+                `;
+            }
+            i++;
+            continue;
+        }
+
+        let runLength = 1;
+        while (i + runLength < rowInfo.length) {
+            const next = rowInfo[i + runLength];
+            if (next.isNotKnown && next.key === current.key) {
+                runLength++;
+            } else {
+                break;
+            }
+        }
+
+        const primaryCell = current.row.querySelector('.rfq-send-mail-cell');
+        const supplierIdsAttr = current.supplierIds.join(',');
+        const isCommon = runLength > 1;
+
+        if (primaryCell) {
+            if (isCommon) {
+                primaryCell.setAttribute('rowspan', runLength);
+                primaryCell.innerHTML = `
+                    <div class="d-flex flex-column align-items-center justify-content-center h-100 gap-1 p-1">
+                        <button type="button"
+                                class="btn btn-sm btn-success rfq-row-send-mail-btn text-nowrap fw-semibold"
+                                data-supplier-ids="${supplierIdsAttr}"
+                                title="Send price request email to supplier for these products">
+                            <i class="bi bi-send-fill me-1"></i>Send Mail
+                        </button>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.65rem;">
+                            Common (${runLength} items)
+                        </span>
+                    </div>
+                `;
+            } else {
+                primaryCell.innerHTML = `
+                    <button type="button"
+                            class="btn btn-sm btn-outline-primary rfq-row-send-mail-btn text-nowrap"
+                            data-supplier-ids="${supplierIdsAttr}"
+                            title="Send price request email to supplier for this product"
+                            style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                        <i class="bi bi-envelope me-1"></i>Send Mail
+                    </button>
+                `;
+            }
+        }
+
+        for (let r = 1; r < runLength; r++) {
+            const mergedCell = rowInfo[i + r].row.querySelector('.rfq-send-mail-cell');
+            if (mergedCell) {
+                mergedCell.classList.add('d-none');
+            }
+        }
+
+        i += runLength;
+    }
 }
 
 function calculateRfqProductValues() {
@@ -1443,29 +1570,54 @@ function syncSupplierEmailToAddress() {
 
     const selectedEmails = new Set();
     document.querySelectorAll('#rfqProductTable tbody tr').forEach(row => {
-        const priceKnownSelect = row.querySelector('.rfq-price-known');
-        const isNotKnown = priceKnownSelect && priceKnownSelect.value === 'no';
-        if (isNotKnown) {
-            const supplierSelect = row.querySelector('.rfq-supplier');
-            if (supplierSelect && !supplierSelect.disabled) {
-                Array.from(supplierSelect.selectedOptions || []).forEach(option => {
-                    const email = getEmailFromSupplierOption(option);
-                    if (email) selectedEmails.add(email);
-                });
-            }
+        const supplierSelect = row.querySelector('.rfq-supplier');
+        if (supplierSelect) {
+            Array.from(supplierSelect.selectedOptions || []).forEach(option => {
+                const email = getEmailFromSupplierOption(option);
+                if (email) selectedEmails.add(email);
+            });
         }
+        row.querySelectorAll('.rfq-supplier-price-supplier').forEach(priceSupplierSelect => {
+            const selectedOption = priceSupplierSelect.options[priceSupplierSelect.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                const email = getEmailFromSupplierOption(selectedOption);
+                if (email) selectedEmails.add(email);
+            }
+        });
     });
     toInput.value = Array.from(selectedEmails).join(', ').toLowerCase();
+
+    const label = document.getElementById('supplierEmailToLabel');
+    const formText = document.getElementById('supplierEmailToFormText');
+    if (selectedEmails.size > 1) {
+        if (label) label.textContent = 'BCC (Multiple Suppliers)';
+        if (formText) formText.textContent = 'Multiple suppliers selected. Email will be sent using BCC method.';
+    } else {
+        if (label) label.textContent = 'To';
+        if (formText) formText.textContent = 'Selected supplier email will be included automatically. Add extra To emails separated by comma or semicolon.';
+    }
 }
 
 function updateSupplierEmailVisibility() {
-    const hasUnknownPriceProduct = Array.from(
-        document.querySelectorAll('#rfqProductTable .rfq-price-known')
-    ).some(select => select.value === 'no');
-    document.getElementById('supplierEmailContentSection').classList.toggle('d-none', !hasUnknownPriceProduct);
-    document.getElementById('rfqSendEmailBtn').classList.toggle('d-none', !hasUnknownPriceProduct);
+    const rows = Array.from(document.querySelectorAll('#rfqProductTable tbody tr'));
+    const hasKnownPriceProduct = rows.some(row => {
+        const priceKnownSelect = row.querySelector('.rfq-price-known');
+        return priceKnownSelect && priceKnownSelect.value === 'yes';
+    });
+
+    const sendEmailBtn = document.getElementById('rfqSendEmailBtn');
+    if (sendEmailBtn) {
+        sendEmailBtn.classList.toggle('d-none', !hasKnownPriceProduct);
+    }
+
+    const emailSection = document.getElementById('supplierEmailContentSection');
+    if (emailSection) {
+        emailSection.classList.remove('d-none');
+    }
+
     syncSupplierEmailToAddress();
     updateRateColumnVisibility();
+    updateRfqSendMailColumn();
 }
 
 function updateRateColumnVisibility() {
@@ -1613,6 +1765,7 @@ function buildRfqProductRow(product = getBlankRfqProduct()) {
         </td>
         <td><input type="number" step="0.01" name="value[]" class="form-control rfq-value" value="${product.value || ''}" readonly disabled><div class="rfq-supplier-value-list small mt-1 d-none"></div></td>
         <td><input type="text" name="product_remarks[]" class="form-control" value="${escapeHtml(product.remarks || '')}"></td>
+        <td class="rfq-send-mail-cell text-center align-middle"></td>
         <td>
             <button type="button" class="btn btn-outline-danger btn-sm rfq-remove-product">
                 <i class="bi bi-trash"></i>
@@ -1657,7 +1810,8 @@ function resetRfqForm() {
     lastGeneratedSupplierEmailBody = defaultSupplierEmailBody;
     document.getElementById('supplierEmailBody').value = lastGeneratedSupplierEmailBody;
     document.getElementById('rfqSubmitBtn').innerHTML = '<i class="bi bi-plus-lg me-1"></i>Add RFQ';
-    document.getElementById('rfqSendEmailBtn').innerHTML = '<i class="bi bi-send me-1"></i>Add & Send Email';
+    const sendEmailBtn = document.getElementById('rfqSendEmailBtn');
+    if (sendEmailBtn) sendEmailBtn.innerHTML = '<i class="bi bi-send me-1"></i>Add & Send Email';
     const currentAttachmentContainer = document.getElementById('rfqCurrentAttachment');
     if (currentAttachmentContainer) {
         currentAttachmentContainer.classList.add('d-none');
@@ -1703,7 +1857,8 @@ function populateRfqForm(rfq) {
     document.getElementById('rfqRemarks').value = rfq.remarks || '';
     document.getElementById('supplierEmailSubject').value = defaultSupplierEmailSubject.replace('{rfq_no}', rfq.rfq_no || '');
     document.getElementById('rfqSubmitBtn').innerHTML = '<i class="bi bi-check2 me-1"></i>Update RFQ';
-    document.getElementById('rfqSendEmailBtn').innerHTML = '<i class="bi bi-send me-1"></i>Update & Send Email';
+    const sendEmailBtnPop = document.getElementById('rfqSendEmailBtn');
+    if (sendEmailBtnPop) sendEmailBtnPop.innerHTML = '<i class="bi bi-send me-1"></i>Update & Send Email';
     setRfqProductRows(rfq.products || []);
     const currentAttachmentContainer = document.getElementById('rfqCurrentAttachment');
     const attachmentLink = document.getElementById('rfqAttachmentLink');
@@ -1848,6 +2003,74 @@ document.getElementById('addRfqForm').addEventListener('input', function (e) {
     if (!e.target.matches('[name="product_name[]"], [name="quantity[]"], [name="product_remarks[]"], #rfqEnquiryDetails')) return;
     refreshSupplierEmailBody();
 });
+
+document.addEventListener('click', function (e) {
+    const sendBtn = e.target.closest('.rfq-row-send-mail-btn');
+    if (!sendBtn) return;
+
+    const supplierIds = sendBtn.dataset.supplierIds;
+    if (!supplierIds) return;
+
+    const form = document.getElementById('addRfqForm');
+    if (!form) return;
+
+    syncSupplierEmailToAddress();
+
+    form.querySelectorAll('.d-none input, .d-none select').forEach(el => {
+        el.required = false;
+    });
+
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    let targetInput = document.getElementById('rfqTargetSupplierId');
+    if (!targetInput) {
+        targetInput = document.createElement('input');
+        targetInput.type = 'hidden';
+        targetInput.name = 'target_supplier_id';
+        targetInput.id = 'rfqTargetSupplierId';
+        form.appendChild(targetInput);
+    }
+    targetInput.value = supplierIds;
+
+    let sendFlag = document.getElementById('rfqSendEmailFlag');
+    if (!sendFlag) {
+        sendFlag = document.createElement('input');
+        sendFlag.type = 'hidden';
+        sendFlag.name = 'send_supplier_email';
+        sendFlag.id = 'rfqSendEmailFlag';
+        form.appendChild(sendFlag);
+    }
+    sendFlag.value = '1';
+
+    if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+    } else {
+        form.submit();
+    }
+});
+
+const submitBtn = document.getElementById('rfqSubmitBtn');
+if (submitBtn) {
+    submitBtn.addEventListener('click', function () {
+        const targetInput = document.getElementById('rfqTargetSupplierId');
+        if (targetInput) targetInput.value = '';
+        const sendFlag = document.getElementById('rfqSendEmailFlag');
+        if (sendFlag) sendFlag.value = '';
+    });
+}
+
+const sendEmailBtn = document.getElementById('rfqSendEmailBtn');
+if (sendEmailBtn) {
+    sendEmailBtn.addEventListener('click', function () {
+        const targetInput = document.getElementById('rfqTargetSupplierId');
+        if (targetInput) targetInput.value = '';
+        const sendFlag = document.getElementById('rfqSendEmailFlag');
+        if (sendFlag) sendFlag.value = '1';
+    });
+}
 
 function getActiveRow() {
     const allCheckedInputs = document.querySelectorAll('.rfq-quotation-product:checked, .rfq-quotation-supplier-price:checked');

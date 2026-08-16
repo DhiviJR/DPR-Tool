@@ -17,7 +17,7 @@ from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation, RFQEmail
 from .email_services import send_threaded_rfq_email, sync_rfq_inbox
 from django.http import HttpResponse, JsonResponse, Http404
 from django.db import transaction
-from django.db.models import Sum, Case, When, Value, IntegerField
+from django.db.models import Sum, Case, When, Value, IntegerField, Q
 from django.db.models.functions import Coalesce
 from decimal import Decimal, InvalidOperation
 from django.utils import timezone
@@ -561,6 +561,13 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
             for page in self.pages:
                 self.__dict__.update(page)
                 
+                # Draw Outer Page Border Line
+                self.saveState()
+                self.setLineWidth(0.8)
+                self.setStrokeColor(colors.black)
+                self.rect(8 * mm, 8 * mm, self._pagesize[0] - 16 * mm, self._pagesize[1] - 16 * mm, fill=False, stroke=True)
+                self.restoreState()
+
                 # Draw Header
                 self.saveState()
                 # Draw Logo Box / Image
@@ -606,9 +613,9 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
 
                 # Draw footer page number (Page X of Y)
                 self.saveState()
-                self.setFont("Helvetica", 9)
+                self.setFont("Helvetica-Bold", 9)
                 text = f"Page {self._pageNumber} of {page_count}"
-                self.drawRightString(self._pagesize[0] - 14 * mm, 12 * mm, text)
+                self.drawRightString(self._pagesize[0] - 10 * mm, 3 * mm, text)
                 self.restoreState()
                 
                 super().showPage()
@@ -828,13 +835,15 @@ def _send_rfq_supplier_price_requests(
     email_attachment=None,
     to_emails=None,
     cc_emails=None,
+    target_supplier_ids=None,
 ):
+    target_supplier_ids_set = {str(sid) for sid in target_supplier_ids} if target_supplier_ids else set()
     supplier_product_map = {}
     for product_row in product_rows:
-        if product_row.get('price_known'):
-            continue
         suppliers = product_row.get('suppliers') or []
         for supplier in suppliers:
+            if target_supplier_ids_set and str(supplier.id) not in target_supplier_ids_set:
+                continue
             supplier_product_map.setdefault(supplier, []).append(product_row)
 
     sent_count = 0
@@ -909,16 +918,29 @@ def _send_rfq_supplier_price_requests(
         recipient_list = normalize_email_list([supplier.email, *extra_to_emails])
         cc_list = normalize_email_list(cc_emails or [])
 
+        is_multiple_suppliers = (len(supplier_product_map) > 1) or (len(selected_supplier_emails) > 1) or (len(recipient_list) > 1)
+
         try:
-            attachments_list = [attachment_payload] if attachment_payload else None
-            send_threaded_rfq_email(
-                rfq=rfq,
-                subject=subject,
-                body=message,
-                to_emails=recipient_list,
-                cc_emails=cc_list,
-                attachments=attachments_list
-            )
+            if is_multiple_suppliers:
+                email = EmailMessage(
+                    subject=subject,
+                    body=message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=[],
+                    bcc=recipient_list,
+                    cc=cc_list,
+                )
+            else:
+                email = EmailMessage(
+                    subject=subject,
+                    body=message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=recipient_list,
+                    cc=cc_list,
+                )
+            if attachment_payload:
+                email.attach(*attachment_payload)
+            email.send(fail_silently=False)
             sent_count += 1
         except Exception as exc:
             failed_suppliers.append(f'{supplier.supplier_name} ({str(exc)[:180]})')
@@ -1169,6 +1191,127 @@ def dashboard(request):
     rfq_price_pending_pct = rfq_overdue_pct
     rfq_quotation_pending_pct = _pct(rfq_quotation_pending_count, total_rfq_count)
 
+    # Accounts financial metrics calculations
+    cust_products = list(CustomerProduct.objects.select_related('dpr', 'dpr__customer').all())
+    supp_products = list(SupplierProduct.objects.filter(
+        Q(quantity_received__gt=0) |
+        Q(quantity_not_ok__gt=0) |
+        Q(status__in=['delivered', 'partially_delivered']) |
+        (Q(supplier_invoice_number__isnull=False) & ~Q(supplier_invoice_number='')) |
+        Q(supplier_bill_amount__gt=0) |
+        (Q(bill_attachment__isnull=False) & ~Q(bill_attachment=''))
+    ).select_related('supplier', 'customer_product', 'customer_product__dpr').distinct())
+
+    total_cust_invoice_val = Decimal('0.00')
+    total_cust_received_val = Decimal('0.00')
+    total_cust_outstanding_val = Decimal('0.00')
+    total_cust_overdue_val = Decimal('0.00')
+
+    cust_paid_count = 0
+    cust_partially_paid_count = 0
+    cust_not_received_count = 0
+    cust_overdue_count = 0
+    cust_due_soon_count = 0
+
+    for p in cust_products:
+        inv_date = p.invoice_date or (p.dpr.po_date if p.dpr else None) or (p.dpr.created_at.date() if p.dpr and p.dpr.created_at else today)
+        cust = p.dpr.customer if p.dpr else None
+        terms_str = (cust.payment_terms or '').lower() if cust else ''
+        days = 30
+        match = re.search(r'(\d+)', terms_str)
+        if match:
+            try:
+                days = int(match.group(1))
+            except ValueError:
+                pass
+        terms_date = inv_date + timedelta(days=days) if inv_date else today
+
+        po_val = p.value or Decimal('0.00')
+        rec_amt = p.received_amount or Decimal('0.00')
+        rem_amt = max(po_val - rec_amt, Decimal('0.00'))
+
+        total_cust_invoice_val += po_val
+        total_cust_received_val += rec_amt
+        total_cust_outstanding_val += rem_amt
+
+        is_paid = (p.payment_status == 'amount_received' or rec_amt >= po_val)
+        is_due_soon = not is_paid and (today <= terms_date <= today + timedelta(days=7))
+        is_overdue = not is_paid and (today > terms_date)
+
+        if is_paid:
+            cust_paid_count += 1
+        else:
+            if p.payment_status == 'partially_received':
+                cust_partially_paid_count += 1
+            else:
+                cust_not_received_count += 1
+
+            if is_due_soon:
+                cust_due_soon_count += 1
+            if is_overdue:
+                cust_overdue_count += 1
+                total_cust_overdue_val += rem_amt
+
+    total_supp_invoice_val = Decimal('0.00')
+    total_supp_received_val = Decimal('0.00')
+    total_supp_outstanding_val = Decimal('0.00')
+    total_supp_overdue_val = Decimal('0.00')
+
+    supp_paid_count = 0
+    supp_partially_paid_count = 0
+    supp_not_received_count = 0
+    supp_overdue_count = 0
+    supp_due_soon_count = 0
+
+    for p in supp_products:
+        dpr_created = p.customer_product.dpr.created_at.date() if (p.customer_product and p.customer_product.dpr and p.customer_product.dpr.created_at) else today
+        inv_date = p.invoice_date or p.po_date or dpr_created
+        supp = p.supplier
+        terms_str = (supp.payment_terms or '').strip().lower() if supp else ''
+        days = 30
+        match = re.search(r'(\d+)', terms_str)
+        if match:
+            try:
+                val = int(match.group(1))
+                if 'day' in terms_str:
+                    days = val
+                elif 'month' in terms_str:
+                    days = val * 30
+                else:
+                    days = val * 7
+            except ValueError:
+                pass
+        terms_date = inv_date + timedelta(days=days) if inv_date else today
+
+        po_val = p.supplier_bill_amount if (p.supplier_bill_amount is not None and p.supplier_bill_amount > Decimal('0.00')) else (p.po_value or Decimal('0.00'))
+        rec_amt = p.received_amount or Decimal('0.00')
+        rem_amt = max(po_val - rec_amt, Decimal('0.00'))
+
+        total_supp_invoice_val += po_val
+        total_supp_received_val += rec_amt
+        total_supp_outstanding_val += rem_amt
+
+        is_paid = (p.payment_status == 'amount_received' or rec_amt >= po_val)
+        is_due_soon = not is_paid and (today <= terms_date <= today + timedelta(days=7))
+        is_overdue = not is_paid and (today > terms_date)
+
+        if is_paid:
+            supp_paid_count += 1
+        else:
+            if p.payment_status == 'partially_received':
+                supp_partially_paid_count += 1
+            else:
+                supp_not_received_count += 1
+
+            if is_due_soon:
+                supp_due_soon_count += 1
+            if is_overdue:
+                supp_overdue_count += 1
+                total_supp_overdue_val += rem_amt
+
+    cust_collection_pct = _pct(float(total_cust_received_val), float(total_cust_invoice_val))
+    supp_payment_pct = _pct(float(total_supp_received_val), float(total_supp_invoice_val))
+
     return render(request, 'dashboard.html', {
         'total_dpr_count': total_dpr_count,
         'total_rfq_count': total_rfq_count,
@@ -1205,6 +1348,28 @@ def dashboard(request):
         'rfq_price_pending_pct': rfq_price_pending_pct,
         'rfq_overdue_pct': rfq_overdue_pct,
         'rfq_quotation_pending_pct': rfq_quotation_pending_pct,
+
+        # Financial accounts context variables
+        'total_cust_invoice_val': float(total_cust_invoice_val),
+        'total_cust_received_val': float(total_cust_received_val),
+        'total_cust_outstanding_val': float(total_cust_outstanding_val),
+        'total_cust_overdue_val': float(total_cust_overdue_val),
+        'cust_paid_count': cust_paid_count,
+        'cust_partially_paid_count': cust_partially_paid_count,
+        'cust_not_received_count': cust_not_received_count,
+        'cust_due_soon_count': cust_due_soon_count,
+        'cust_overdue_count': cust_overdue_count,
+        'cust_collection_pct': cust_collection_pct,
+        'total_supp_invoice_val': float(total_supp_invoice_val),
+        'total_supp_received_val': float(total_supp_received_val),
+        'total_supp_outstanding_val': float(total_supp_outstanding_val),
+        'total_supp_overdue_val': float(total_supp_overdue_val),
+        'supp_paid_count': supp_paid_count,
+        'supp_partially_paid_count': supp_partially_paid_count,
+        'supp_not_received_count': supp_not_received_count,
+        'supp_due_soon_count': supp_due_soon_count,
+        'supp_overdue_count': supp_overdue_count,
+        'supp_payment_pct': supp_payment_pct,
     })
 
 
@@ -1760,7 +1925,7 @@ def material_status(request):
     )
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def accounts_details(request):
     case_filter = request.GET.get('case', '').strip()
     today = timezone.localdate()
@@ -1890,7 +2055,7 @@ def accounts_details(request):
     )
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def customer_product_followup_update(request, product_id):
     if request.method != 'POST':
         raise Http404
@@ -1917,7 +2082,7 @@ def customer_product_followup_update(request, product_id):
     return JsonResponse({'status': 'ok'})
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def customer_product_payment_update(request, product_id):
     if request.method != 'POST':
         raise Http404
@@ -2004,16 +2169,23 @@ def customer_product_payment_update(request, product_id):
     })
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def supplier_accounts_details(request):
     case_filter = request.GET.get('case', '').strip()
     today = timezone.localdate()
 
-    products = SupplierProduct.objects.select_related(
+    products = SupplierProduct.objects.filter(
+        Q(quantity_received__gt=0) |
+        Q(quantity_not_ok__gt=0) |
+        Q(status__in=['delivered', 'partially_delivered']) |
+        (Q(supplier_invoice_number__isnull=False) & ~Q(supplier_invoice_number='')) |
+        Q(supplier_bill_amount__gt=0) |
+        (Q(bill_attachment__isnull=False) & ~Q(bill_attachment=''))
+    ).select_related(
         'supplier',
         'customer_product',
         'customer_product__dpr'
-    )
+    ).distinct()
 
     items = []
     total_invoice_value = Decimal('0.00')
@@ -2053,7 +2225,7 @@ def supplier_accounts_details(request):
 
         terms_date = inv_date + timedelta(days=days)
 
-        po_val = product.po_value or Decimal('0.00')
+        po_val = product.supplier_bill_amount if (product.supplier_bill_amount is not None and product.supplier_bill_amount > Decimal('0.00')) else (product.po_value or Decimal('0.00'))
         rec_amt = product.received_amount or Decimal('0.00')
         rem_amt = max(po_val - rec_amt, Decimal('0.00'))
 
@@ -2115,6 +2287,7 @@ def supplier_accounts_details(request):
             'payment_notes': product.payment_notes or '',
             'supplier_invoice_number': product.supplier_invoice_number or '',
             'bill_attachment_url': product.bill_attachment.url if product.bill_attachment else '',
+            'bill_attachment_name': re.split(r'[/\\]', product.bill_attachment.name)[-1] if product.bill_attachment else '',
         }
         items.append(item)
 
@@ -2144,7 +2317,7 @@ def supplier_accounts_details(request):
     )
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def supplier_product_followup_update(request, supplier_product_id):
     if request.method != 'POST':
         raise Http404
@@ -2171,7 +2344,7 @@ def supplier_product_followup_update(request, supplier_product_id):
     return JsonResponse({'status': 'ok'})
 
 
-@role_required('ADMIN')
+@role_required('ADMIN', 'ACCOUNTS')
 def supplier_product_payment_update(request, supplier_product_id):
     if request.method != 'POST':
         raise Http404
@@ -2329,6 +2502,21 @@ def supplier_product_status_update(request, supplier_product_id):
         supplier_invoice_number = request.POST.get('supplier_invoice_number', '').strip() or None
         supplier_bill_amount_raw = request.POST.get('supplier_bill_amount', '').strip()
         bill_attachment = request.FILES.get('bill_attachment')
+
+        if 'supplier_invoice_number' in request.POST:
+            if not supplier_invoice_number:
+                return JsonResponse({'status': 'error', 'message': 'Supplier Invoice Number is required.'}, status=400)
+
+            try:
+                bill_amt = Decimal(supplier_bill_amount_raw or '0')
+            except (InvalidOperation, ValueError):
+                bill_amt = Decimal('0.00')
+
+            if bill_amt <= Decimal('0.00'):
+                return JsonResponse({'status': 'error', 'message': 'Supplier Bill Amount is required and must be greater than 0.'}, status=400)
+
+            if not bill_attachment and not supplier_product.bill_attachment:
+                return JsonResponse({'status': 'error', 'message': 'Bill Attachment is required.'}, status=400)
 
         supplier_product.quantity_received = received_quantity
         supplier_product.quantity_not_ok = not_ok_quantity
@@ -3050,6 +3238,7 @@ def customer_details(request):
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
         state_code = request.POST.get('state_code', '').strip().upper()
+        is_sez = 'Yes' if request.POST.get('is_sez', '').strip().lower() == 'yes' else 'No'
         payment_terms = request.POST.get('payment_terms', '').strip()
 
 
@@ -3084,6 +3273,7 @@ def customer_details(request):
                 address=address or None,
                 gstin=gstin or None,
                 state_code=state_code or None,
+                is_sez=is_sez,
                 payment_terms=payment_terms or None
             )
             messages.success(request, 'Customer added successfully.')
@@ -3099,8 +3289,9 @@ def customer_details(request):
             customer.address = address or None
             customer.gstin = gstin or None
             customer.state_code = state_code or None
+            customer.is_sez = is_sez
             customer.payment_terms = payment_terms or None
-            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address', 'gstin', 'state_code', 'payment_terms'])
+            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
             messages.success(request, 'Customer updated successfully.')
         elif action == 'delete':
             try:
@@ -3149,6 +3340,8 @@ def rfq_details(request):
         supplier_email_body = request.POST.get('supplier_email_body', '').strip()
         supplier_email_attachment = request.FILES.get('supplier_email_attachment')
         has_unknown_price = any(val == 'no' for val in price_known_values)
+        target_supplier_id = request.POST.get('target_supplier_id', '').strip()
+        target_supplier_ids = [s.strip() for s in target_supplier_id.split(',') if s.strip()] if target_supplier_id else None
         send_supplier_email = (
             request.POST.get('send_supplier_email') == '1'
             or (has_unknown_price and bool(supplier_email_to.strip()))
@@ -3335,7 +3528,8 @@ def rfq_details(request):
                     supplier_email_body,
                     supplier_email_attachment,
                     supplier_to_emails,
-                    supplier_cc_emails
+                    supplier_cc_emails,
+                    target_supplier_ids=target_supplier_ids
                 )
                 if failed_suppliers:
                     messages.warning(request, f"RFQ added, but price request email failed for: {', '.join(failed_suppliers)}.")
@@ -3434,7 +3628,8 @@ def rfq_details(request):
                     supplier_email_body,
                     supplier_email_attachment,
                     supplier_to_emails,
-                    supplier_cc_emails
+                    supplier_cc_emails,
+                    target_supplier_ids=target_supplier_ids
                 )
                 if failed_suppliers:
                     messages.warning(request, f"RFQ updated, but price request email failed for: {', '.join(failed_suppliers)}.")
@@ -3826,6 +4021,8 @@ def supplier_details(request):
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
+        state_code = request.POST.get('state_code', '').strip().upper()
+        is_sez = 'Yes' if request.POST.get('is_sez', '').strip().lower() == 'yes' else 'No'
         payment_terms = request.POST.get('payment_terms', '').strip()
 
 
@@ -3845,6 +4042,8 @@ def supplier_details(request):
                 phone_number=phone_number or None,
                 address=address or None,
                 gstin=gstin or None,
+                state_code=state_code or None,
+                is_sez=is_sez,
                 payment_terms=payment_terms or None
             )
             messages.success(request, 'Supplier added successfully.')
@@ -3858,8 +4057,10 @@ def supplier_details(request):
             supplier.phone_number = phone_number or None
             supplier.address = address or None
             supplier.gstin = gstin or None
+            supplier.state_code = state_code or None
+            supplier.is_sez = is_sez
             supplier.payment_terms = payment_terms or None
-            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'address', 'gstin', 'payment_terms'])
+            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
             messages.success(request, 'Supplier updated successfully.')
         elif action == 'delete':
             try:
@@ -4610,17 +4811,7 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
     story.append(Spacer(1, 2 * mm))
 
     # 6. Remarks & Totals Table
-    is_igst = False
-    if supplier_gstin and len(supplier_gstin) >= 2 and supplier_gstin[:2].isdigit():
-        is_igst = (supplier_gstin[:2] != '33')
-    elif supplier.address:
-        addr_lower = supplier.address.lower()
-        if 'tamil nadu' not in addr_lower and 'tamilnadu' not in addr_lower and 'hosur' not in addr_lower and 'chennai' not in addr_lower and ('karnataka' in addr_lower or 'bangalore' in addr_lower or 'bengaluru' in addr_lower or 'maharashtra' in addr_lower or 'mumbai' in addr_lower or 'pune' in addr_lower or 'delhi' in addr_lower or 'gujarat' in addr_lower or 'andhra' in addr_lower or 'telangana' in addr_lower or 'kerala' in addr_lower):
-            is_igst = True
-    gst_rate = Decimal('18.00')
-    gst_amount = (basic_total * gst_rate / Decimal('100.00')).quantize(Decimal('0.01'))
-    grand_total = basic_total + gst_amount
-
+    is_sez_supplier = (getattr(supplier, 'is_sez', 'No') or 'No').strip().upper() == 'YES'
     remarks_col = Paragraph(
         '<b>REMARKS :</b><br/>'
         '1. Please return the duplicate copy of this order duly signed in as a token of your acceptance.<br/>'
@@ -4629,17 +4820,37 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         normal_style
     )
 
-    totals_data = [
-        [remarks_col, Paragraph('<b>BASIC</b>', bold_style), Paragraph(f'{basic_total:,.2f}', right_bold_style)],
-    ]
-    if is_igst:
-        totals_data.append(['', Paragraph('<b>IGST 18%</b>', bold_style), Paragraph(f'{gst_amount:,.2f}', right_bold_style)])
+    if is_sez_supplier:
+        gst_amount = Decimal('0.00')
+        grand_total = basic_total
+        totals_data = [
+            [remarks_col, Paragraph('<b>BASIC</b>', bold_style), Paragraph(f'{basic_total:,.2f}', right_bold_style)],
+            ['', Paragraph('<b>IGST 0%</b>', bold_style), Paragraph('0.00', right_bold_style)],
+            ['', Paragraph('<b>GRAND TOTAL</b>', bold_style), Paragraph(f'{grand_total:,.2f}', right_bold_style)],
+        ]
     else:
-        half_gst = (gst_amount / Decimal('2.00')).quantize(Decimal('0.01'))
-        totals_data.append(['', Paragraph('<b>CGST 9%</b>', bold_style), Paragraph(f'{half_gst:,.2f}', right_bold_style)])
-        totals_data.append(['', Paragraph('<b>SGST 9%</b>', bold_style), Paragraph(f'{half_gst:,.2f}', right_bold_style)])
-        
-    totals_data.append(['', Paragraph('<b>GRAND TOTAL</b>', bold_style), Paragraph(f'{grand_total:,.2f}', right_bold_style)])
+        is_igst = False
+        if supplier_gstin and len(supplier_gstin) >= 2 and supplier_gstin[:2].isdigit():
+            is_igst = (supplier_gstin[:2] != '33')
+        elif supplier.address:
+            addr_lower = supplier.address.lower()
+            if 'tamil nadu' not in addr_lower and 'tamilnadu' not in addr_lower and 'hosur' not in addr_lower and 'chennai' not in addr_lower and ('karnataka' in addr_lower or 'bangalore' in addr_lower or 'bengaluru' in addr_lower or 'maharashtra' in addr_lower or 'mumbai' in addr_lower or 'pune' in addr_lower or 'delhi' in addr_lower or 'gujarat' in addr_lower or 'andhra' in addr_lower or 'telangana' in addr_lower or 'kerala' in addr_lower):
+                is_igst = True
+        gst_rate = Decimal('18.00')
+        gst_amount = (basic_total * gst_rate / Decimal('100.00')).quantize(Decimal('0.01'))
+        grand_total = basic_total + gst_amount
+
+        totals_data = [
+            [remarks_col, Paragraph('<b>BASIC</b>', bold_style), Paragraph(f'{basic_total:,.2f}', right_bold_style)],
+        ]
+        if is_igst:
+            totals_data.append(['', Paragraph('<b>IGST 18%</b>', bold_style), Paragraph(f'{gst_amount:,.2f}', right_bold_style)])
+        else:
+            half_gst = (gst_amount / Decimal('2.00')).quantize(Decimal('0.01'))
+            totals_data.append(['', Paragraph('<b>CGST 9%</b>', bold_style), Paragraph(f'{half_gst:,.2f}', right_bold_style)])
+            totals_data.append(['', Paragraph('<b>SGST 9%</b>', bold_style), Paragraph(f'{half_gst:,.2f}', right_bold_style)])
+            
+        totals_data.append(['', Paragraph('<b>GRAND TOTAL</b>', bold_style), Paragraph(f'{grand_total:,.2f}', right_bold_style)])
 
     remarks_table = Table(totals_data, colWidths=[100 * mm, 40 * mm, 40 * mm])
     remarks_table.setStyle(TableStyle([
@@ -5069,7 +5280,7 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, HRFlowable, Image
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, HRFlowable, Image, PageBreak
     )
     from reportlab.pdfgen import canvas
     from django.conf import settings
@@ -5168,25 +5379,20 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
 
         def save(self):
             page_count = len(self.pages)
+            pages_per_copy = page_count // 3 if page_count % 3 == 0 else page_count
             for page in self.pages:
                 self.__dict__.update(page)
                 self.saveState()
                 self.setFont("Times-Bold", 9)
+                current_copy_page = ((self._pageNumber - 1) % pages_per_copy) + 1 if page_count % 3 == 0 else self._pageNumber
                 self.drawRightString(
                     self._pagesize[0] - 10 * mm,
                     5 * mm,
-                    f"Page {self._pageNumber} of {page_count}"
+                    f"Page {current_copy_page} of {pages_per_copy}"
                 )
                 self.restoreState()
                 super().showPage()
             super().save()
-
-    story = []
-
-    story.append(Paragraph("<b>Original</b>", right_bold))
-    story.append(Spacer(1, 1 * mm))
-    story.append(Paragraph("TAX INVOICE", title_style))
-    story.append(Spacer(1, 1.5 * mm))
 
     comp_header = (
         "<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>"
@@ -5208,12 +5414,6 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         f"Mail Id : {customer.email or ''}<br/>"
         f"GSTIN : {customer.gstin or '-'}"
     )
-
-    left_cell_content = [
-        Paragraph(comp_header, normal),
-        HRFlowable(width="100%", thickness=0.5, color=colors.black, spaceBefore=2, spaceAfter=2),
-        Paragraph(cust_info, normal),
-    ]
 
     if target_invoice:
         inv_no = target_invoice.invoice_number
@@ -5247,33 +5447,6 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         [Paragraph("Despatch Through :", normal), Paragraph("By Hand", normal), Paragraph("Destination :", normal), Paragraph("", normal)],
         [Paragraph("Shipping Address :", normal), Paragraph("", normal), Paragraph("", normal), Paragraph("", normal)],
     ]
-
-    right_table = Table(
-        right_table_data,
-        colWidths=[24 * mm, 30 * mm, 28 * mm, 28 * mm]
-    )
-    right_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 1),
-        ('TOPPADDING', (0,0), (-1,-1), 1),
-        ('LEFTPADDING', (0,0), (-1,-1), 1),
-        ('RIGHTPADDING', (0,0), (-1,-1), 1),
-        ('LINEBELOW', (0,0), (-1,-1), 0.3, colors.lightgrey),
-    ]))
-
-    header_grid = Table([[left_cell_content, right_table]], colWidths=[80 * mm, 110 * mm])
-    header_grid.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOX', (0,0), (-1,-1), 1, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-        ('LEFTPADDING', (0,0), (-1,-1), 3),
-        ('RIGHTPADDING', (0,0), (-1,-1), 3),
-    ]))
-
-    story.append(header_grid)
-    story.append(Spacer(1, 1.5 * mm))
 
     headers = [
         Paragraph("<b>S.No</b>", center_bold),
@@ -5324,50 +5497,64 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         prod_table_data.append(row)
 
     # State code based GST calculation:
-    # Tamil Nadu (State Code 33 / TN): CGST 9%, SGST 9%, IGST 0%
-    # All other states (e.g. 03, 27, 29, etc.): IGST 18%, CGST 0%, SGST 0%
+    is_sez_customer = (getattr(customer, 'is_sez', 'No') or 'No').strip().upper() == 'YES' if customer else False
     state_code_clean = (customer.state_code or '').strip().upper() if customer else ''
     gstin_clean = (customer.gstin or '').strip().upper() if customer else ''
     region_clean = (customer.region or '').strip().lower() if customer else ''
 
-    if state_code_clean:
-        is_tamilnadu = (state_code_clean == '33' or state_code_clean in ('TN', 'TAMIL NADU', 'TAMILNADU'))
-    elif gstin_clean and len(gstin_clean) >= 2 and gstin_clean[:2].isdigit():
-        is_tamilnadu = (gstin_clean[:2] == '33')
-    else:
-        is_tamilnadu = (region_clean in ('chennai', 'hosur', 'tamil nadu', 'tamilnadu') or 'tamil' in region_clean)
-
-    if is_tamilnadu:
-        sgst_rate = Decimal('9.00')
-        cgst_rate = Decimal('9.00')
-        sgst_amt = (subtotal * sgst_rate / Decimal('100')).quantize(Decimal('0.01'))
-        cgst_amt = (subtotal * cgst_rate / Decimal('100')).quantize(Decimal('0.01'))
-        igst_amt = Decimal('0.00')
-        tax_total = sgst_amt + cgst_amt
-
-        tax_rows = [
-            ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
-            ["", "", Paragraph("SGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
-            ["", "", Paragraph("CGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
-            ["", "", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
-        ]
-    else:
-        igst_rate = Decimal('18.00')
-        igst_amt = (subtotal * igst_rate / Decimal('100')).quantize(Decimal('0.01'))
+    if is_sez_customer:
         sgst_amt = Decimal('0.00')
         cgst_amt = Decimal('0.00')
-        tax_total = igst_amt
+        igst_amt = Decimal('0.00')
+        tax_total = Decimal('0.00')
 
         tax_rows = [
             ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
             ["", "", Paragraph("SGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("CGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("IGST", right_align), Paragraph("18%", center_align), "", "", "", Paragraph(f"Rs. {igst_amt:,.2f}", right_align)],
+            ["", "", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
             ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
         ]
+    else:
+        if state_code_clean:
+            is_tamilnadu = (state_code_clean == '33' or state_code_clean in ('TN', 'TAMIL NADU', 'TAMILNADU'))
+        elif gstin_clean and len(gstin_clean) >= 2 and gstin_clean[:2].isdigit():
+            is_tamilnadu = (gstin_clean[:2] == '33')
+        else:
+            is_tamilnadu = (region_clean in ('chennai', 'hosur', 'tamil nadu', 'tamilnadu') or 'tamil' in region_clean)
+
+        if is_tamilnadu:
+            sgst_rate = Decimal('9.00')
+            cgst_rate = Decimal('9.00')
+            sgst_amt = (subtotal * sgst_rate / Decimal('100')).quantize(Decimal('0.01'))
+            cgst_amt = (subtotal * cgst_rate / Decimal('100')).quantize(Decimal('0.01'))
+            igst_amt = Decimal('0.00')
+            tax_total = sgst_amt + cgst_amt
+
+            tax_rows = [
+                ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
+                ["", "", Paragraph("SGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
+                ["", "", Paragraph("CGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
+                ["", "", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ]
+        else:
+            igst_rate = Decimal('18.00')
+            igst_amt = (subtotal * igst_rate / Decimal('100')).quantize(Decimal('0.01'))
+            sgst_amt = Decimal('0.00')
+            cgst_amt = Decimal('0.00')
+            tax_total = igst_amt
+
+            tax_rows = [
+                ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
+                ["", "", Paragraph("SGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", "", Paragraph("CGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", "", Paragraph("IGST", right_align), Paragraph("18%", center_align), "", "", "", Paragraph(f"Rs. {igst_amt:,.2f}", right_align)],
+                ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ]
 
     grand_total = subtotal + tax_total
     prod_table_data.extend(tax_rows)
@@ -5380,7 +5567,6 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
 
     col_widths = [10 * mm, 26 * mm, 68 * mm, 18 * mm, 10 * mm, 12 * mm, 22 * mm, 24 * mm]
 
-    prod_table = Table(prod_table_data, colWidths=col_widths)
     t_style = [
         ('BOX', (0,0), (-1,-1), 1, colors.black),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
@@ -5390,10 +5576,7 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         ('LEFTPADDING', (0,0), (-1,-1), 2),
         ('RIGHTPADDING', (0,0), (-1,-1), 2),
     ]
-    prod_table.setStyle(TableStyle(t_style))
-    story.append(prod_table)
 
-    # Amount Chargable Box
     raw_words = _number_to_words(grand_total).upper().strip()
     raw_words = re.sub(r'\bONLY\.?$', '', raw_words, flags=re.IGNORECASE).strip()
     if not raw_words.endswith('RUPEES') and not raw_words.endswith('RUPPES'):
@@ -5405,16 +5588,6 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         bold
     )
 
-    amount_words_table = Table([[amount_words_p]], colWidths=[190 * mm])
-    amount_words_table.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 1, colors.black),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('LEFTPADDING', (0,0), (-1,-1), 4),
-    ]))
-    story.append(amount_words_table)
-
-    # Bank Details Table (Left side)
     bank_table_data = [
         [Paragraph("Our Bank", normal), Paragraph(": Indian Bank", bold)],
         [Paragraph("Branch", normal), Paragraph(": Bangalore Road", bold)],
@@ -5423,56 +5596,252 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         [Paragraph("<br/><b>Declaration :</b><br/>We declare that this invoice shows the actual price of the goods described and all particulars are goods and correct.", normal), ""],
     ]
 
-    bank_table = Table(bank_table_data, colWidths=[28 * mm, 67 * mm])
-    bank_table.setStyle(TableStyle([
-        ('SPAN', (0, 4), (1, 4)),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 1),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
-        ('TOPPADDING', (0, 0), (-1, -1), 1),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-    ]))
+    story = []
+    copy_names = ["Original", "Duplicate", "Triplicate"]
 
-    # Right side: Signatory box
-    sign_cell_content = [
-        Paragraph("For Metrology Enginnering Solutions", right_align),
-        Spacer(1, 18 * mm),
-        Paragraph("Authorized Signatory", right_bold),
-    ]
+    for copy_idx, copy_name in enumerate(copy_names):
+        if copy_idx > 0:
+            story.append(PageBreak())
 
-    sign_box = Table([[sign_cell_content]], colWidths=[95 * mm])
-    sign_box.setStyle(TableStyle([
-        ('BOX', (0, 0), (-1, -1), 0.8, colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
-        ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-    ]))
+        story.append(Paragraph(f"<b>{copy_name}</b>", right_bold))
+        story.append(Spacer(1, 1 * mm))
+        story.append(Paragraph("TAX INVOICE", title_style))
+        story.append(Spacer(1, 1.5 * mm))
 
-    footer_master_data = [
-        [bank_table, sign_box]
-    ]
+        left_cell_content = [
+            Paragraph(comp_header, normal),
+            HRFlowable(width="100%", thickness=0.5, color=colors.black, spaceBefore=2, spaceAfter=2),
+            Paragraph(cust_info, normal),
+        ]
 
-    footer_master = Table(footer_master_data, colWidths=[95 * mm, 95 * mm])
-    footer_master.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (0, 0), 'TOP'),
-        ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
-        ('TOPPADDING', (0, 0), (-1, -1), 0),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
-    ]))
+        right_table = Table(
+            right_table_data,
+            colWidths=[24 * mm, 30 * mm, 28 * mm, 28 * mm]
+        )
+        right_table.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+            ('TOPPADDING', (0,0), (-1,-1), 1),
+            ('LEFTPADDING', (0,0), (-1,-1), 1),
+            ('RIGHTPADDING', (0,0), (-1,-1), 1),
+            ('LINEBELOW', (0,0), (-1,-1), 0.3, colors.lightgrey),
+        ]))
 
-    story.append(KeepTogether([footer_master]))
+        header_grid = Table([[left_cell_content, right_table]], colWidths=[80 * mm, 110 * mm])
+        header_grid.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('BOX', (0,0), (-1,-1), 1, colors.black),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('TOPPADDING', (0,0), (-1,-1), 2),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+            ('LEFTPADDING', (0,0), (-1,-1), 3),
+            ('RIGHTPADDING', (0,0), (-1,-1), 3),
+        ]))
+
+        story.append(header_grid)
+        story.append(Spacer(1, 1.5 * mm))
+
+        prod_table = Table(prod_table_data, colWidths=col_widths)
+        prod_table.setStyle(TableStyle(t_style))
+        story.append(prod_table)
+
+        amount_words_table = Table([[amount_words_p]], colWidths=[190 * mm])
+        amount_words_table.setStyle(TableStyle([
+            ('BOX', (0,0), (-1,-1), 1, colors.black),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('LEFTPADDING', (0,0), (-1,-1), 4),
+        ]))
+        story.append(amount_words_table)
+
+        bank_table = Table(bank_table_data, colWidths=[28 * mm, 67 * mm])
+        bank_table.setStyle(TableStyle([
+            ('SPAN', (0, 4), (1, 4)),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 1),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ]))
+
+        sign_cell_content = [
+            Paragraph("For Metrology Enginnering Solutions", right_align),
+            Spacer(1, 18 * mm),
+            Paragraph("Authorized Signatory", right_bold),
+        ]
+
+        sign_box = Table([[sign_cell_content]], colWidths=[95 * mm])
+        sign_box.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.8, colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+            ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ]))
+
+        footer_master_data = [
+            [bank_table, sign_box]
+        ]
+
+        footer_master = Table(footer_master_data, colWidths=[95 * mm, 95 * mm])
+        footer_master.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (0, 0), 'TOP'),
+            ('VALIGN', (1, 0), (1, 0), 'BOTTOM'),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+
+        story.append(KeepTogether([footer_master]))
 
     doc.build(story, canvasmaker=NumberedCanvas)
     return buffer
 
 
-@role_required('ADMIN', 'PURCHASE', 'SALES')
+@role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
+def print_customer_address_pdf(request, product_id):
+    """Generate and return Address Printout PDF on the fly without database storage."""
+    from products.models import CustomerProduct
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from xml.sax.saxutils import escape as xml_escape
+    from django.http import HttpResponse, Http404
+
+    try:
+        product = CustomerProduct.objects.select_related('dpr', 'dpr__customer').get(pk=product_id)
+    except CustomerProduct.DoesNotExist:
+        raise Http404("Product not found")
+
+    dpr = product.dpr
+    customer = dpr.customer
+
+    def pdf_text(val):
+        return xml_escape(str(val or ''))
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=15 * mm,
+        leftMargin=15 * mm,
+        topMargin=15 * mm,
+        bottomMargin=15 * mm
+    )
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'AddressTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=14,
+        leading=18,
+        alignment=1,
+    )
+    norm_style = ParagraphStyle(
+        'AddressNorm',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        leading=14,
+    )
+
+    cust_atten = customer.email.split('@')[0] if (customer.email and '@' in customer.email) else (customer.customer_name or "")
+    po_no = dpr.po_number or dpr.serial_number or '-'
+    po_date_str = dpr.po_date.strftime('%d/%m/%Y') if dpr.po_date else '-'
+
+    from_address_text = """<b>FROM:</b><br/>
+<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>
+NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br/>
+2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri,<br/>
+Tamilnadu-635109.<br/>
+<b>Phone :</b> +91-965-577-8807
+"""
+
+    to_address_text = f"""<b>TO:</b><br/>
+<b>M/s. {pdf_text(customer.customer_name)}</b><br/>
+{pdf_text(customer.address or '')}<br/>
+{pdf_text(customer.region or '')}<br/>
+<b>Contact Number :</b> {pdf_text(customer.phone_number or '')}<br/>
+<b>Mail Id :</b> {pdf_text(customer.email or '')}<br/>
+<b>GSTIN :</b> {pdf_text(customer.gstin or '-')}<br/>
+<b>Buyer's PO No :</b> {pdf_text(po_no)} | <b>PO Date :</b> {pdf_text(po_date_str)}<br/>
+<b>DPR Serial No :</b> {pdf_text(dpr.serial_number or '')}
+"""
+
+    from_table = Table([[Paragraph(from_address_text, norm_style)]], colWidths=[180 * mm])
+    from_table.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 1.5, colors.black),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+        ('TOPPADDING', (0,0), (-1,-1), 10),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+        ('LEFTPADDING', (0,0), (-1,-1), 12),
+        ('RIGHTPADDING', (0,0), (-1,-1), 12),
+    ]))
+
+    to_table = Table([[Paragraph(to_address_text, norm_style)]], colWidths=[180 * mm])
+    to_table.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 1.5, colors.black),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+        ('TOPPADDING', (0,0), (-1,-1), 10),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+        ('LEFTPADDING', (0,0), (-1,-1), 12),
+        ('RIGHTPADDING', (0,0), (-1,-1), 12),
+    ]))
+
+    story = [
+        Paragraph('<b>ADDRESS PRINTOUT</b>', title_style),
+        Spacer(1, 10 * mm),
+        from_table,
+        Spacer(1, 10 * mm),
+        to_table
+    ]
+
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="Address_Printout_{product_id}.pdf"'
+    return response
+
+
+@role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
+def upload_customer_address_attachment(request, product_id):
+    """Upload or retrieve user address printout attachment for CustomerProduct."""
+    from products.models import CustomerProduct
+    try:
+        product = CustomerProduct.objects.get(pk=product_id)
+    except CustomerProduct.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Product not found'}, status=404)
+
+    if request.method == 'POST':
+        attachment_file = request.FILES.get('address_attachment')
+        if attachment_file:
+            product.address_attachment = attachment_file
+            product.save(update_fields=['address_attachment'])
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Address printout attached successfully.',
+                'attachment_url': product.address_attachment.url,
+            })
+        return JsonResponse({'status': 'error', 'message': 'No file attached.'}, status=400)
+
+    url = product.address_attachment.url if product.address_attachment else ''
+    return JsonResponse({
+        'status': 'success',
+        'has_attachment': bool(product.address_attachment),
+        'attachment_url': url,
+    })
+
+
+@role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
 def customer_invoice_modal_data(request, product_id):
     """Return JSON data for the Generate Invoice modal popup showing only the selected product."""
     from products.models import CustomerProduct
@@ -5505,7 +5874,7 @@ def customer_invoice_modal_data(request, product_id):
     })
 
 
-@role_required('ADMIN', 'PURCHASE', 'SALES')
+@role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
 def generate_customer_invoice(request, product_id, invoice_id=None):
     """Generate a Tax Invoice PDF for a customer product / DPR order."""
     from products.models import CustomerProduct, CustomerInvoice
@@ -5843,7 +6212,7 @@ def _build_customer_outstanding_email_html(customer, items, custom_body=None):
     return html_content, total_outstanding
 
 
-@role_required('ADMIN', 'PURCHASE', 'SALES')
+@role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
 def send_invoice_email(request):
     """Send outstanding payment reminder email with formatted table in email body separately to each selected customer."""
     if request.method != 'POST':
@@ -6062,7 +6431,7 @@ def _build_supplier_outstanding_email_html(supplier, items, custom_body=None):
     return html_content, total_outstanding
 
 
-@role_required('ADMIN', 'PURCHASE')
+@role_required('ADMIN', 'PURCHASE', 'ACCOUNTS')
 def send_supplier_invoice_email(request):
     """Send payment status statement email with formatted table in email body separately to each selected supplier."""
     if request.method != 'POST':

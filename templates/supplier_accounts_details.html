@@ -127,11 +127,11 @@
                 <thead class="table-light">
                     <tr>
                         <th class="sortable" data-col="0" data-sort-type="number">S.No <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="1" data-sort-type="text">PO / Invoice Number <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="1" data-sort-type="text">Supplier Invoice <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="2" data-sort-type="text">Bill Number <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="3" data-sort-type="text">Supplier Name <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="4" data-sort-type="date">PO Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable text-end" data-col="5" data-sort-type="number">PO Amount <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable text-end" data-col="5" data-sort-type="number">Bill Amount <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="6" data-sort-type="date">Payment Terms Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable text-end" data-col="7" data-sort-type="number">Paid Amount <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable text-center" data-col="8" data-sort-type="text">Payment Status <i class="sort-icon bi bi-arrow-down-up"></i></th>
@@ -160,25 +160,18 @@
                         data-is-overdue="{% if item.is_overdue %}1{% else %}0{% endif %}"
                         class="{% if item.color_state == 'green' %}table-success-light{% elif item.color_state == 'orange' %}table-warning-light{% elif item.color_state == 'red' %}table-danger-light{% endif %}">
                         <td class="serial-cell" data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
-                        <td class="fw-semibold" data-sort-value="{{ item.invoice_number|default:''|lower }}">
-                            {% if item.supplier_po_number %}
-                                <a href="{% url 'generate_supplier_po' item.product.customer_product.dpr.id %}?supplier_id={{ item.supplier_id }}&po_number={{ item.supplier_po_number|urlencode }}"
-                                   target="_blank" class="text-decoration-none text-primary fw-bold">
-                                    {{ item.invoice_number }}
+                        <td class="fw-semibold" data-sort-value="{% if item.bill_attachment_name %}{{ item.bill_attachment_name|lower }}{% elif item.bill_attachment_url %}bill{% else %}-{% endif %}">
+                            {% if item.bill_attachment_url %}
+                                <a href="{{ item.bill_attachment_url }}" target="_blank" class="text-decoration-none text-success fw-bold">
+                                    <i class="bi bi-file-earmark-text me-1"></i>{{ item.bill_attachment_name|default:'View Bill' }}
                                 </a>
                             {% else %}
-                                <span class="text-primary fw-bold">{{ item.invoice_number }}</span>
+                                <span class="text-muted">-</span>
                             {% endif %}
                         </td>
                         <td data-sort-value="{{ item.supplier_invoice_number|lower }}">
                             {% if item.supplier_invoice_number %}
-                                {% if item.bill_attachment_url %}
-                                    <a href="{{ item.bill_attachment_url }}" target="_blank" class="text-decoration-none text-success fw-semibold">
-                                        <i class="bi bi-file-earmark-text me-1"></i>{{ item.supplier_invoice_number }}
-                                    </a>
-                                {% else %}
-                                    <span class="fw-semibold text-secondary">{{ item.supplier_invoice_number }}</span>
-                                {% endif %}
+                                <span class="fw-semibold text-secondary">{{ item.supplier_invoice_number }}</span>
                             {% else %}
                                 <span class="text-muted">-</span>
                             {% endif %}
@@ -347,7 +340,7 @@
                 <div class="modal-body p-4">
                     <div class="mb-3 p-3 bg-light rounded-3">
                         <div class="d-flex justify-content-between mb-1">
-                            <span class="text-muted small">PO / Invoice Number:</span>
+                            <span class="text-muted small">Supplier Invoice:</span>
                             <span id="modalInvoiceNo" class="fw-bold text-primary"></span>
                         </div>
                         <div class="d-flex justify-content-between mb-1">
@@ -355,7 +348,7 @@
                             <span id="modalSupplierName" class="fw-semibold"></span>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span class="text-muted small">Total PO Amount:</span>
+                            <span class="text-muted small">Total Bill Amount:</span>
                             <span id="modalTotalAmount" class="fw-bold text-dark"></span>
                         </div>
                     </div>
@@ -637,7 +630,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const notes = btn.getAttribute('data-payment-notes') || '';
 
             const subEl = document.getElementById('viewModalInvoiceNoSubtitle');
-            if (subEl) subEl.textContent = `PO / Invoice: ${invoiceNo}`;
+            if (subEl) subEl.textContent = `Supplier Invoice: ${invoiceNo}`;
             
             const partyLblEl = document.getElementById('viewModalPartyLabel');
             if (partyLblEl) partyLblEl.textContent = partyLabel;

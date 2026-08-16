@@ -35,6 +35,10 @@ class CustomUser(AbstractUser):
     def is_purchase(self):
         return self.role == UserProfile.ROLE_PURCHASE
 
+    @property
+    def is_accounts(self):
+        return self.role == UserProfile.ROLE_ACCOUNTS
+
     def has_role(self, *allowed_roles):
         if self.is_superuser:
             return True
@@ -45,11 +49,13 @@ class UserProfile(models.Model):
     ROLE_ADMIN = 'ADMIN'
     ROLE_SALES = 'SALES'
     ROLE_PURCHASE = 'PURCHASE'
+    ROLE_ACCOUNTS = 'ACCOUNTS'
 
     ROLE_CHOICES = [
         (ROLE_ADMIN, 'ADMIN'),
         (ROLE_SALES, 'SALES'),
         (ROLE_PURCHASE, 'PURCHASE'),
+        (ROLE_ACCOUNTS, 'ACCOUNTS'),
     ]
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
