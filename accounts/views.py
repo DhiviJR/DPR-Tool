@@ -918,26 +918,15 @@ def _send_rfq_supplier_price_requests(
         recipient_list = normalize_email_list([supplier.email, *extra_to_emails])
         cc_list = normalize_email_list(cc_emails or [])
 
-        is_multiple_suppliers = (len(supplier_product_map) > 1) or (len(selected_supplier_emails) > 1) or (len(recipient_list) > 1)
-
         try:
-            if is_multiple_suppliers:
-                email = EmailMessage(
-                    subject=subject,
-                    body=message,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[],
-                    bcc=recipient_list,
-                    cc=cc_list,
-                )
-            else:
-                email = EmailMessage(
-                    subject=subject,
-                    body=message,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=recipient_list,
-                    cc=cc_list,
-                )
+            email = EmailMessage(
+                subject=subject,
+                body=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[],
+                bcc=recipient_list,
+                cc=cc_list,
+            )
             if attachment_payload:
                 email.attach(*attachment_payload)
             email.send(fail_silently=False)
@@ -1857,6 +1846,78 @@ def supplier_po_product_details(request):
     )
 
 
+def rework_tracking(request):
+    validity_filter = request.GET.get('validity')
+    supplier_filter = request.GET.get('supplier')
+    today = timezone.localdate()
+    within_7_days = today + timedelta(days=5)
+
+    rework_products = SupplierProduct.objects.select_related(
+        'customer_product',
+        'customer_product__dpr',
+        'customer_product__dpr__customer',
+        'supplier'
+    ).filter(
+        Q(quantity_not_ok__gt=0) | Q(not_ok_reason__isnull=False)
+    ).annotate(
+        status_rank=Case(
+            When(status__isnull=True, then=Value(0)),
+            When(status='partially_delivered', then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField()
+        )
+    )
+
+    if validity_filter == 'within7':
+        rework_products = rework_products.filter(
+            po_validity__gte=today,
+            po_validity__lte=within_7_days
+        )
+    elif validity_filter == 'expired':
+        rework_products = rework_products.filter(po_validity__lt=today)
+
+    if supplier_filter and supplier_filter.isdigit():
+        rework_products = rework_products.filter(supplier_id=int(supplier_filter))
+
+    rework_products = list(rework_products.order_by('-id'))
+
+    for sp in rework_products:
+        sp.validity_state = _get_validity_state(
+            sp.po_validity,
+            today
+        )
+        sp.row_class = _get_status_validity_row_class(
+            sp.status,
+            sp.validity_state
+        )
+        sp.filter_state = _get_status_validity_filter_state(
+            sp.status,
+            sp.validity_state
+        )
+        sp.quantity_ok = max(
+            sp.quantity_received - sp.quantity_not_ok,
+            0
+        )
+        if sp.quantity_not_ok > 0 and not sp.rework_sent_date:
+            sp.rework_sent_date = sp.invoice_date or today
+
+    suppliers = Supplier.objects.filter(
+        id__in=[sp.supplier_id for sp in rework_products if sp.supplier_id]
+    ).distinct()
+
+    return render(
+        request,
+        'rework_tracking.html',
+        {
+            'rework_products': rework_products,
+            'suppliers': suppliers,
+            'selected_supplier': supplier_filter,
+            'total_rework_count': len(rework_products),
+            'total_rework_items': sum(sp.quantity_not_ok for sp in rework_products),
+        }
+    )
+
+
 @role_required('ADMIN', 'PURCHASE')
 def material_status(request):
     case_filter = request.GET.get('case', '').strip()
@@ -2521,12 +2582,17 @@ def supplier_product_status_update(request, supplier_product_id):
         supplier_product.quantity_received = received_quantity
         supplier_product.quantity_not_ok = not_ok_quantity
         supplier_product.not_ok_reason = not_ok_reason if not_ok_quantity > 0 else None
+        if not_ok_quantity > 0 and not supplier_product.rework_sent_date:
+            supplier_product.rework_sent_date = timezone.localdate()
+        elif not_ok_quantity == 0:
+            supplier_product.rework_sent_date = None
 
         update_fields = [
             'status',
             'quantity_received',
             'quantity_not_ok',
-            'not_ok_reason'
+            'not_ok_reason',
+            'rework_sent_date'
         ]
 
         if 'supplier_invoice_number' in request.POST:
@@ -3398,6 +3464,12 @@ def rfq_details(request):
                     for supplier_id in request.POST.getlist(f'supplier_ids_{i}[]')
                     if supplier_id
                 ]
+                if not selected_supplier_ids and not price_known:
+                    selected_supplier_ids = [
+                        supplier_id
+                        for supplier_id in (request.POST.getlist('draft_supplier_ids[]') or request.POST.getlist('supplier_ids[]'))
+                        if supplier_id
+                    ]
                 supplier_price_rows = []
                 seen_price_supplier_ids = set()
                 price_supplier_ids = request.POST.getlist(f'supplier_price_supplier_{i}[]')

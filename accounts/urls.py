@@ -6,6 +6,7 @@ urlpatterns = [
     path('dpr-view/', views.dpr_view, name='dpr_view'),
     path('customer-po-product-details/', views.customer_po_product_details, name='customer_po_product_details'),
     path('supplier-po-product-details/', views.supplier_po_product_details, name='supplier_po_product_details'),
+    path('rework-tracking/', views.rework_tracking, name='rework_tracking'),
     path('material-status/', views.material_status, name='material_status'),
     path('accounts-details/', views.accounts_details, name='accounts_details'),
     path('supplier-accounts-details/', views.supplier_accounts_details, name='supplier_accounts_details'),

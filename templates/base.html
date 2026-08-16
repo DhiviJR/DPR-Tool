@@ -40,8 +40,15 @@
                 </li>
                 {% endif %}
                 {% if can_view_supplier_po %}
-                <li class="nav-item">
-                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'supplier_po_product_details' %}active{% endif %}" href="{% url 'supplier_po_product_details' %}">Supplier PO</a>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle dpr-nav-link {% if request.resolver_match.url_name == 'supplier_po_product_details' or request.resolver_match.url_name == 'rework_tracking' %}active{% endif %}"
+                       href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Supplier PO
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item {% if request.resolver_match.url_name == 'supplier_po_product_details' %}active{% endif %}" href="{% url 'supplier_po_product_details' %}"><i class="bi bi-box-seam me-2"></i>Supplier PO Details</a></li>
+                        <li><a class="dropdown-item {% if request.resolver_match.url_name == 'rework_tracking' %}active{% endif %}" href="{% url 'rework_tracking' %}"><i class="bi bi-arrow-repeat me-2"></i>Rework Tracking</a></li>
+                    </ul>
                 </li>
                 {% endif %}
                 {% if can_view_accounts %}

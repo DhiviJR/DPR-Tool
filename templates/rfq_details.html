@@ -62,6 +62,17 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body rfq-modal-body">
+                    <div id="rfqModalAlertContainer">
+                        {% if messages %}
+                            {% for message in messages %}
+                            <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show mb-3" role="alert">
+                                <i class="bi {% if message.tags == 'success' %}bi-check-circle-fill me-2{% elif message.tags == 'warning' %}bi-exclamation-triangle-fill me-2{% else %}bi-info-circle-fill me-2{% endif %}"></i>
+                                <strong>{{ message }}</strong>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
                     <div class="row g-3 align-items-end">
                         <div class="col-lg-2">
                             <label class="form-label">RFQ No</label>
@@ -109,21 +120,25 @@
                                 <table class="table table-bordered align-middle mb-2" id="rfqProductTable" style="min-width: 1400px;">
                                     <thead class="table-light">
                                         <tr>
+                                            <th class="text-center align-middle rfq-select-col" style="width: 40px;">
+                                                <input type="checkbox" class="form-check-input" id="rfqSelectAllUnknownProducts" title="Select / Deselect all products with unknown price">
+                                            </th>
                                             <th>S.no</th>
                                             <th>Product</th>
                                             <th>Product Type</th>
                                             <th>Price Known?</th>
                                             <th>Qty</th>
                                             <th>Rate Per Unit</th>
-                                            <th>Supplier</th>
                                             <th>Value</th>
                                             <th>Remarks</th>
-                                            <th class="text-center">Send Mail</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <tr>
+                                            <td class="text-center align-middle rfq-select-cell">
+                                                <input type="checkbox" class="form-check-input rfq-product-select-cb d-none" disabled title="Select product for supplier email inquiry">
+                                            </td>
                                             <td class="rfq-product-serial">1</td>
                                             <td>
                                                 <input type="hidden" name="product_id[]" value="">
@@ -162,17 +177,8 @@
                                                     </button>
                                                 </div>
                                             </td>
-                                            <td class="rfq-supplier-cell">
-                                                <select name="supplier_ids_0[]" class="form-select rfq-supplier" multiple size="3">
-                                                    <option value="">Select Supplier</option>
-                                                    {% for supplier in suppliers %}
-                                                    <option value="{{ supplier.id }}" data-email="{{ supplier.email|default:'' }}">{{ supplier.supplier_name }}</option>
-                                                    {% endfor %}
-                                                </select>
-                                            </td>
                                             <td><input type="number" step="0.01" name="value[]" class="form-control rfq-value" readonly disabled><div class="rfq-supplier-value-list small mt-1 d-none"></div></td>
                                             <td><input type="text" name="product_remarks[]" class="form-control"></td>
-                                            <td class="rfq-send-mail-cell text-center align-middle"></td>
                                             <td>
                                                 <button type="button" class="btn btn-outline-danger btn-sm rfq-remove-product">
                                                     <i class="bi bi-trash"></i>
@@ -186,68 +192,104 @@
                                 <i class="bi bi-plus-lg me-1"></i>Add Product
                             </button>
                         </div>
-                        <div class="col-12 d-none" id="supplierEmailContentSection">
-                            <h5 class="mb-3">Supplier Email Content</h5>
-                            <div class="row g-3">
-                                <div class="col-lg-6">
-                                    <label class="form-label" id="supplierEmailToLabel">To</label>
-                                    <input type="text"
-                                           name="supplier_email_to"
-                                           id="supplierEmailTo"
-                                           class="form-control text-lowercase js-lowercase-input"
-                                           placeholder="supplier@example.com, team@example.com">
-                                    <div class="form-text" id="supplierEmailToFormText">Selected supplier email will be included automatically. Add extra To emails separated by comma or semicolon.</div>
-                                </div>
-                                <div class="col-lg-6">
-                                    <label class="form-label">CC</label>
-                                    <input type="text"
-                                           name="supplier_email_cc"
-                                           id="supplierEmailCc"
-                                           class="form-control text-lowercase js-lowercase-input"
-                                           placeholder="manager@example.com, purchase@example.com">
-                                </div>
-                                <div class="col-lg-6">
-                                    <label class="form-label">Email Subject</label>
-                                    <input type="text"
-                                           name="supplier_email_subject"
-                                           id="supplierEmailSubject"
-                                           class="form-control"
-                                           value="{{ default_supplier_email_subject }}">
-                                </div>
-                                <div class="col-lg-6">
-                                    <label class="form-label">Email Attachment</label>
-                                    <input type="file"
-                                           name="supplier_email_attachment"
-                                           id="supplierEmailAttachment"
-                                           class="form-control">
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label">Email Body</label>
-                                    <textarea name="supplier_email_body"
-                                              id="supplierEmailBody"
-                                              class="form-control"
-                                              rows="8">{{ default_supplier_email_body }}</textarea>
-                                    <div class="form-text">
-                                        Available placeholders: {supplier_name}, {rfq_no}, {customer_name}, {enquiry_details}, {products}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-outline-success me-1" id="rfqSendEmailBtn">
-                        <i class="bi bi-send me-1"></i>Add & Send Email
+                    <button type="button" class="btn btn-outline-primary me-1 d-none" id="rfqDraftEmailBtn">
+                        <i class="bi bi-envelope-paper me-1"></i>Draft Email for Supplier price inquiry
                     </button>
                     <button type="submit" class="btn btn-success" id="rfqSubmitBtn">
                         <i class="bi bi-plus-lg me-1"></i>Add RFQ
                     </button>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
-</div>
+
+    <!-- Draft Supplier Email Modal -->
+    <div class="modal fade" id="rfqDraftEmailModal" tabindex="-1" aria-labelledby="rfqDraftEmailModalLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold" id="rfqDraftEmailModalLabel">
+                        <i class="bi bi-envelope-paper me-2 text-primary"></i>Draft Supplier Price Inquiry Email
+                    </h5>
+                    <button type="button" class="btn-close" id="rfqDraftEmailHeaderCloseBtn" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Select Supplier(s) *</label>
+                            <select name="draft_supplier_ids[]"
+                                    id="draftModalSupplierSelect"
+                                    class="form-select rfq-draft-supplier"
+                                    multiple
+                                    size="4">
+                                {% for supplier in suppliers %}
+                                <option value="{{ supplier.id }}" data-email="{{ supplier.email|default:'' }}">
+                                    {{ supplier.supplier_name }} {% if supplier.email %}({{ supplier.email }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Hold Ctrl (or Cmd) to select multiple suppliers for this price inquiry.</div>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-semibold" id="supplierEmailToLabel">BCC (Suppliers)</label>
+                            <input type="text"
+                                   name="supplier_email_to"
+                                   id="supplierEmailTo"
+                                   class="form-control text-lowercase js-lowercase-input"
+                                   placeholder="supplier@example.com, team@example.com">
+                            <div class="form-text" id="supplierEmailToFormText">Selected supplier emails will be added as BCC so suppliers cannot see each other's email addresses.</div>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-semibold">CC</label>
+                            <input type="text"
+                                   name="supplier_email_cc"
+                                   id="supplierEmailCc"
+                                   class="form-control text-lowercase js-lowercase-input"
+                                   placeholder="manager@example.com, purchase@example.com">
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-semibold">Email Subject</label>
+                            <input type="text"
+                                   name="supplier_email_subject"
+                                   id="supplierEmailSubject"
+                                   class="form-control"
+                                   value="{{ default_supplier_email_subject }}">
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-semibold">Email Attachment</label>
+                            <input type="file"
+                                   name="supplier_email_attachment"
+                                   id="supplierEmailAttachment"
+                                   class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Email Body</label>
+                            <textarea name="supplier_email_body"
+                                      id="supplierEmailBody"
+                                      class="form-control"
+                                      rows="9">{{ default_supplier_email_body }}</textarea>
+                            <div class="form-text">
+                                Available placeholders: {supplier_name}, {rfq_no}, {customer_name}, {enquiry_details}, {products}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="closeDraftEmailModalBtn">
+                        <i class="bi bi-arrow-left me-1"></i>Back
+                    </button>
+                    <button type="button" class="btn btn-success" id="rfqSendEmailFromDraftBtn">
+                        <i class="bi bi-send me-1"></i>Send Email
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
 <style>
     .rfq-status-tabs {
         display: flex;
@@ -1351,135 +1393,6 @@ function renumberRfqProductRows() {
             if (priceInput) priceInput.name = `supplier_price_${index}[]`;
         });
     });
-    updateRfqSendMailColumn();
-}
-
-function updateRfqSendMailColumn() {
-    const table = document.getElementById('rfqProductTable');
-    if (!table) return;
-
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
-    if (!rows.length) return;
-
-    const hasAnyNotKnown = rows.some(row => {
-        const priceKnownSelect = row.querySelector('.rfq-price-known');
-        return priceKnownSelect && priceKnownSelect.value === 'no';
-    });
-
-    const headers = table.querySelectorAll('thead th');
-    headers.forEach(th => {
-        if (th.textContent.trim() === 'Send Mail') {
-            th.classList.toggle('d-none', !hasAnyNotKnown);
-        }
-    });
-
-    rows.forEach(row => {
-        const cell = row.querySelector('.rfq-send-mail-cell');
-        if (cell) {
-            cell.removeAttribute('rowspan');
-            cell.classList.toggle('d-none', !hasAnyNotKnown);
-            cell.innerHTML = '';
-        }
-    });
-
-    if (!hasAnyNotKnown) return;
-
-    const rowInfo = rows.map((row, index) => {
-        const priceKnownSelect = row.querySelector('.rfq-price-known');
-        const isNotKnown = priceKnownSelect && priceKnownSelect.value === 'no';
-        const supplierSelect = row.querySelector('.rfq-supplier');
-        const selectedOptions = supplierSelect
-            ? Array.from(supplierSelect.selectedOptions || []).filter(o => o.value)
-            : [];
-        const supplierIds = selectedOptions.map(o => o.value).sort();
-        const key = isNotKnown ? (supplierIds.length ? supplierIds.join(',') : '__none__') : '__known__';
-        return {
-            index,
-            row,
-            isNotKnown,
-            supplierIds,
-            key
-        };
-    });
-
-    let i = 0;
-    while (i < rowInfo.length) {
-        const current = rowInfo[i];
-
-        if (!current.isNotKnown) {
-            const cell = current.row.querySelector('.rfq-send-mail-cell');
-            if (cell) {
-                cell.classList.add('d-none');
-            }
-            i++;
-            continue;
-        }
-
-        if (current.key === '__none__') {
-            const cell = current.row.querySelector('.rfq-send-mail-cell');
-            if (cell) {
-                cell.innerHTML = `
-                    <button type="button" class="btn btn-sm btn-outline-secondary disabled text-nowrap" title="Select supplier first" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
-                        <i class="bi bi-envelope me-1"></i>Send Mail
-                    </button>
-                `;
-            }
-            i++;
-            continue;
-        }
-
-        let runLength = 1;
-        while (i + runLength < rowInfo.length) {
-            const next = rowInfo[i + runLength];
-            if (next.isNotKnown && next.key === current.key) {
-                runLength++;
-            } else {
-                break;
-            }
-        }
-
-        const primaryCell = current.row.querySelector('.rfq-send-mail-cell');
-        const supplierIdsAttr = current.supplierIds.join(',');
-        const isCommon = runLength > 1;
-
-        if (primaryCell) {
-            if (isCommon) {
-                primaryCell.setAttribute('rowspan', runLength);
-                primaryCell.innerHTML = `
-                    <div class="d-flex flex-column align-items-center justify-content-center h-100 gap-1 p-1">
-                        <button type="button"
-                                class="btn btn-sm btn-success rfq-row-send-mail-btn text-nowrap fw-semibold"
-                                data-supplier-ids="${supplierIdsAttr}"
-                                title="Send price request email to supplier for these products">
-                            <i class="bi bi-send-fill me-1"></i>Send Mail
-                        </button>
-                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.65rem;">
-                            Common (${runLength} items)
-                        </span>
-                    </div>
-                `;
-            } else {
-                primaryCell.innerHTML = `
-                    <button type="button"
-                            class="btn btn-sm btn-outline-primary rfq-row-send-mail-btn text-nowrap"
-                            data-supplier-ids="${supplierIdsAttr}"
-                            title="Send price request email to supplier for this product"
-                            style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
-                        <i class="bi bi-envelope me-1"></i>Send Mail
-                    </button>
-                `;
-            }
-        }
-
-        for (let r = 1; r < runLength; r++) {
-            const mergedCell = rowInfo[i + r].row.querySelector('.rfq-send-mail-cell');
-            if (mergedCell) {
-                mergedCell.classList.add('d-none');
-            }
-        }
-
-        i += runLength;
-    }
 }
 
 function calculateRfqProductValues() {
@@ -1520,11 +1433,26 @@ function getSelectedOptionText(select) {
     return selectedOption ? selectedOption.text.trim() : '';
 }
 
+function updateSelectAllCheckboxHeaderState() {
+    const selectAllCb = document.getElementById('rfqSelectAllUnknownProducts');
+    if (!selectAllCb) return;
+    const unknownCbs = Array.from(document.querySelectorAll('#rfqProductTable tbody .rfq-product-select-cb:not([disabled])'));
+    if (unknownCbs.length === 0) {
+        selectAllCb.checked = false;
+        selectAllCb.disabled = true;
+    } else {
+        selectAllCb.disabled = false;
+        selectAllCb.checked = unknownCbs.every(cb => cb.checked);
+    }
+}
+
 function getUnknownPriceProductLines() {
     const lines = [];
-    document.querySelectorAll('#rfqProductTable tbody tr').forEach((row, index) => {
+    document.querySelectorAll('#rfqProductTable tbody tr').forEach((row) => {
         const priceKnownSelect = row.querySelector('.rfq-price-known');
+        const checkbox = row.querySelector('.rfq-product-select-cb');
         if (!priceKnownSelect || priceKnownSelect.value !== 'no') return;
+        if (!checkbox || !checkbox.checked) return;
 
         const productName = row.querySelector('[name="product_name[]"]')?.value.trim() || '-';
         const productType = getSelectedOptionText(row.querySelector('[name="product_type[]"]')) || '-';
@@ -1569,14 +1497,14 @@ function syncSupplierEmailToAddress() {
     if (!toInput) return;
 
     const selectedEmails = new Set();
+    const draftSupplierSelect = document.getElementById('draftModalSupplierSelect');
+    if (draftSupplierSelect) {
+        Array.from(draftSupplierSelect.selectedOptions || []).forEach(option => {
+            const email = getEmailFromSupplierOption(option);
+            if (email) selectedEmails.add(email);
+        });
+    }
     document.querySelectorAll('#rfqProductTable tbody tr').forEach(row => {
-        const supplierSelect = row.querySelector('.rfq-supplier');
-        if (supplierSelect) {
-            Array.from(supplierSelect.selectedOptions || []).forEach(option => {
-                const email = getEmailFromSupplierOption(option);
-                if (email) selectedEmails.add(email);
-            });
-        }
         row.querySelectorAll('.rfq-supplier-price-supplier').forEach(priceSupplierSelect => {
             const selectedOption = priceSupplierSelect.options[priceSupplierSelect.selectedIndex];
             if (selectedOption && selectedOption.value) {
@@ -1589,51 +1517,34 @@ function syncSupplierEmailToAddress() {
 
     const label = document.getElementById('supplierEmailToLabel');
     const formText = document.getElementById('supplierEmailToFormText');
-    if (selectedEmails.size > 1) {
-        if (label) label.textContent = 'BCC (Multiple Suppliers)';
-        if (formText) formText.textContent = 'Multiple suppliers selected. Email will be sent using BCC method.';
-    } else {
-        if (label) label.textContent = 'To';
-        if (formText) formText.textContent = 'Selected supplier email will be included automatically. Add extra To emails separated by comma or semicolon.';
-    }
+    if (label) label.textContent = 'BCC (Suppliers)';
+    if (formText) formText.textContent = 'Selected supplier emails will be added as BCC so suppliers cannot see each other\'s email addresses.';
 }
 
 function updateSupplierEmailVisibility() {
     const rows = Array.from(document.querySelectorAll('#rfqProductTable tbody tr'));
-    const hasKnownPriceProduct = rows.some(row => {
+    const hasUnknownPriceChecked = rows.some(row => {
         const priceKnownSelect = row.querySelector('.rfq-price-known');
-        return priceKnownSelect && priceKnownSelect.value === 'yes';
+        const checkbox = row.querySelector('.rfq-product-select-cb');
+        return priceKnownSelect && priceKnownSelect.value === 'no' && checkbox && checkbox.checked;
     });
 
-    const sendEmailBtn = document.getElementById('rfqSendEmailBtn');
-    if (sendEmailBtn) {
-        sendEmailBtn.classList.toggle('d-none', !hasKnownPriceProduct);
-    }
-
-    const emailSection = document.getElementById('supplierEmailContentSection');
-    if (emailSection) {
-        emailSection.classList.remove('d-none');
+    const draftEmailBtn = document.getElementById('rfqDraftEmailBtn');
+    if (draftEmailBtn) {
+        draftEmailBtn.classList.toggle('d-none', !hasUnknownPriceChecked);
     }
 
     syncSupplierEmailToAddress();
     updateRateColumnVisibility();
-    updateRfqSendMailColumn();
+    updateSelectAllCheckboxHeaderState();
 }
 
 function updateRateColumnVisibility() {
     const table = document.getElementById('rfqProductTable');
     if (!table) return;
 
-    const headers = table.querySelectorAll('thead th');
-    if (headers.length > 5) {
-        headers[5].classList.remove('d-none');
-    }
-
-    table.querySelectorAll('tbody tr').forEach(row => {
-        const cells = row.querySelectorAll('td');
-        if (cells.length > 5) {
-            cells[5].classList.remove('d-none');
-        }
+    table.querySelectorAll('tbody tr .rfq-rate-cell').forEach(cell => {
+        cell.classList.remove('d-none');
     });
 }
 
@@ -1673,6 +1584,22 @@ function syncRfqPriceMode(row) {
     const supplierPriceDetails = row.querySelector('.rfq-supplier-price-details');
     const addSupplierPriceButton = row.querySelector('.rfq-add-supplier-price');
     const action = document.getElementById('rfqFormAction')?.value || 'add';
+    const checkbox = row.querySelector('.rfq-product-select-cb');
+
+    if (checkbox) {
+        if (!priceKnown) {
+            checkbox.classList.remove('d-none');
+            checkbox.disabled = false;
+            if (!checkbox.dataset.userToggled) {
+                checkbox.checked = true;
+            }
+        } else {
+            checkbox.classList.add('d-none');
+            checkbox.disabled = true;
+            checkbox.checked = false;
+            delete checkbox.dataset.userToggled;
+        }
+    }
 
     if (rateInput) {
         rateInput.disabled = !priceKnown;
@@ -1722,7 +1649,17 @@ function buildRfqProductRow(product = getBlankRfqProduct()) {
     const selectedSuppliers = product.supplier_ids && product.supplier_ids.length
         ? product.supplier_ids
         : (product.supplier_id ? [product.supplier_id] : []);
+    const isUnknown = priceKnownValue === 'no';
+    const isChecked = isUnknown && product.selected !== false;
+
     row.innerHTML = `
+        <td class="text-center align-middle rfq-select-cell">
+            <input type="checkbox" 
+                   class="form-check-input rfq-product-select-cb ${isUnknown ? '' : 'd-none'}" 
+                   ${isUnknown ? '' : 'disabled'} 
+                   ${isChecked ? 'checked' : ''} 
+                   title="Select product for supplier email inquiry">
+        </td>
         <td class="rfq-product-serial"></td>
         <td>
             <input type="hidden" name="product_id[]" value="${product.id || ''}">
@@ -1758,14 +1695,8 @@ function buildRfqProductRow(product = getBlankRfqProduct()) {
                 </button>
             </div>
         </td>
-        <td class="rfq-supplier-cell">
-            <select name="supplier_ids_0[]" class="form-select rfq-supplier" multiple size="3">
-                ${getRfqSupplierOptions(selectedSuppliers)}
-            </select>
-        </td>
         <td><input type="number" step="0.01" name="value[]" class="form-control rfq-value" value="${product.value || ''}" readonly disabled><div class="rfq-supplier-value-list small mt-1 d-none"></div></td>
         <td><input type="text" name="product_remarks[]" class="form-control" value="${escapeHtml(product.remarks || '')}"></td>
-        <td class="rfq-send-mail-cell text-center align-middle"></td>
         <td>
             <button type="button" class="btn btn-outline-danger btn-sm rfq-remove-product">
                 <i class="bi bi-trash"></i>
@@ -1816,6 +1747,10 @@ function resetRfqForm() {
     if (currentAttachmentContainer) {
         currentAttachmentContainer.classList.add('d-none');
     }
+    const draftSupplierSelect = document.getElementById('draftModalSupplierSelect');
+    if (draftSupplierSelect) {
+        Array.from(draftSupplierSelect.options).forEach(opt => opt.selected = false);
+    }
     filterRfqCustomersByRegion();
     setRfqProductRows([getBlankRfqProduct()]);
     refreshSupplierEmailBody(true);
@@ -1857,8 +1792,17 @@ function populateRfqForm(rfq) {
     document.getElementById('rfqRemarks').value = rfq.remarks || '';
     document.getElementById('supplierEmailSubject').value = defaultSupplierEmailSubject.replace('{rfq_no}', rfq.rfq_no || '');
     document.getElementById('rfqSubmitBtn').innerHTML = '<i class="bi bi-check2 me-1"></i>Update RFQ';
-    const sendEmailBtnPop = document.getElementById('rfqSendEmailBtn');
-    if (sendEmailBtnPop) sendEmailBtnPop.innerHTML = '<i class="bi bi-send me-1"></i>Update & Send Email';
+    const draftSupplierSelect = document.getElementById('draftModalSupplierSelect');
+    if (draftSupplierSelect && rfq.products) {
+        const existingSupplierIds = new Set();
+        rfq.products.forEach(p => {
+            (p.supplier_ids || []).forEach(id => existingSupplierIds.add(String(id)));
+            if (p.supplier_id) existingSupplierIds.add(String(p.supplier_id));
+        });
+        Array.from(draftSupplierSelect.options).forEach(opt => {
+            opt.selected = existingSupplierIds.has(String(opt.value));
+        });
+    }
     setRfqProductRows(rfq.products || []);
     const currentAttachmentContainer = document.getElementById('rfqCurrentAttachment');
     const attachmentLink = document.getElementById('rfqAttachmentLink');
@@ -1892,7 +1836,7 @@ document.getElementById('addRfqProductRow').addEventListener('click', function (
 });
 
 document.addEventListener('mousedown', function (e) {
-    if (e.target.tagName === 'OPTION' && e.target.parentElement && e.target.parentElement.classList.contains('rfq-supplier')) {
+    if (e.target.tagName === 'OPTION' && e.target.parentElement && (e.target.parentElement.classList.contains('rfq-supplier') || e.target.parentElement.classList.contains('rfq-draft-supplier'))) {
         e.preventDefault();
         const select = e.target.parentElement;
         const scrollTop = select.scrollTop;
@@ -1904,12 +1848,32 @@ document.addEventListener('mousedown', function (e) {
 });
 
 document.addEventListener('change', function (e) {
-    if (e.target.classList.contains('rfq-price-known')) {
+    if (e.target.id === 'draftModalSupplierSelect') {
+        syncSupplierEmailToAddress();
+    } else if (e.target.classList.contains('rfq-price-known')) {
         const row = e.target.closest('tr');
         if (row) syncRfqPriceMode(row);
         refreshSupplierEmailBody();
     } else if (e.target.classList.contains('rfq-supplier')) {
         syncSupplierEmailToAddress();
+        updateSupplierEmailVisibility();
+        refreshSupplierEmailBody();
+    } else if (e.target.classList.contains('rfq-product-select-cb')) {
+        e.target.dataset.userToggled = 'true';
+        updateSelectAllCheckboxHeaderState();
+        updateSupplierEmailVisibility();
+        refreshSupplierEmailBody();
+    } else if (e.target.id === 'rfqSelectAllUnknownProducts') {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('#rfqProductTable tbody tr').forEach(row => {
+            const priceKnownSelect = row.querySelector('.rfq-price-known');
+            const checkbox = row.querySelector('.rfq-product-select-cb');
+            if (priceKnownSelect && priceKnownSelect.value === 'no' && checkbox && !checkbox.disabled) {
+                checkbox.checked = isChecked;
+                checkbox.dataset.userToggled = 'true';
+            }
+        });
+        updateSupplierEmailVisibility();
         refreshSupplierEmailBody();
     } else if (e.target.classList.contains('rfq-supplier-price-supplier')) {
         const priceRow = e.target.closest('.rfq-supplier-price-row');
@@ -2004,53 +1968,7 @@ document.getElementById('addRfqForm').addEventListener('input', function (e) {
     refreshSupplierEmailBody();
 });
 
-document.addEventListener('click', function (e) {
-    const sendBtn = e.target.closest('.rfq-row-send-mail-btn');
-    if (!sendBtn) return;
 
-    const supplierIds = sendBtn.dataset.supplierIds;
-    if (!supplierIds) return;
-
-    const form = document.getElementById('addRfqForm');
-    if (!form) return;
-
-    syncSupplierEmailToAddress();
-
-    form.querySelectorAll('.d-none input, .d-none select').forEach(el => {
-        el.required = false;
-    });
-
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-    }
-
-    let targetInput = document.getElementById('rfqTargetSupplierId');
-    if (!targetInput) {
-        targetInput = document.createElement('input');
-        targetInput.type = 'hidden';
-        targetInput.name = 'target_supplier_id';
-        targetInput.id = 'rfqTargetSupplierId';
-        form.appendChild(targetInput);
-    }
-    targetInput.value = supplierIds;
-
-    let sendFlag = document.getElementById('rfqSendEmailFlag');
-    if (!sendFlag) {
-        sendFlag = document.createElement('input');
-        sendFlag.type = 'hidden';
-        sendFlag.name = 'send_supplier_email';
-        sendFlag.id = 'rfqSendEmailFlag';
-        form.appendChild(sendFlag);
-    }
-    sendFlag.value = '1';
-
-    if (typeof form.requestSubmit === 'function') {
-        form.requestSubmit();
-    } else {
-        form.submit();
-    }
-});
 
 const submitBtn = document.getElementById('rfqSubmitBtn');
 if (submitBtn) {
@@ -2062,15 +1980,113 @@ if (submitBtn) {
     });
 }
 
-const sendEmailBtn = document.getElementById('rfqSendEmailBtn');
-if (sendEmailBtn) {
-    sendEmailBtn.addEventListener('click', function () {
-        const targetInput = document.getElementById('rfqTargetSupplierId');
-        if (targetInput) targetInput.value = '';
-        const sendFlag = document.getElementById('rfqSendEmailFlag');
-        if (sendFlag) sendFlag.value = '1';
+const draftEmailBtn = document.getElementById('rfqDraftEmailBtn');
+if (draftEmailBtn) {
+    draftEmailBtn.addEventListener('click', function () {
+        syncSupplierEmailToAddress();
+        refreshSupplierEmailBody();
+
+        const addModalEl = document.getElementById('addRfqModal');
+        const draftModalEl = document.getElementById('rfqDraftEmailModal');
+
+        const addModal = bootstrap.Modal.getInstance(addModalEl);
+        if (addModal) addModal.hide();
+
+        const draftModal = bootstrap.Modal.getOrCreateInstance(draftModalEl);
+        draftModal.show();
     });
 }
+
+function returnToAddRfqModal() {
+    const draftModalEl = document.getElementById('rfqDraftEmailModal');
+    const draftModal = bootstrap.Modal.getInstance(draftModalEl);
+    if (draftModal) draftModal.hide();
+
+    const addModalEl = document.getElementById('addRfqModal');
+    const addModal = bootstrap.Modal.getOrCreateInstance(addModalEl);
+    addModal.show();
+}
+
+const closeDraftBtn = document.getElementById('closeDraftEmailModalBtn');
+if (closeDraftBtn) {
+    closeDraftBtn.addEventListener('click', returnToAddRfqModal);
+}
+
+const headerCloseDraftBtn = document.getElementById('rfqDraftEmailHeaderCloseBtn');
+if (headerCloseDraftBtn) {
+    headerCloseDraftBtn.addEventListener('click', returnToAddRfqModal);
+}
+
+const sendFromDraftBtn = document.getElementById('rfqSendEmailFromDraftBtn');
+if (sendFromDraftBtn) {
+    sendFromDraftBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+
+        const form = document.getElementById('addRfqForm');
+        if (!form) return;
+
+        const draftSupplierSelect = document.getElementById('draftModalSupplierSelect');
+        const toInput = document.getElementById('supplierEmailTo');
+        const selectedSuppliers = draftSupplierSelect
+            ? Array.from(draftSupplierSelect.selectedOptions || []).filter(o => o.value)
+            : [];
+
+        if (selectedSuppliers.length === 0 && (!toInput || !toInput.value.trim())) {
+            alert('Please select at least one supplier to send the price inquiry email.');
+            if (draftSupplierSelect) draftSupplierSelect.focus();
+            return;
+        }
+
+        syncSupplierEmailToAddress();
+
+        let targetInput = document.getElementById('rfqTargetSupplierId');
+        if (!targetInput) {
+            targetInput = document.createElement('input');
+            targetInput.type = 'hidden';
+            targetInput.name = 'target_supplier_id';
+            targetInput.id = 'rfqTargetSupplierId';
+            form.appendChild(targetInput);
+        }
+        targetInput.value = '';
+
+        let sendFlag = document.getElementById('rfqSendEmailFlag');
+        if (!sendFlag) {
+            sendFlag = document.createElement('input');
+            sendFlag.type = 'hidden';
+            sendFlag.name = 'send_supplier_email';
+            sendFlag.id = 'rfqSendEmailFlag';
+            form.appendChild(sendFlag);
+        }
+        sendFlag.value = '1';
+
+        form.querySelectorAll('.d-none input, .d-none select').forEach(el => {
+            el.required = false;
+        });
+
+        if (!form.checkValidity()) {
+            returnToAddRfqModal();
+            setTimeout(() => {
+                form.reportValidity();
+            }, 300);
+            return;
+        }
+
+        form.submit();
+    });
+}
+
+{% if messages %}
+document.addEventListener('DOMContentLoaded', function () {
+    const alertText = document.getElementById('rfqModalAlertContainer')?.textContent || '';
+    if (alertText.includes('RFQ added') || alertText.includes('RFQ updated') || alertText.includes('email') || alertText.includes('Price request') || alertText.includes('supplier')) {
+        const modalEl = document.getElementById('addRfqModal');
+        if (modalEl) {
+            const addModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            addModal.show();
+        }
+    }
+});
+{% endif %}
 
 function getActiveRow() {
     const allCheckedInputs = document.querySelectorAll('.rfq-quotation-product:checked, .rfq-quotation-supplier-price:checked');

@@ -134,6 +134,7 @@ class SupplierProduct(models.Model):
     quantity_received = models.IntegerField(default=0)
     quantity_not_ok = models.IntegerField(default=0)
     not_ok_reason = models.TextField(blank=True, null=True)
+    rework_sent_date = models.DateField(blank=True, null=True)
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,

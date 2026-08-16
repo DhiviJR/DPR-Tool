@@ -160,9 +160,11 @@
                             <div class="d-inline-flex align-items-center gap-1 text-nowrap">
                                 <div class="d-inline-flex flex-column gap-1">
                                     {% if product.material_status_code == 'pending' %}
-                                    <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed;" data-product-id="{{ product.id }}" disabled title="Material not yet received from supplier">
-                                        Generate Invoice
-                                    </button>
+                                    <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="The item is not received from supplier">
+                                        <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed; pointer-events: none;" data-product-id="{{ product.id }}" disabled title="The item is not received from supplier">
+                                            Generate Invoice
+                                        </button>
+                                    </span>
                                     {% else %}
                                     <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a;" data-product-id="{{ product.id }}">
                                         Generate Invoice
@@ -692,6 +694,11 @@ document.getElementById('deliveredDetailsModal').addEventListener('hidden.bs.mod
 
 // Generate Invoice Modal Logic (Vanilla JS)
 document.addEventListener('DOMContentLoaded', function() {
+    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        tooltipTriggerList.forEach(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+    }
+
     const generateInvoiceForm = document.getElementById('generateInvoiceForm');
 
     document.addEventListener('click', function(e) {
@@ -716,10 +723,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         window.currentInvoiceProductId = productId;
-        const modalAddressBtn = document.getElementById('modalAddAddressPrintoutBtn');
-        if (modalAddressBtn) {
-            modalAddressBtn.href = `/print-customer-address-pdf/${productId}/`;
-        }
 
         const modalEl = document.getElementById('generateInvoiceModal');
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -901,9 +904,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <a href="#" target="_blank" id="modalAddAddressPrintoutBtn" class="btn text-white me-auto" style="background-color: #0284c7; border-color: #0284c7;" title="View Auto-Generated Address Printout">
-                        <i class="bi bi-printer me-1"></i> Address printout
-                    </a>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success" id="submitGenerateInvoiceBtn">
                         <i class="bi bi-printer me-1"></i> Generate Invoice

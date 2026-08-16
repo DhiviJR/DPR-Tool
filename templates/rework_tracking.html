@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Track Rework Products | DPR System{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h1 class="dpr-page-title mb-1">Track Rework Products</h1>
+        <p class="dpr-page-subtitle mb-0">Detailed tracking of items sent for rework, sent dates, and defect reasons</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'supplier_po_product_details' %}" class="btn btn-outline-primary dpr-back-btn btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Supplier PO Details
+        </a>
+        <a href="{% url 'customer_po_product_details' %}" class="btn btn-outline-success dpr-back-btn btn-sm">
+            <i class="bi bi-boxes me-1"></i>Material Status
+        </a>
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Dashboard</a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-4">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon yellow"><i class="bi bi-tools"></i></div>
+                <div>
+                    <div class="dpr-kpi-value text-warning">{{ total_rework_count }}</div>
+                    <div class="dpr-kpi-label">Total Rework Line Items</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon red"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <div>
+                    <div class="dpr-kpi-value text-danger">{{ total_rework_items }}</div>
+                    <div class="dpr-kpi-label">Total Rework Quantity (Items)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon blue"><i class="bi bi-arrow-repeat"></i></div>
+                <div>
+                    <div class="dpr-kpi-value text-primary">Pending Inward</div>
+                    <div class="dpr-kpi-label">Awaiting Supplier Rework Receipt</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rework Table Card -->
+<div class="dpr-card dpr-table-card border-0 shadow-sm">
+    <div class="dpr-table-toolbar">
+        <div class="row g-2 align-items-center">
+            <div class="col-lg-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="search" id="reworkSearch" class="form-control border-start-0 ps-0"
+                           placeholder="Search by DPR, product, supplier, PO number, reason..." autocomplete="off">
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="d-flex align-items-center gap-2">
+                    <label for="reworkSupplierFilter" class="form-label mb-0 small text-nowrap text-muted fw-semibold">Supplier:</label>
+                    <select id="reworkSupplierFilter" class="form-select form-select-sm">
+                        <option value="">All Suppliers</option>
+                        {% for s in suppliers %}
+                        <option value="{{ s.id }}" {% if selected_supplier == s.id|stringformat:"s" %}selected{% endif %}>{{ s.supplier_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="col-lg-3 text-lg-end">
+                <span id="reworkRowCount" class="text-muted small fw-semibold">Showing {{ rework_products|length }} items</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="reworkTable" class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>S.No</th>
+                        <th>DPR Serial No</th>
+                        <th>Supplier Name</th>
+                        <th>PO Number</th>
+                        <th>Product Name</th>
+                        <th>PO Date</th>
+                        <th class="text-center">Qty Ordered</th>
+                        <th class="text-center">Qty Received</th>
+                        <th>PO Validity</th>
+                        <th>PO Value</th>
+                        <th>Expected Date</th>
+                        <th>Bill Value</th>
+                        <th class="text-center">Inward Status</th>
+                        <th class="text-center bg-warning-subtle text-dark">Rework Qty</th>
+                        <th class="bg-warning-subtle text-dark">Rework Sent Date</th>
+                        <th class="bg-warning-subtle text-dark" style="min-width: 180px;">Rework Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sp in rework_products %}
+                    <tr data-supplier-id="{{ sp.supplier_id }}">
+                        <td>{{ forloop.counter }}</td>
+                        <td class="fw-semibold text-primary">{{ sp.customer_product.dpr.serial_number|default:'-' }}</td>
+                        <td class="fw-medium">{{ sp.supplier.supplier_name|default:'-' }}</td>
+                        <td>
+                            {% if sp.po_number and sp.po_number != '-' %}
+                                <a href="{% url 'generate_supplier_po' sp.customer_product.dpr.id %}?supplier_id={{ sp.supplier.id }}&po_number={{ sp.po_number|urlencode }}" target="_blank" class="text-decoration-none text-primary fw-semibold">
+                                    {{ sp.po_number }}
+                                </a>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="fw-semibold">{{ sp.customer_product.product_name }}</td>
+                        <td>{{ sp.po_date|date:'Y-m-d'|default:'-' }}</td>
+                        <td class="text-center fw-semibold">{{ sp.quantity }}</td>
+                        <td class="text-center text-success fw-bold">{{ sp.quantity_received }}</td>
+                        <td>{{ sp.po_validity|date:'Y-m-d'|default:'-' }}</td>
+                        <td>{{ sp.po_value|default:'0.00' }}</td>
+                        <td>{{ sp.expected_date|date:'Y-m-d'|default:'-' }}</td>
+                        <td>{{ sp.supplier_bill_amount|default:'-' }}</td>
+                        <td class="text-center">
+                            {% if sp.status == 'delivered' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-check-circle me-1"></i>Closed
+                                </span>
+                            {% elif sp.status == 'cancelled' %}
+                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelled
+                                </span>
+                            {% else %}
+                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="bi bi-hourglass-split me-1"></i>Inward
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center bg-warning-subtle fw-bold text-danger">
+                            <span class="badge bg-danger text-white fs-6 px-2.5 py-1">
+                                {{ sp.quantity_not_ok }}
+                            </span>
+                        </td>
+                        <td class="bg-warning-subtle fw-semibold">
+                            {{ sp.rework_sent_date|date:'Y-m-d'|default:'-' }}
+                        </td>
+                        <td class="bg-warning-subtle">
+                            <span class="text-dark small">{{ sp.not_ok_reason|default:'-' }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="16" class="text-center py-5 text-muted">
+                            <i class="bi bi-check-circle fs-2 d-block mb-2 text-success"></i>
+                            No products are currently sent for rework.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('reworkSearch');
+    const supplierFilter = document.getElementById('reworkSupplierFilter');
+    const table = document.getElementById('reworkTable');
+    const rows = table.querySelectorAll('tbody tr');
+    const rowCountSpan = document.getElementById('reworkRowCount');
+
+    function filterTable() {
+        const query = searchInput.value.toLowerCase().trim();
+        const selectedSupplier = supplierFilter.value;
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            if (row.cells.length === 1) return;
+
+            const text = row.textContent.toLowerCase();
+            const supplierId = row.getAttribute('data-supplier-id');
+
+            let matchesQuery = !query || text.includes(query);
+            let matchesSupplier = !selectedSupplier || supplierId === selectedSupplier;
+
+            if (matchesQuery && matchesSupplier) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (rowCountSpan) {
+            rowCountSpan.textContent = `Showing ${visibleCount} items`;
+        }
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterTable);
+    if (supplierFilter) supplierFilter.addEventListener('change', filterTable);
+});
+</script>
+{% endblock %}
