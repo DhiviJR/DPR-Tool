@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block title %}Review Email Classification - DPR System{% endblock %}
+
+{% block content %}
+<div class="py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div>
+                    <h3 class="fw-bold text-dark mb-1">
+                        <i class="bi bi-shield-check text-primary me-2"></i>Review Email Classification
+                    </h3>
+                    <p class="text-muted mb-0">Inspect AI classification details and override category if needed</p>
+                </div>
+                <a href="{% url 'email_classifier:dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+                </a>
+            </div>
+
+            <!-- Email Meta & Body Details Card -->
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-header bg-light py-3">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h5 class="fw-bold text-dark mb-1">{{ record.subject }}</h5>
+                            <span class="text-muted small">From: {{ record.sender|default:'Unknown' }} &bull; {{ record.received_at|date:'d M Y, H:i' }}</span>
+                        </div>
+                        <div class="col-md-4 text-md-end mt-2 mt-md-0">
+                            <span class="badge bg-primary px-3 py-2 fs-6">AI Category: {{ record.ai_category }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <h6 class="fw-semibold text-secondary mb-2">Email Body</h6>
+                    <div class="p-3 bg-light rounded-3 border mb-4 font-monospace text-dark" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto;">
+{{ record.body }}
+                    </div>
+
+                    <div class="row g-3">
+                        {% if record.reason %}
+                        <div class="col-md-6">
+                            <div class="p-3 bg-info-subtle text-info-emphasis rounded-3 border border-info-subtle">
+                                <div class="fw-bold mb-1"><i class="bi bi-info-circle me-1"></i>AI Reasoning</div>
+                                <div class="small">{{ record.reason }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if record.important_details %}
+                        <div class="col-md-6">
+                            <div class="p-3 bg-warning-subtle text-warning-emphasis rounded-3 border border-warning-subtle">
+                                <div class="fw-bold mb-1"><i class="bi bi-stars me-1"></i>Extracted Details</div>
+                                <div class="small">{{ record.important_details }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Review / Override Form -->
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-header bg-white py-3">
+                    <h5 class="fw-bold text-dark mb-0"><i class="bi bi-pencil-square me-2"></i>Human Review & Final Category</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="id_final_category" class="form-label fw-semibold">Final Category (Override AI if needed)</label>
+                            <select name="final_category" id="id_final_category" class="form-select">
+                                <option value="">-- Use AI Category ({{ record.ai_category }}) --</option>
+                                {% for val, label in form.fields.final_category.choices %}
+                                    {% if val %}
+                                    <option value="{{ val }}" {% if form.final_category.value == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-4 form-check">
+                            <input type="checkbox" name="reviewed" id="id_reviewed" class="form-check-input" {% if form.reviewed.value %}checked{% endif %}>
+                            <label for="id_reviewed" class="form-check-label fw-semibold">Mark as Reviewed</label>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'email_classifier:dashboard' %}" class="btn btn-light border px-4">Cancel</a>
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="bi bi-check-lg me-1"></i> Save Review
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

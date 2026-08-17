@@ -48,6 +48,15 @@
         </a>
     </div>
     {% endif %}
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'email_classifier:dashboard' %}" class="dpr-card-hover text-decoration-none">
+            <div class="dpr-action-card dpr-action-info" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff;">
+                <i class="bi bi-envelope-paper-heart fs-4 mb-2 d-block"></i>
+                <small>AI Classification &amp; Inbox</small>
+                <h6 class="mb-0">Emails</h6>
+            </div>
+        </a>
+    </div>
     {% if can_view_customer_po and not is_admin and not is_purchase %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">

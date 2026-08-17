@@ -4,4 +4,6 @@ Pillow
 pyserial
 reportlab
 python-dotenv
+ollama>=0.4
+
 

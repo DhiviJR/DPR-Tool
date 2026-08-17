@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'dpr',
     'products',
     'rfq',
+    'email_classifier',
 ]
 AUTH_USER_MODEL = 'accounts.CustomUser'
 MIDDLEWARE = [
@@ -188,10 +189,19 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 EMAIL_IMAP_HOST = os.environ.get('DJANGO_EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
 EMAIL_IMAP_PORT = int(os.environ.get('DJANGO_EMAIL_IMAP_PORT', '993'))
 
+# Email Classifier Settings
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
+OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+EMAIL_CLASSIFIER_BACKEND = os.environ.get('EMAIL_CLASSIFIER_BACKEND', 'rules')
+EMAIL_IMAP_USERNAME = os.environ.get('EMAIL_IMAP_USERNAME', EMAIL_HOST_USER)
+EMAIL_IMAP_PASSWORD = os.environ.get('EMAIL_IMAP_PASSWORD', EMAIL_HOST_PASSWORD)
+EMAIL_IMAP_MAILBOX = os.environ.get('EMAIL_IMAP_MAILBOX', 'INBOX')
+
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
 
 
 

@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('email-classifier/', include('email_classifier.urls')),
     path('', include('accounts.urls')),
 ]
 

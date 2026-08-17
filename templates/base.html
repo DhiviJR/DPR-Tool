@@ -68,6 +68,11 @@
                     <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'rfq_details' %}active{% endif %}" href="{% url 'rfq_details' %}">RFQ</a>
                 </li>
                 {% endif %}
+                <li class="nav-item">
+                    <a class="nav-link dpr-nav-link {% if request.resolver_match.app_name == 'email_classifier' %}active{% endif %}" href="{% url 'email_classifier:dashboard' %}">
+                        <i class="bi bi-envelope-paper me-1"></i>Emails
+                    </a>
+                </li>
                 {% if can_view_masters or can_view_customer_details %}
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle dpr-nav-link {% if request.resolver_match.url_name == 'customer_details' or request.resolver_match.url_name == 'supplier_details' %}active{% endif %}"
