@@ -145,6 +145,8 @@ def _get_hsn_code(product):
     prod_type = (product.product_type or '').lower().strip()
     
     type_hsn_map = {
+        'apg': '90173029',
+        'arg': '90173029',
         'apg steel': '90173029',
         'arg steel': '90173029',
         'apg carbide': '90173029',
@@ -749,7 +751,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
                 delivery_weeks = p_weeks
         elif pt in ('apg carbide', 'arg carbide') or 'carbide' in pt:
             has_carbide = True
-        elif pt in ('apg steel', 'arg steel') or 'steel' in pt:
+        elif pt in ('apg steel', 'arg steel', 'apg', 'arg') or 'steel' in pt or 'apg' in pt or 'arg' in pt:
             has_steel = True
         elif any(x in pt for x in ('tpg', 'trg', 'ppg', 'prg', 'spares')):
             has_tpg_spares = True
@@ -888,8 +890,15 @@ def _send_rfq_supplier_price_requests(
 
         product_lines = []
         for index, row in enumerate(rows, start=1):
+            spec_dict = row.get('product_specifications') or {}
+            spec_str = ""
+            if isinstance(spec_dict, dict) and spec_dict:
+                spec_items = [f"{k}: {v}" for k, v in spec_dict.items() if v and str(v).strip()]
+                if spec_items:
+                    spec_str = f" ({' | '.join(spec_items)})"
+
             product_lines.append(
-                f"{index}. {row['product_name']} | Type: {row['product_type'] or '-'} | "
+                f"{index}. {row['product_name']}{spec_str} | Type: {row['product_type'] or '-'} | "
                 f"Qty: {row['quantity']} | Remarks: {row['remarks'] or '-'}"
             )
 
@@ -2823,6 +2832,7 @@ def customer_order_edit(request, dpr_id):
         rates = request.POST.getlist('mes_rate_per_unit[]')
         mes_rates = request.POST.getlist('mes_rate_per_unit[]')
         remarks_list = request.POST.getlist('remarks[]')
+        specs_list = request.POST.getlist('product_specifications[]')
 
         for i, product_name in enumerate(product_names):
             if product_name.strip() == '':
@@ -2851,10 +2861,19 @@ def customer_order_edit(request, dpr_id):
             if not attachment and existing_attachment:
                 attachment = existing_attachment
 
+            spec_raw = specs_list[i] if i < len(specs_list) else ''
+            spec_dict = {}
+            if spec_raw:
+                try:
+                    spec_dict = json.loads(spec_raw) if isinstance(spec_raw, str) else spec_raw
+                except Exception:
+                    spec_dict = {}
+
             CustomerProduct.objects.create(
                 dpr=dpr,
                 product_name=product_name,
                 product_type=product_types[i] if i < len(product_types) else None,
+                product_specifications=spec_dict,
                 quantity_ordered=quantity,
                 rate_per_unit=rate_per_unit,
                 mes_rate_per_unit=mes_rate_per_unit,
@@ -3427,6 +3446,7 @@ def rfq_details(request):
         units = request.POST.getlist('unit[]')
         rates = request.POST.getlist('rate_per_unit[]')
         product_remarks = request.POST.getlist('product_remarks[]')
+        product_specs = request.POST.getlist('product_specifications[]')
         supplier_email_to = request.POST.get('supplier_email_to', '').strip().lower()
         supplier_email_cc = request.POST.get('supplier_email_cc', '').strip().lower()
         supplier_email_subject = request.POST.get('supplier_email_subject', '').strip()
@@ -3568,10 +3588,19 @@ def rfq_details(request):
                         return redirect('rfq_details')
 
                 unit_val = (units[i].strip() if i < len(units) and units[i].strip() else "No's")
+                spec_raw = product_specs[i] if i < len(product_specs) else ''
+                spec_dict = {}
+                if spec_raw:
+                    try:
+                        spec_dict = json.loads(spec_raw) if isinstance(spec_raw, str) else spec_raw
+                    except Exception:
+                        spec_dict = {}
+
                 product_rows.append({
                     'id': product_id,
                     'product_name': product_name.strip(),
                     'product_type': product_type,
+                    'product_specifications': spec_dict,
                     'price_known': price_known,
                     'supplier': suppliers_for_price[0] if suppliers_for_price else None,
                     'suppliers': suppliers_for_price,
