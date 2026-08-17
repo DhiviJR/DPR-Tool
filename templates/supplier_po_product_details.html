@@ -80,7 +80,7 @@
                                 -
                             {% endif %}
                         </td>
-                        <td data-sort-value="{{ row.customer_product.product_name|default:''|lower }}">{{ row.customer_product.product_name }}</td>
+                        <td data-sort-value="{{ row.customer_product.display_name|default:''|lower }}">{{ row.customer_product.display_name }}</td>
                         <td data-sort-value="{{ row.po_date|date:'Y-m-d'|default:'' }}">{{ row.po_date|date:'Y-m-d'|default:'-' }}</td>
                         <td data-sort-value="{{ row.quantity }}">{{ row.quantity }}</td>
                         <td class="quantity-received-cell" data-sort-value="{{ row.quantity_received }}">{{ row.quantity_received }}</td>

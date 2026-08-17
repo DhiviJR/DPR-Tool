@@ -375,12 +375,8 @@
                             <td>
                                 <select class="form-control" name="product_type[]">
                                     <option value="">Select Type</option>
-                                    <option value="APG steel" {% if p.product_type == 'APG steel' %}selected{% endif %}>APG steel</option>
-                                    <option value="ARG steel" {% if p.product_type == 'ARG steel' %}selected{% endif %}>ARG steel</option>
-                                    <option value="APG carbide" {% if p.product_type == 'APG carbide' %}selected{% endif %}>APG carbide</option>
-                                    <option value="ARG carbide" {% if p.product_type == 'ARG carbide' %}selected{% endif %}>ARG carbide</option>
-                                    <option value="SAPG" {% if p.product_type == 'SAPG' %}selected{% endif %}>SAPG</option>
-                                    <option value="SARG" {% if p.product_type == 'SARG' %}selected{% endif %}>SARG</option>
+                                    <option value="APG" {% if p.product_type == 'APG' %}selected{% endif %}>APG</option>
+                                    <option value="ARG" {% if p.product_type == 'ARG' %}selected{% endif %}>ARG</option>
                                     <option value="Multi-Gauge" {% if p.product_type == 'Multi-Gauge' %}selected{% endif %}>Multi-Gauge</option>
                                     <option value="unit Std Air" {% if p.product_type == 'unit Std Air' %}selected{% endif %}>unit Std Air</option>
                                     <option value="unit SPC Air" {% if p.product_type == 'unit SPC Air' %}selected{% endif %}>unit SPC Air</option>
@@ -458,12 +454,8 @@
                             <td>
                                 <select class="form-control" name="product_type[]">
                                     <option value="">Select Type</option>
-                                    <option value="APG steel">APG steel</option>
-                                    <option value="ARG steel">ARG steel</option>
-                                    <option value="APG carbide">APG carbide</option>
-                                    <option value="ARG carbide">ARG carbide</option>
-                                    <option value="SAPG">SAPG</option>
-                                    <option value="SARG">SARG</option>
+                                    <option value="APG">APG</option>
+                                    <option value="ARG">ARG</option>
                                     <option value="Multi-Gauge">Multi-Gauge</option>
                                     <option value="unit Std Air">unit Std Air</option>
                                     <option value="unit SPC Air">unit SPC Air</option>
@@ -670,7 +662,7 @@ document.getElementById('confirmationType')?.addEventListener('change', function
 });
 
 const productTypesList = [
-    "APG steel", "ARG steel", "APG carbide", "ARG carbide", "SAPG", "SARG",
+    "APG", "ARG",
     "Multi-Gauge", "unit Std Air", "unit SPC Air", "unit Std lvdt", "unit SPC lvdt",
     "AMC", "Service", "Spares", "TPG", "TRG", "STPG", "STRG", "PPG", "PRG", "SPPG", "SPRG"
 ];

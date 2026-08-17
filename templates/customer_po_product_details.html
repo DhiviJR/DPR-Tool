@@ -126,7 +126,7 @@
                         <td data-sort-value="{{ product.dpr.serial_number|default:''|lower }}">{{ product.dpr.serial_number }}</td>
                         <td data-sort-value="{{ product.dpr.customer.customer_name|default:''|lower }}">{{ product.dpr.customer.customer_name }}</td>
                         <td data-sort-value="{{ product.dpr.po_number|default:''|lower }}">{{ product.dpr.po_number|default:'-' }}</td>
-                        <td data-sort-value="{{ product.product_name|default:''|lower }}">{{ product.product_name }}</td>
+                        <td data-sort-value="{{ product.display_name|default:''|lower }}">{{ product.display_name }}</td>
                         <td data-sort-value="{{ product.dpr.po_date|date:'Y-m-d'|default:'' }}">{{ product.dpr.po_date|date:'Y-m-d'|default:'-' }}</td>
                         <td data-sort-value="{{ product.quantity_ordered }}">{{ product.quantity_ordered }}</td>
                         <td class="quantity-delivered-cell" data-sort-value="{{ product.quantity_delivered }}">{{ product.quantity_delivered }}</td>

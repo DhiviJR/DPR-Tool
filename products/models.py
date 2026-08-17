@@ -5,12 +5,8 @@ from suppliers.models import Supplier
 
 class CustomerProduct(models.Model):
     PRODUCT_TYPE_CHOICES = (
-        ('APG steel', 'APG steel'),
-        ('ARG steel', 'ARG steel'),
-        ('APG carbide', 'APG carbide'),
-        ('ARG carbide', 'ARG carbide'),
-        ('SAPG', 'SAPG'),
-        ('SARG', 'SARG'),
+        ('APG', 'APG'),
+        ('ARG', 'ARG'),
         ('Multi-Gauge', 'Multi-Gauge'),
         ('unit Std Air', 'unit Std Air'),
         ('unit SPC Air', 'unit SPC Air'),
@@ -21,12 +17,8 @@ class CustomerProduct(models.Model):
         ('Spares', 'Spares'),
         ('TPG', 'TPG'),
         ('TRG', 'TRG'),
-        ('STPG', 'STPG'),
-        ('STRG', 'STRG'),
         ('PPG', 'PPG'),
         ('PRG', 'PRG'),
-        ('SPPG', 'SPPG'),
-        ('SPRG', 'SPRG'),
     )
     STATUS_CHOICES = (
         ('delivered', 'Delivered'),
@@ -53,6 +45,23 @@ class CustomerProduct(models.Model):
     mes_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     remarks = models.TextField(blank=True, null=True)
+    product_specifications = models.JSONField(blank=True, null=True, default=dict)
+
+    def get_formatted_specifications(self):
+        if not self.product_specifications or not isinstance(self.product_specifications, dict):
+            return ""
+        items = []
+        for k, v in self.product_specifications.items():
+            if v and str(v).strip():
+                items.append(f"{k}: {v}")
+        return " | ".join(items)
+
+    @property
+    def display_name(self):
+        specs = self.get_formatted_specifications()
+        if specs:
+            return f"{self.product_name} ({specs})"
+        return self.product_name
 
     attachment = models.FileField(
         upload_to='product_attachments/',

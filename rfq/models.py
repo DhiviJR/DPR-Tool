@@ -83,7 +83,24 @@ class RFQProduct(models.Model):
         help_text="Indicates if quotation has been prepared for this product"
     )
     remarks = models.TextField(blank=True, null=True)
+    product_specifications = models.JSONField(blank=True, null=True, default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def get_formatted_specifications(self):
+        if not self.product_specifications or not isinstance(self.product_specifications, dict):
+            return ""
+        items = []
+        for k, v in self.product_specifications.items():
+            if v and str(v).strip():
+                items.append(f"{k}: {v}")
+        return " | ".join(items)
+
+    @property
+    def display_name(self):
+        specs = self.get_formatted_specifications()
+        if specs:
+            return f"{self.product_name} ({specs})"
+        return self.product_name
 
     def __str__(self):
         return f"{self.rfq.rfq_no} - {self.product_name}"
