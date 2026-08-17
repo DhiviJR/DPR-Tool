@@ -1,9 +1,11 @@
+from datetime import datetime, timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
-from .forms import EmailPasteForm, ReviewForm
+from .forms import ReviewForm
 from .models import EmailRecord
 from .services.classifier_service import get_classifier
 from .services.imap_reader import fetch_all_messages
@@ -12,14 +14,54 @@ from .services.imap_reader import fetch_all_messages
 @login_required
 def dashboard(request):
     selected_category = request.GET.get('category', '')
-    records = EmailRecord.objects.order_by('-received_at', '-id')
-    total_emails_count = records.count()
+    date_preset = request.GET.get('date_preset', '').strip()
+    from_date_str = request.GET.get('from_date', '').strip()
+    to_date_str = request.GET.get('to_date', '').strip()
+
+    today_date = timezone.localdate()
+
+    # Apply date preset shortcuts if selected
+    if date_preset == 'today':
+        from_date_str = today_date.strftime('%Y-%m-%d')
+        to_date_str = today_date.strftime('%Y-%m-%d')
+    elif date_preset == 'week':
+        from_date_str = (today_date - timedelta(days=7)).strftime('%Y-%m-%d')
+        to_date_str = today_date.strftime('%Y-%m-%d')
+    elif date_preset == 'month':
+        from_date_str = (today_date - timedelta(days=30)).strftime('%Y-%m-%d')
+        to_date_str = today_date.strftime('%Y-%m-%d')
+    elif date_preset == 'year':
+        from_date_str = (today_date - timedelta(days=365)).strftime('%Y-%m-%d')
+        to_date_str = today_date.strftime('%Y-%m-%d')
+
+    base_records = EmailRecord.objects.all()
+
+    if from_date_str:
+        try:
+            from_date_obj = datetime.strptime(from_date_str, '%Y-%m-%d').date()
+            base_records = base_records.filter(received_at__date__gte=from_date_obj)
+        except ValueError:
+            from_date_str = ''
+
+    if to_date_str:
+        try:
+            to_date_obj = datetime.strptime(to_date_str, '%Y-%m-%d').date()
+            base_records = base_records.filter(received_at__date__lte=to_date_obj)
+        except ValueError:
+            to_date_str = ''
+
+    records = base_records.order_by('-received_at', '-id')
+    total_emails_count = base_records.count()
+
     if selected_category in EmailRecord.Category.values:
         records = records.filter(ai_category=selected_category)
     else:
         selected_category = ''
 
-    counts_raw = {item['ai_category']: item['total'] for item in EmailRecord.objects.values('ai_category').annotate(total=Count('id'))}
+    counts_raw = {
+        item['ai_category']: item['total']
+        for item in base_records.values('ai_category').annotate(total=Count('id'))
+    }
     category_order = [
         'CUSTOMER_ORDER',
         'PAYMENT_INVOICE',
@@ -30,7 +72,7 @@ def dashboard(request):
     ]
     counts = {cat: counts_raw.get(cat, 0) for cat in category_order}
 
-    enquiry_qs = EmailRecord.objects.filter(
+    enquiry_qs = base_records.filter(
         Q(ai_category='ENQUIRY') | Q(final_category='ENQUIRY')
     )
     enquiry_total_count = enquiry_qs.count()
@@ -45,6 +87,9 @@ def dashboard(request):
         'enquiry_total_count': enquiry_total_count,
         'enquiry_added_count': enquiry_added_count,
         'enquiry_pending_count': enquiry_pending_count,
+        'date_preset': date_preset,
+        'from_date': from_date_str,
+        'to_date': to_date_str,
     })
 
 
@@ -95,29 +140,6 @@ def sync_inbox(request):
             messages.error(request, f'Inbox sync failed: {exc}')
     return redirect('email_classifier:dashboard')
 
-
-@login_required
-def classify_email(request):
-    if request.method == 'POST':
-        form = EmailPasteForm(request.POST)
-        if form.is_valid():
-            try:
-                result = get_classifier().classify(**form.cleaned_data)
-            except Exception as exc:
-                messages.error(request, f'Could not classify the email: {exc}')
-            else:
-                EmailRecord.objects.create(
-                    **form.cleaned_data,
-                    ai_category=result['category'],
-                    confidence=result['confidence'],
-                    reason=result['reason'],
-                    important_details=result['important_details'],
-                )
-                messages.success(request, 'Email classified and saved.')
-                return redirect('email_classifier:dashboard')
-    else:
-        form = EmailPasteForm()
-    return render(request, 'email_classifier/classify.html', {'form': form})
 
 
 @login_required
