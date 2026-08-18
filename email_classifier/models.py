@@ -5,7 +5,7 @@ from django.utils import timezone
 class EmailRecord(models.Model):
     class Category(models.TextChoices):
         ENQUIRY = 'ENQUIRY', 'Enquiry'
-        CUSTOMER_ORDER = 'CUSTOMER_ORDER', 'Customer Order'
+        CUSTOMER_ORDER = 'CUSTOMER_ORDER', 'Purchase Order'
         QUOTATION_REQUEST = 'QUOTATION_REQUEST', 'Quotation Request'
         PAYMENT_INVOICE = 'PAYMENT_INVOICE', 'Payment / Invoice'
         SUPPORT_COMPLAINT = 'SUPPORT_COMPLAINT', 'Support / Complaint'

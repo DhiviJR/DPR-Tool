@@ -257,6 +257,51 @@ document.addEventListener('submit', function (e) {
         }
     });
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('add_customer') === '1') {
+        const custName = urlParams.get('customer_name') || '';
+        const email = urlParams.get('email') || '';
+        const phone = urlParams.get('phone_number') || '';
+        const fromEmailId = urlParams.get('from_email_id') || '';
+        const mailDate = urlParams.get('mail_date') || '';
+        const enquiryDetails = urlParams.get('enquiry_details') || '';
+        const productName = urlParams.get('product_name') || '';
+        const productType = urlParams.get('product_type') || '';
+        const quantity = urlParams.get('quantity') || '';
+        const unit = urlParams.get('unit') || '';
+        const productRemarks = urlParams.get('product_remarks') || '';
+
+        const form = document.querySelector('.dpr-card form');
+        if (form) {
+            const nameInput = form.querySelector('input[name="customer_name"]');
+            const emailInput = form.querySelector('input[name="email"]');
+            const phoneInput = form.querySelector('input[name="phone_number"]');
+            const stateCodeInput = form.querySelector('input[name="state_code"]');
+            const regionSelect = form.querySelector('select[name="region"]');
+
+            if (nameInput && custName) nameInput.value = custName;
+            if (emailInput && email) emailInput.value = email;
+            if (phoneInput && phone) phoneInput.value = phone;
+
+            let hiddenInput = form.querySelector('input[name="from_email_id"]');
+            if (!hiddenInput) {
+                form.insertAdjacentHTML('beforeend', `
+                    <input type="hidden" name="from_email_id" value="${fromEmailId}">
+                    <input type="hidden" name="mail_date_param" value="${mailDate}">
+                    <input type="hidden" name="enquiry_details_param" value="${enquiryDetails}">
+                    <input type="hidden" name="product_name_param" value="${productName}">
+                    <input type="hidden" name="product_type_param" value="${productType}">
+                    <input type="hidden" name="quantity_param" value="${quantity}">
+                    <input type="hidden" name="unit_param" value="${unit}">
+                    <input type="hidden" name="product_remarks_param" value="${productRemarks}">
+                `);
+            }
+            form.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+});
 </script>
 {% endblock %}
 

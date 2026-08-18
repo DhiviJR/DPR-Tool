@@ -145,8 +145,6 @@ def _get_hsn_code(product):
     prod_type = (product.product_type or '').lower().strip()
     
     type_hsn_map = {
-        'apg': '90173029',
-        'arg': '90173029',
         'apg steel': '90173029',
         'arg steel': '90173029',
         'apg carbide': '90173029',
@@ -751,7 +749,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
                 delivery_weeks = p_weeks
         elif pt in ('apg carbide', 'arg carbide') or 'carbide' in pt:
             has_carbide = True
-        elif pt in ('apg steel', 'arg steel', 'apg', 'arg') or 'steel' in pt or 'apg' in pt or 'arg' in pt:
+        elif pt in ('apg steel', 'arg steel') or 'steel' in pt:
             has_steel = True
         elif any(x in pt for x in ('tpg', 'trg', 'ppg', 'prg', 'spares')):
             has_tpg_spares = True
@@ -890,15 +888,8 @@ def _send_rfq_supplier_price_requests(
 
         product_lines = []
         for index, row in enumerate(rows, start=1):
-            spec_dict = row.get('product_specifications') or {}
-            spec_str = ""
-            if isinstance(spec_dict, dict) and spec_dict:
-                spec_items = [f"{k}: {v}" for k, v in spec_dict.items() if v and str(v).strip()]
-                if spec_items:
-                    spec_str = f" ({' | '.join(spec_items)})"
-
             product_lines.append(
-                f"{index}. {row['product_name']}{spec_str} | Type: {row['product_type'] or '-'} | "
+                f"{index}. {row['product_name']} | Type: {row['product_type'] or '-'} | "
                 f"Qty: {row['quantity']} | Remarks: {row['remarks'] or '-'}"
             )
 
@@ -2832,7 +2823,6 @@ def customer_order_edit(request, dpr_id):
         rates = request.POST.getlist('mes_rate_per_unit[]')
         mes_rates = request.POST.getlist('mes_rate_per_unit[]')
         remarks_list = request.POST.getlist('remarks[]')
-        specs_list = request.POST.getlist('product_specifications[]')
 
         for i, product_name in enumerate(product_names):
             if product_name.strip() == '':
@@ -2861,19 +2851,10 @@ def customer_order_edit(request, dpr_id):
             if not attachment and existing_attachment:
                 attachment = existing_attachment
 
-            spec_raw = specs_list[i] if i < len(specs_list) else ''
-            spec_dict = {}
-            if spec_raw:
-                try:
-                    spec_dict = json.loads(spec_raw) if isinstance(spec_raw, str) else spec_raw
-                except Exception:
-                    spec_dict = {}
-
             CustomerProduct.objects.create(
                 dpr=dpr,
                 product_name=product_name,
                 product_type=product_types[i] if i < len(product_types) else None,
-                product_specifications=spec_dict,
                 quantity_ordered=quantity,
                 rate_per_unit=rate_per_unit,
                 mes_rate_per_unit=mes_rate_per_unit,
@@ -3350,7 +3331,7 @@ def customer_details(request):
                 return redirect('customer_details')
 
         if action == 'add':
-            Customer.objects.create(
+            new_customer = Customer.objects.create(
                 customer_name=customer_name,
                 region=region,
                 email=email or None,
@@ -3361,6 +3342,33 @@ def customer_details(request):
                 is_sez=is_sez,
                 payment_terms=payment_terms or None
             )
+            from_email_id = request.POST.get('from_email_id', '').strip()
+            mail_date_param = request.POST.get('mail_date_param', '').strip()
+            enquiry_details_param = request.POST.get('enquiry_details_param', '').strip()
+            product_name_param = request.POST.get('product_name_param', '').strip()
+            product_type_param = request.POST.get('product_type_param', '').strip()
+            quantity_param = request.POST.get('quantity_param', '').strip()
+            unit_param = request.POST.get('unit_param', '').strip()
+            product_remarks_param = request.POST.get('product_remarks_param', '').strip()
+
+            if from_email_id:
+                from urllib.parse import urlencode
+                from django.urls import reverse
+                url = reverse('rfq_details')
+                params = urlencode({
+                    'add_rfq': '1',
+                    'from_email_id': from_email_id,
+                    'customer_id': new_customer.id,
+                    'mail_date': mail_date_param or timezone.localdate().strftime('%Y-%m-%d'),
+                    'enquiry_details': enquiry_details_param or 'Email Enquiry',
+                    'product_name': product_name_param or enquiry_details_param or 'Product Details',
+                    'product_type': product_type_param,
+                    'quantity': quantity_param or '1',
+                    'unit': unit_param or "No's",
+                    'product_remarks': product_remarks_param,
+                })
+                messages.success(request, f'Customer "{new_customer.customer_name}" added. Complete the RFQ details below.')
+                return redirect(f"{url}?{params}")
             messages.success(request, 'Customer added successfully.')
         elif action == 'edit':
             try:
@@ -3419,7 +3427,6 @@ def rfq_details(request):
         units = request.POST.getlist('unit[]')
         rates = request.POST.getlist('rate_per_unit[]')
         product_remarks = request.POST.getlist('product_remarks[]')
-        product_specs = request.POST.getlist('product_specifications[]')
         supplier_email_to = request.POST.get('supplier_email_to', '').strip().lower()
         supplier_email_cc = request.POST.get('supplier_email_cc', '').strip().lower()
         supplier_email_subject = request.POST.get('supplier_email_subject', '').strip()
@@ -3561,19 +3568,10 @@ def rfq_details(request):
                         return redirect('rfq_details')
 
                 unit_val = (units[i].strip() if i < len(units) and units[i].strip() else "No's")
-                spec_raw = product_specs[i] if i < len(product_specs) else ''
-                spec_dict = {}
-                if spec_raw:
-                    try:
-                        spec_dict = json.loads(spec_raw) if isinstance(spec_raw, str) else spec_raw
-                    except Exception:
-                        spec_dict = {}
-
                 product_rows.append({
                     'id': product_id,
                     'product_name': product_name.strip(),
                     'product_type': product_type,
-                    'product_specifications': spec_dict,
                     'price_known': price_known,
                     'supplier': suppliers_for_price[0] if suppliers_for_price else None,
                     'suppliers': suppliers_for_price,
@@ -3590,6 +3588,7 @@ def rfq_details(request):
                 return redirect('rfq_details')
 
         if action == 'add':
+            from_email_id = request.POST.get('from_email_id', '').strip()
             with transaction.atomic():
                 rfq = RFQ.objects.create(
                     mail_date=mail_date,
@@ -3598,6 +3597,9 @@ def rfq_details(request):
                     remarks=remarks or None,
                     attachment=attachment
                 )
+                if from_email_id and from_email_id.isdigit():
+                    from email_classifier.models import EmailRecord
+                    EmailRecord.objects.filter(pk=int(from_email_id)).update(is_added_to_rfq=True)
                 for product_row in product_rows:
                     selected_suppliers = product_row.pop('suppliers', [])
                     supplier_prices = product_row.pop('supplier_prices', [])
@@ -3934,6 +3936,19 @@ def rfq_details(request):
         else:
             rfq.order_status = 'pending'
             pending_rfqs.append(rfq)
+
+    def _rfq_color_rank(rfq):
+        row_cls = getattr(rfq, 'row_class', '')
+        if row_cls == 'table-danger':
+            return 0
+        if row_cls == 'table-success':
+            return 2
+        return 1
+
+    all_rfqs.sort(key=_rfq_color_rank)
+    pending_rfqs.sort(key=_rfq_color_rank)
+    confirmed_rfqs.sort(key=_rfq_color_rank)
+    overdue_rfqs.sort(key=_rfq_color_rank)
 
     if status_filter == 'pending':
         rfqs_to_display = pending_rfqs
@@ -4538,15 +4553,31 @@ def add_supplier(request):
 
 @role_required('ADMIN', 'SALES', 'PURCHASE')
 def get_customer_quotations(request):
-    customer_id = request.GET.get('customer_id')
-    if not customer_id:
-        return JsonResponse({'status': 'error', 'message': 'customer_id is required'}, status=400)
-    try:
-        customer = Customer.objects.get(id=customer_id)
-    except Customer.DoesNotExist:
-        return JsonResponse({'status': 'error', 'message': 'Customer not found'}, status=404)
+    import re
+    from django.db.models import Q
 
-    rfqs = RFQ.objects.filter(customer=customer).prefetch_related('products', 'quotations').order_by('-created_at')
+    customer_id = request.GET.get('customer_id')
+    product_name = (request.GET.get('product_name') or '').strip()
+
+    rfqs_qs = RFQ.objects.none()
+    if customer_id:
+        try:
+            customer = Customer.objects.get(id=customer_id)
+            rfqs_qs = rfqs_qs | RFQ.objects.filter(customer=customer)
+        except Customer.DoesNotExist:
+            pass
+
+    if product_name:
+        words = [w for w in re.split(r'[\s\-_\/]+', product_name) if len(w) >= 3 and w.lower() not in ('steel', 'carbide', 'unit', 'set', 'nos')]
+        q_filter = Q(products__product_name__icontains=product_name) | Q(products__product_type__icontains=product_name)
+        for w in words:
+            q_filter |= Q(products__product_name__icontains=w) | Q(products__product_type__icontains=w)
+        rfqs_qs = rfqs_qs | RFQ.objects.filter(q_filter)
+
+    if not customer_id and not product_name:
+        rfqs_qs = RFQ.objects.all()
+
+    rfqs = rfqs_qs.distinct().prefetch_related('products', 'quotations').order_by('-created_at')
 
     quotations = []
     for rfq in rfqs:
@@ -4580,21 +4611,20 @@ def get_customer_quotations(request):
         products_list = []
         has_prepared_not_emailed = False
         for p in rfq.products.all():
-            if p.quotation_email_sent or p.quotation_prepared:
-                prepared_not_emailed = p.quotation_prepared and not p.quotation_email_sent
-                has_prepared_not_emailed = has_prepared_not_emailed or prepared_not_emailed
-                products_list.append({
-                    'product_id': p.id,
-                    'product_name': p.product_name,
-                    'product_type': p.product_type or '',
-                    'quantity': p.quantity,
-                    'rate_per_unit': str(p.rate_per_unit),
-                    'value': str(p.value),
-                    'remarks': p.remarks or '',
-                    'quotation_email_sent': p.quotation_email_sent,
-                    'quotation_prepared': p.quotation_prepared,
-                    'prepared_not_emailed': prepared_not_emailed,
-                })
+            prepared_not_emailed = p.quotation_prepared and not p.quotation_email_sent
+            has_prepared_not_emailed = has_prepared_not_emailed or prepared_not_emailed
+            products_list.append({
+                'product_id': p.id,
+                'product_name': p.product_name,
+                'product_type': p.product_type or '',
+                'quantity': p.quantity,
+                'rate_per_unit': str(p.rate_per_unit),
+                'value': str(p.value),
+                'remarks': p.remarks or '',
+                'quotation_email_sent': p.quotation_email_sent,
+                'quotation_prepared': p.quotation_prepared,
+                'prepared_not_emailed': prepared_not_emailed,
+            })
 
         if products_list:
             quotations.append({

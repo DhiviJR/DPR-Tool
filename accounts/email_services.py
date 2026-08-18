@@ -319,46 +319,81 @@ def sync_rfq_inbox(rfq=None):
             return 0, None
 
         msg_nums = data[0].split()
-        recent_nums = msg_nums[-250:]
+        recent_nums = msg_nums[-60:]  # Scan recent 60 emails for ultra-fast performance
+
+        existing_message_ids = set(
+            RFQEmailMessage.objects.values_list('message_id', flat=True)
+        )
 
         for num in recent_nums:
-            status, msg_data = mail.fetch(num, '(RFC822)')
-            if status != 'OK' or not msg_data:
+            # Fetch headers only first (very fast, <10ms per email)
+            status, header_data = mail.fetch(num, '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT FROM TO CC IN-REPLY-TO REFERENCES DATE)])')
+            if status != 'OK' or not header_data or not header_data[0]:
                 continue
 
-            raw_email = msg_data[0][1]
-            if not isinstance(raw_email, bytes):
+            raw_headers = header_data[0][1]
+            if not isinstance(raw_headers, bytes):
                 continue
 
-            msg = email.message_from_bytes(raw_email)
+            msg_header = email.message_from_bytes(raw_headers)
 
-            message_id = _clean_header_str(msg.get('Message-ID'))
+            message_id = _clean_header_str(msg_header.get('Message-ID'))
             if not message_id:
                 message_id = f"<imap-{num.decode()}@{imap_host}>"
-            
             if not message_id.startswith('<'):
                 message_id = f"<{message_id}>"
-
-            # Truncate headers safely to fit MySQL CharField max_lengths
             if len(message_id) > 250:
                 message_id = message_id[:240] + f"-{num.decode()}@msg>"
 
-            subject = _clean_header_str(msg.get('Subject'))
+            # If already in DB and linked, skip downloading full body
+            existing_msg = RFQEmailMessage.objects.filter(message_id=message_id).first()
+            if existing_msg and existing_msg.rfq:
+                continue
+
+            subject = _clean_header_str(msg_header.get('Subject'))
             if subject and len(subject) > 490:
                 subject = subject[:490]
 
-            from_str = _clean_header_str(msg.get('From'))
+            from_str = _clean_header_str(msg_header.get('From'))
             if from_str and len(from_str) > 250:
                 from_str = from_str[:250]
 
-            to_str = _clean_header_str(msg.get('To'))
-            cc_str = _clean_header_str(msg.get('Cc'))
-
-            in_reply_to = _clean_header_str(msg.get('In-Reply-To'))
+            to_str = _clean_header_str(msg_header.get('To'))
+            cc_str = _clean_header_str(msg_header.get('Cc'))
+            in_reply_to = _clean_header_str(msg_header.get('In-Reply-To'))
             if in_reply_to and len(in_reply_to) > 250:
                 in_reply_to = in_reply_to[:240] + ">"
+            references = _clean_header_str(msg_header.get('References'))
 
-            references = _clean_header_str(msg.get('References'))
+            # Check if headers match any RFQ before downloading full email body
+            matched_rfq = _match_email_to_rfq(
+                subject=subject,
+                body='',
+                from_str=from_str,
+                to_str=to_str,
+                in_reply_to=in_reply_to,
+                references=references,
+                target_rfq=rfq
+            )
+
+            if not matched_rfq:
+                continue
+
+            if existing_msg:
+                if existing_msg.rfq != matched_rfq:
+                    existing_msg.rfq = matched_rfq
+                    existing_msg.save(update_fields=['rfq'])
+                    synced_count += 1
+                continue
+
+            # Now fetch full RFC822 body only for new matching email
+            status, msg_data = mail.fetch(num, '(RFC822)')
+            if status != 'OK' or not msg_data or not msg_data[0]:
+                continue
+            raw_email = msg_data[0][1]
+            if not isinstance(raw_email, bytes):
+                continue
+            msg = email.message_from_bytes(raw_email)
 
             date_str = msg.get('Date')
             sent_at = timezone.now()
@@ -372,27 +407,6 @@ def sync_rfq_inbox(rfq=None):
                     pass
 
             body = _extract_email_body(msg)
-
-            matched_rfq = _match_email_to_rfq(
-                subject=subject,
-                body=body,
-                from_str=from_str,
-                to_str=to_str,
-                in_reply_to=in_reply_to,
-                references=references,
-                target_rfq=rfq
-            )
-
-            if not matched_rfq:
-                continue
-
-            existing_msg = RFQEmailMessage.objects.filter(message_id=message_id).first()
-            if existing_msg:
-                if existing_msg.rfq != matched_rfq:
-                    existing_msg.rfq = matched_rfq
-                    existing_msg.save(update_fields=['rfq'])
-                    synced_count += 1
-                continue
 
             has_attachments = False
             attachment_names = []

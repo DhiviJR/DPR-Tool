@@ -144,12 +144,12 @@
 
                 </div>
 
-                <!-- Quotation Number -->
+                <!-- Quotation -->
 
                 <div class="col-md-4 mb-3 position-relative">
 
                     <label class="form-label">
-                        Quotation Number *
+                        Quotation *
                     </label>
 
                     <div class="dropdown" id="quotationDropdownContainer">
@@ -160,7 +160,7 @@
                                 data-bs-auto-close="outside"
                                 aria-expanded="false"
                                 style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            Select Quotation Number
+                            Select Quotation
                         </button>
                         <div class="dropdown-menu w-100 p-2" 
                              id="quotationDropdownMenu" 
@@ -811,7 +811,7 @@ function loadCustomerQuotations() {
         if (checkedValues.length > 0) {
             btn.textContent = checkedValues.join(', ');
         } else {
-            btn.textContent = 'Select Quotation Number';
+            btn.textContent = 'Select Quotation';
         }
         updatePreparedEmailWarning(checkedValues);
     };
@@ -866,21 +866,26 @@ function loadCustomerQuotations() {
         menu.appendChild(item);
     };
 
-    if (!customerId) {
+    const firstRowProdInput = document.querySelector('#productTable tbody tr:first-child input[name="product_name[]"]');
+    const urlParams = new URLSearchParams(window.location.search);
+    const productNameParam = urlParams.get('product_name') || '';
+    const currentProdName = (firstRowProdInput && firstRowProdInput.value.trim()) ? firstRowProdInput.value.trim() : productNameParam;
+
+    if (!customerId && !currentProdName) {
         if (selectedQuotes.length > 0) {
             selectedQuotes.forEach(q => {
                 addCheckbox(q, q, true);
             });
             updateDisplay();
         } else {
-            document.getElementById('quotationDropdownBtn').textContent = 'Select Quotation Number';
+            document.getElementById('quotationDropdownBtn').textContent = 'Select Quotation';
             updatePreparedEmailWarning([]);
         }
         return;
     }
 
     const currentDprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
-    fetch(`/get-customer-quotations/?customer_id=${customerId}&dpr_id=${currentDprId}`)
+    fetch(`/get-customer-quotations/?customer_id=${customerId}&product_name=${encodeURIComponent(currentProdName)}&dpr_id=${currentDprId}`)
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
@@ -1349,6 +1354,92 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Close modal
         poConfirmationModalInstance.hide();
+    });
+
+    // Auto-fill from Email if add_po=1 in URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('add_po') === '1') {
+        const fromEmailId = urlParams.get('from_email_id') || '';
+        const customerId = urlParams.get('customer_id') || '';
+        const regionParam = urlParams.get('region') || '';
+        const poNumberParam = urlParams.get('po_number') || '';
+        const poDateParam = urlParams.get('po_date') || '';
+        const productName = urlParams.get('product_name') || '';
+        const productType = urlParams.get('product_type') || '';
+        const quantity = urlParams.get('quantity') || '';
+        const rate = urlParams.get('rate') || '';
+        const productRemarks = urlParams.get('product_remarks') || '';
+
+        const regionSelect = document.getElementById('regionDropdown');
+        const customerSelect = document.getElementById('customerDropdown');
+        const poNumberInput = document.getElementById('poNumberInput');
+        const poNumberField = document.getElementById('poNumberField');
+        const poDateInput = document.getElementById('poDateInput');
+        const form = document.getElementById('customerOrderForm');
+
+        if (customerSelect && customerId) {
+            const targetOpt = Array.from(customerSelect.options).find(o => String(o.value) === String(customerId));
+            if (targetOpt) {
+                targetOpt.hidden = false;
+                const custRegion = targetOpt.dataset.region;
+                if (regionSelect && custRegion) {
+                    regionSelect.value = custRegion;
+                }
+            }
+            if (typeof filterCustomersByRegion === 'function') {
+                filterCustomersByRegion();
+            }
+            customerSelect.value = customerId;
+            if (targetOpt) targetOpt.hidden = false;
+        } else if (regionSelect && regionParam) {
+            regionSelect.value = regionParam;
+            if (typeof filterCustomersByRegion === 'function') {
+                filterCustomersByRegion();
+            }
+        }
+
+        if (confirmationTypeSelect) {
+            confirmationTypeSelect.value = 'Customer PO';
+            if (poNumberField) poNumberField.style.display = 'block';
+        }
+
+        if (poNumberInput && poNumberParam) {
+            poNumberInput.value = poNumberParam;
+        }
+
+        if (poDateInput && poDateParam) {
+            poDateInput.value = poDateParam;
+        }
+
+        const firstRow = document.querySelector('#productTable tbody tr:first-child');
+        if (firstRow) {
+            const nameInput = firstRow.querySelector('input[name="product_name[]"]');
+            const typeSelect = firstRow.querySelector('select[name="product_type[]"]');
+            const qtyInput = firstRow.querySelector('input[name="quantity[]"]');
+            const rateInput = firstRow.querySelector('input[name="mes_rate_per_unit[]"]');
+            const remarksInput = firstRow.querySelector('input[name="remarks[]"]');
+
+            if (nameInput && productName) nameInput.value = productName;
+            if (typeSelect && productType) typeSelect.value = productType;
+            if (qtyInput && quantity) qtyInput.value = quantity;
+            if (rateInput && rate) rateInput.value = rate;
+            if (remarksInput && productRemarks) remarksInput.value = productRemarks;
+        }
+
+        if (form && fromEmailId) {
+            let hiddenInput = form.querySelector('input[name="from_email_id"]');
+            if (!hiddenInput) {
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="from_email_id" value="${fromEmailId}">`);
+            }
+        }
+
+        loadCustomerQuotations();
+    }
+
+    document.querySelector('#productTable tbody').addEventListener('input', (e) => {
+        if (e.target && e.target.name === 'product_name[]') {
+            loadCustomerQuotations();
+        }
     });
 });
 </script>

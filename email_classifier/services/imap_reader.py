@@ -45,12 +45,14 @@ def _body(message):
     return raw.decode(message.get_content_charset() or 'utf-8', errors='replace').strip() if raw else ''
 
 
-def fetch_all_messages(offset=0, limit=20):
+from email_classifier.models import EmailRecord
+
+
+def fetch_all_messages(offset=0, limit=25):
     """Return one small, read-only batch of Inbox messages.
 
-    Large mailboxes can close a connection if thousands of full message bodies
-    are fetched in a single session. Offset and limit let the command resume
-    gradually on later scheduled runs.
+    Uses a fast header-first check to skip downloading full bodies for
+    emails that already exist in the database.
     """
     required = (settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
     if not all(required):
@@ -62,25 +64,77 @@ def fetch_all_messages(offset=0, limit=20):
         status, _ = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
         if status != 'OK':
             raise RuntimeError(f'Cannot open mailbox {settings.EMAIL_IMAP_MAILBOX}.')
-        # ALL includes previous and newly received messages. BODY.PEEK and
-        # readonly=True ensure that merely reading never changes the mailbox.
-        # Some cPanel-style mail servers close the connection when sent the
-        # UID command. Standard IMAP SEARCH/FETCH is more widely compatible.
+
         status, result = client.search(None, 'ALL')
         if status != 'OK':
             raise RuntimeError('Unable to search Inbox emails.')
 
-        messages = []
         message_numbers = list(reversed(result[0].split()))
         batch = message_numbers[offset:offset + limit]
+
+        if not batch:
+            return [], len(message_numbers)
+
+        # 1. Fast Header-Only fetch for batch
+        headers_info = []
+        try:
+            status, data = client.fetch(b','.join(batch), '(BODY.PEEK[HEADER])')
+            if status == 'OK' and data:
+                for item in data:
+                    if isinstance(item, tuple) and len(item) == 2 and item[1]:
+                        msg = email.message_from_bytes(item[1])
+                        msg_id = _decode(msg.get('Message-ID'))
+                        uid_val = (msg_id or hashlib.sha256(item[1]).hexdigest())[:255]
+                        num = item[0].split()[0]
+                        headers_info.append({
+                            'num': num,
+                            'uid': uid_val,
+                            'sender': _decode(msg.get('From')),
+                            'subject': _decode(msg.get('Subject')) or '(No subject)',
+                            'date': _parse_date(_decode(msg.get('Date'))),
+                        })
+        except Exception:
+            pass
+
+        # 2. Skip emails already stored in DB
+        if headers_info:
+            uids_in_batch = [h['uid'] for h in headers_info]
+            existing_uids = set(EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True))
+            new_headers = [h for h in headers_info if h['uid'] not in existing_uids]
+
+            if not new_headers:
+                # All emails in batch already imported! Fast return!
+                return [], len(message_numbers)
+
+            # 3. Fetch body ONLY for brand new emails
+            messages = []
+            for h in new_headers:
+                try:
+                    b_text = ''
+                    if h['num']:
+                        st, d = client.fetch(h['num'], '(BODY.PEEK[])')
+                        if st == 'OK' and d and d[0] and isinstance(d[0], tuple) and len(d[0]) > 1:
+                            m = email.message_from_bytes(d[0][1])
+                            b_text = _body(m)
+                    messages.append({
+                        'uid': h['uid'],
+                        'sender': h['sender'],
+                        'subject': h['subject'],
+                        'body': b_text,
+                        'date': h['date'],
+                    })
+                except Exception:
+                    pass
+            return messages, len(message_numbers)
+
+        # Fallback to full fetch if header fetch was empty
+        messages = []
         for message_number in batch:
             status, data = client.fetch(message_number, '(BODY.PEEK[])')
             if status != 'OK' or not data or not data[0]:
                 continue
             raw_message = data[0][1]
             message = email.message_from_bytes(raw_message)
-            # Message-ID is stable across IMAP sequence-number changes. Use a
-            # hash for emails that do not include one.
             message_id = _decode(message.get('Message-ID'))
             uid_val = (message_id or hashlib.sha256(raw_message).hexdigest())[:255]
             date_raw = _decode(message.get('Date'))
