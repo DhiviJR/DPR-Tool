@@ -68,17 +68,7 @@
         </a>
     </div>
     {% endif %}
-    {% if can_view_customer_order %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'customer_order' %}" class="dpr-card-hover">
-            <div class="dpr-action-card dpr-action-primary">
-                <i class="bi bi-file-earmark-plus fs-4 mb-2 d-block"></i>
-                <small>Create DPR</small>
-                <h6 class="mb-0">Customer Order</h6>
-            </div>
-        </a>
-    </div>
-    {% endif %}
+
     {% if can_view_dpr %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'dpr_view' %}" class="dpr-card-hover">

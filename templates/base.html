@@ -153,6 +153,16 @@
 </style>
 
 <script>
+window.escapeHtml = function(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+
 (function() {
     window.showLoading = function() {
         const loader = document.getElementById('dprGlobalLoader');
@@ -206,15 +216,16 @@
 
     if (window.fetch) {
         const originalFetch = window.fetch;
-        window.fetch = function(...args) {
-            showLoading();
-            return originalFetch.apply(this, args)
+        window.fetch = function(resource, init) {
+            const skipLoader = init && (init.skipLoader || (init.headers && (init.headers['X-Skip-Loader'] || init.headers['x-skip-loader'])));
+            if (!skipLoader) showLoading();
+            return originalFetch.apply(this, arguments)
                 .then(function(response) {
-                    hideLoading();
+                    if (!skipLoader) hideLoading();
                     return response;
                 })
                 .catch(function(error) {
-                    hideLoading();
+                    if (!skipLoader) hideLoading();
                     throw error;
                 });
         };

@@ -1391,11 +1391,31 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             customerSelect.value = customerId;
             if (targetOpt) targetOpt.hidden = false;
+            if (typeof loadCustomerQuotations === 'function') {
+                loadCustomerQuotations();
+            }
         } else if (regionSelect && regionParam) {
             regionSelect.value = regionParam;
             if (typeof filterCustomersByRegion === 'function') {
                 filterCustomersByRegion();
             }
+        }
+
+        const quotationNoParam = urlParams.get('quotation_number') || '';
+        if (quotationNoParam) {
+            const quoteInput = document.getElementById('quotationNumberInput');
+            if (quoteInput) quoteInput.value = quotationNoParam;
+            if (typeof loadCustomerQuotations === 'function') {
+                loadCustomerQuotations();
+            }
+        }
+
+        const quotationValParam = urlParams.get('quotation_value') || '';
+        if (quotationValParam) {
+            const quotationValInput = document.querySelector('input[name="quotation_value"]');
+            if (quotationValInput) quotationValInput.value = quotationValParam;
+            const poValInput = document.getElementById('poValueInput');
+            if (poValInput && !poValInput.value) poValInput.value = quotationValParam;
         }
 
         if (confirmationTypeSelect) {
@@ -1411,19 +1431,113 @@ document.addEventListener('DOMContentLoaded', function() {
             poDateInput.value = poDateParam;
         }
 
-        const firstRow = document.querySelector('#productTable tbody tr:first-child');
-        if (firstRow) {
-            const nameInput = firstRow.querySelector('input[name="product_name[]"]');
-            const typeSelect = firstRow.querySelector('select[name="product_type[]"]');
-            const qtyInput = firstRow.querySelector('input[name="quantity[]"]');
-            const rateInput = firstRow.querySelector('input[name="mes_rate_per_unit[]"]');
-            const remarksInput = firstRow.querySelector('input[name="remarks[]"]');
+        function groupProductsByNameAndType(prods) {
+            if (!Array.isArray(prods) || prods.length === 0) return [];
+            const map = {};
+            const result = [];
 
-            if (nameInput && productName) nameInput.value = productName;
-            if (typeSelect && productType) typeSelect.value = productType;
-            if (qtyInput && quantity) qtyInput.value = quantity;
-            if (rateInput && rate) rateInput.value = rate;
-            if (remarksInput && productRemarks) remarksInput.value = productRemarks;
+            prods.forEach(p => {
+                let name = (p.product_name || '').trim();
+                let type = (p.product_type || 'APG').trim();
+                let rateVal = String(p.rate || p.mes_rate_per_unit || p.rate_per_unit || '').trim();
+                let remarksVal = (p.remarks || p.product_remarks || '').trim();
+
+                const nameLower = name.toLowerCase();
+                const typeLower = type.toLowerCase();
+                if (nameLower.includes('air ring') || ['arg', 'sarg'].includes(typeLower)) {
+                    name = 'Air Ring Gauge';
+                    type = 'ARG';
+                } else if (nameLower.includes('air plug') || ['apg', 'sapg'].includes(typeLower)) {
+                    name = 'Air Plug Gauge';
+                    type = 'APG';
+                } else if (nameLower.includes('thread ring') || ['trg', 'strg'].includes(typeLower)) {
+                    name = 'Thread Ring Gauge';
+                    type = 'TRG';
+                } else if (nameLower.includes('thread plug') || ['tpg', 'stpg'].includes(typeLower)) {
+                    name = 'Thread Plug Gauge';
+                    type = 'TPG';
+                } else if (nameLower.includes('plain ring') || ['prg', 'sprg'].includes(typeLower)) {
+                    name = 'Plain Ring Gauge';
+                    type = 'PRG';
+                } else if (nameLower.includes('plain plug') || ['ppg', 'sppg'].includes(typeLower)) {
+                    name = 'Plain Plug Gauge';
+                    type = 'PPG';
+                }
+
+                const key = `${name.toLowerCase()}|||${type.toLowerCase()}|||${rateVal}`;
+
+                let qty = parseInt(p.quantity, 10);
+                if (isNaN(qty) || qty < 1) qty = 1;
+
+                if (map[key]) {
+                    map[key].quantity += qty;
+                    if (remarksVal && !map[key]._remSet.has(remarksVal.toLowerCase())) {
+                        map[key]._remSet.add(remarksVal.toLowerCase());
+                        if (map[key].remarks) {
+                            map[key].remarks += `; ${remarksVal}`;
+                        } else {
+                            map[key].remarks = remarksVal;
+                        }
+                    }
+                } else {
+                    const newItem = {
+                        product_name: name,
+                        product_type: type,
+                        quantity: qty,
+                        rate: rateVal,
+                        remarks: remarksVal,
+                        _remSet: new Set(remarksVal ? [remarksVal.toLowerCase()] : [])
+                    };
+                    map[key] = newItem;
+                    result.push(newItem);
+                }
+            });
+
+            result.forEach(item => delete item._remSet);
+            return result;
+        }
+
+        const sessionProductsJson = `{{ email_products_json|default:''|escapejs }}`;
+        const productsJsonStr = sessionProductsJson || urlParams.get('products_json') || '';
+        let multiProducts = [];
+        if (productsJsonStr) {
+            try {
+                multiProducts = JSON.parse(productsJsonStr);
+            } catch(e) { console.error('Error parsing products_json:', e); }
+        }
+
+        multiProducts = groupProductsByNameAndType(multiProducts);
+
+        const tbody = document.querySelector('#productTable tbody');
+        if (multiProducts && multiProducts.length > 0 && tbody) {
+            tbody.innerHTML = '';
+            multiProducts.forEach((prod, idx) => {
+                const rowData = {
+                    product_name: prod.product_name || '',
+                    product_type: prod.product_type || '',
+                    quantity: prod.quantity || 1,
+                    mes_rate_per_unit: prod.rate || rate || '',
+                    remarks: prod.remarks || prod.product_remarks || ''
+                };
+                tbody.insertAdjacentHTML('beforeend', generateProductRow(idx, rowData));
+            });
+            renumberProductRows();
+            calculateTotals();
+        } else if (tbody) {
+            const firstRow = tbody.querySelector('tr:first-child');
+            if (firstRow) {
+                const nameInput = firstRow.querySelector('input[name="product_name[]"]');
+                const typeSelect = firstRow.querySelector('select[name="product_type[]"]');
+                const qtyInput = firstRow.querySelector('input[name="quantity[]"]');
+                const rateInput = firstRow.querySelector('input[name="mes_rate_per_unit[]"]');
+                const remarksInput = firstRow.querySelector('input[name="remarks[]"]');
+
+                if (nameInput && productName) nameInput.value = productName;
+                if (typeSelect && productType) typeSelect.value = productType;
+                if (qtyInput && quantity) qtyInput.value = quantity;
+                if (rateInput && rate) rateInput.value = rate;
+                if (remarksInput && productRemarks) remarksInput.value = productRemarks;
+            }
         }
 
         if (form && fromEmailId) {

@@ -4425,14 +4425,21 @@ def customer_order(request):
         )
 
         if request.POST.get('save_action') == 'supplier_order':
+            request.session.pop('email_prefill_products_json', None)
             return redirect('dpr_supplier', dpr_id=dpr.id)
+        request.session.pop('email_prefill_products_json', None)
         return redirect('customer_order')
+
+    from_email_id = request.GET.get('from_email_id', '')
+    session_key = f'email_products_{from_email_id}' if from_email_id else 'email_prefill_products_json'
+    email_products_json = request.session.get(session_key) or request.session.get('email_prefill_products_json', '')
 
     context = {
         'customers': customers,
         'dpr': None,
         'products': None,
         'is_edit': False,
+        'email_products_json': email_products_json,
     }
 
     return render(
@@ -6273,6 +6280,167 @@ def sync_rfq_email_inbox(request, rfq_id=0):
         'message': f'Sync successful! {synced_count} new message(s) synchronized across all RFQs.',
         'synced_count': synced_count
     })
+
+
+@login_required
+@role_required('ADMIN', 'PURCHASE')
+def get_supplier_email_thread(request, dpr_id):
+    try:
+        dpr = DPR.objects.get(pk=dpr_id)
+    except DPR.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'DPR not found.'}, status=404)
+
+    supplier_id = request.GET.get('supplier_id')
+    supplier = None
+    if supplier_id:
+        try:
+            supplier = Supplier.objects.get(pk=supplier_id)
+        except Supplier.DoesNotExist:
+            pass
+
+    if request.GET.get('sync') == '1':
+        try:
+            from .email_services import sync_rfq_inbox
+            sync_rfq_inbox(rfq=None)
+        except Exception as e:
+            logger.warning(f"Error syncing inbox for supplier: {e}")
+
+    show_all = request.GET.get('all') == '1'
+
+    messages_query = RFQEmailMessage.objects.none()
+    if supplier and supplier.email:
+        messages_query = RFQEmailMessage.objects.filter(
+            Q(sender__icontains=supplier.email) |
+            Q(recipients__icontains=supplier.email) |
+            Q(subject__icontains=dpr.serial_number) |
+            Q(body__icontains=dpr.serial_number)
+        )
+    elif supplier:
+        messages_query = RFQEmailMessage.objects.filter(
+            Q(subject__icontains=supplier.supplier_name) |
+            Q(body__icontains=supplier.supplier_name) |
+            Q(subject__icontains=dpr.serial_number)
+        )
+    else:
+        messages_query = RFQEmailMessage.objects.filter(
+            Q(subject__icontains=dpr.serial_number) |
+            Q(body__icontains=dpr.serial_number)
+        )
+
+    if show_all:
+        email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:150]
+    else:
+        email_messages = messages_query.order_by('sent_at')
+
+    data = []
+    for msg in email_messages:
+        data.append({
+            'id': msg.id,
+            'message_id': msg.message_id,
+            'in_reply_to': msg.in_reply_to,
+            'sender': msg.sender,
+            'recipients': msg.recipients,
+            'cc_recipients': msg.cc_recipients or '',
+            'subject': msg.subject,
+            'body': msg.body or '',
+            'direction': msg.direction,
+            'sent_at': timezone.localtime(msg.sent_at).strftime('%b %d, %Y %I:%M %p') if msg.sent_at else '',
+            'has_attachments': msg.has_attachments,
+            'attachment_names': msg.attachment_names or '',
+        })
+
+    return JsonResponse({
+        'status': 'success',
+        'dpr_id': dpr.id,
+        'dpr_serial': dpr.serial_number,
+        'supplier_id': supplier.id if supplier else '',
+        'supplier_name': supplier.supplier_name if supplier else '',
+        'supplier_email': supplier.email if supplier else '',
+        'show_all': show_all,
+        'messages': data
+    })
+
+
+@login_required
+@role_required('ADMIN', 'PURCHASE')
+def send_supplier_email_reply(request, dpr_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    try:
+        dpr = DPR.objects.get(pk=dpr_id)
+    except DPR.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'DPR not found.'}, status=404)
+
+    to_emails_raw = request.POST.get('to_emails', '').strip()
+    cc_emails_raw = request.POST.get('cc_emails', '').strip()
+    subject = request.POST.get('subject', '').strip()
+    body = request.POST.get('body', '').strip()
+    parent_message_id = request.POST.get('parent_message_id', '').strip()
+    supplier_id = request.POST.get('supplier_id')
+    po_number = request.POST.get('po_number')
+    reply_attachment = request.FILES.get('reply_attachment')
+
+    if not to_emails_raw:
+        return JsonResponse({'status': 'error', 'message': 'Recipient email address (To) is required.'}, status=400)
+    if not subject or not body:
+        return JsonResponse({'status': 'error', 'message': 'Subject and Body are required.'}, status=400)
+
+    to_emails = [e.strip() for e in re.split(r'[;,]', to_emails_raw) if e.strip()]
+    cc_emails = [e.strip() for e in re.split(r'[;,]', cc_emails_raw) if e.strip()]
+
+    attachments = []
+
+    supplier = None
+    items = []
+    if supplier_id:
+        try:
+            supplier = Supplier.objects.get(pk=supplier_id)
+            from products.models import SupplierProduct
+            email_items = SupplierProduct.objects.filter(
+                customer_product__dpr=dpr,
+                supplier=supplier
+            ).select_related('customer_product', 'supplier')
+            if po_number:
+                email_items = email_items.filter(po_number=po_number)
+            items = list(email_items)
+            if items:
+                pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+                safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number or f'SPO-{dpr.id}')
+                filename = f"{safe_po_num}.pdf"
+                attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
+        except Exception as exc:
+            logger.warning(f"Could not auto-attach Supplier PO PDF to reply: {exc}")
+
+    if reply_attachment:
+        attachments.append((
+            reply_attachment.name,
+            reply_attachment.read(),
+            getattr(reply_attachment, 'content_type', 'application/octet-stream')
+        ))
+
+    try:
+        from .email_services import send_threaded_rfq_email
+        msg_record = send_threaded_rfq_email(
+            rfq=None,
+            subject=subject,
+            body=body,
+            to_emails=to_emails,
+            cc_emails=cc_emails,
+            attachments=attachments,
+            parent_message_id=parent_message_id or None
+        )
+        if supplier and items:
+            from products.models import SupplierProduct
+            SupplierProduct.objects.filter(pk__in=[item.pk for item in items]).update(po_email_sent=True)
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Reply sent successfully!',
+            'message_id': msg_record.message_id if msg_record else ''
+        })
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': f'Failed to send reply: {str(exc)}'}, status=500)
 
 
 

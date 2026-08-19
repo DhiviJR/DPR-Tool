@@ -319,122 +319,124 @@ def sync_rfq_inbox(rfq=None):
             return 0, None
 
         msg_nums = data[0].split()
-        recent_nums = msg_nums[-60:]  # Scan recent 60 emails for ultra-fast performance
+        recent_nums = msg_nums[-60:]  # Scan recent 60 emails in a single batch request
 
-        existing_message_ids = set(
-            RFQEmailMessage.objects.values_list('message_id', flat=True)
-        )
-
-        for num in recent_nums:
-            # Fetch headers only first (very fast, <10ms per email)
-            status, header_data = mail.fetch(num, '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT FROM TO CC IN-REPLY-TO REFERENCES DATE)])')
-            if status != 'OK' or not header_data or not header_data[0]:
-                continue
-
-            raw_headers = header_data[0][1]
-            if not isinstance(raw_headers, bytes):
-                continue
-
-            msg_header = email.message_from_bytes(raw_headers)
-
-            message_id = _clean_header_str(msg_header.get('Message-ID'))
-            if not message_id:
-                message_id = f"<imap-{num.decode()}@{imap_host}>"
-            if not message_id.startswith('<'):
-                message_id = f"<{message_id}>"
-            if len(message_id) > 250:
-                message_id = message_id[:240] + f"-{num.decode()}@msg>"
-
-            # If already in DB and linked, skip downloading full body
-            existing_msg = RFQEmailMessage.objects.filter(message_id=message_id).first()
-            if existing_msg and existing_msg.rfq:
-                continue
-
-            subject = _clean_header_str(msg_header.get('Subject'))
-            if subject and len(subject) > 490:
-                subject = subject[:490]
-
-            from_str = _clean_header_str(msg_header.get('From'))
-            if from_str and len(from_str) > 250:
-                from_str = from_str[:250]
-
-            to_str = _clean_header_str(msg_header.get('To'))
-            cc_str = _clean_header_str(msg_header.get('Cc'))
-            in_reply_to = _clean_header_str(msg_header.get('In-Reply-To'))
-            if in_reply_to and len(in_reply_to) > 250:
-                in_reply_to = in_reply_to[:240] + ">"
-            references = _clean_header_str(msg_header.get('References'))
-
-            # Check if headers match any RFQ before downloading full email body
-            matched_rfq = _match_email_to_rfq(
-                subject=subject,
-                body='',
-                from_str=from_str,
-                to_str=to_str,
-                in_reply_to=in_reply_to,
-                references=references,
-                target_rfq=rfq
+        if recent_nums:
+            status, batch_headers = mail.fetch(
+                b','.join(recent_nums),
+                '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT FROM TO CC IN-REPLY-TO REFERENCES DATE)])'
             )
+            if status == 'OK' and batch_headers:
+                for item in batch_headers:
+                    if not isinstance(item, tuple) or len(item) < 2:
+                        continue
+                    header_info, raw_headers = item[0], item[1]
+                    if not isinstance(raw_headers, bytes):
+                        continue
 
-            if not matched_rfq:
-                continue
+                    num_match = re.search(rb'^\d+', header_info)
+                    num = num_match.group(0) if num_match else b''
 
-            if existing_msg:
-                if existing_msg.rfq != matched_rfq:
-                    existing_msg.rfq = matched_rfq
-                    existing_msg.save(update_fields=['rfq'])
+                    msg_header = email.message_from_bytes(raw_headers)
+
+                    message_id = _clean_header_str(msg_header.get('Message-ID'))
+                    if not message_id:
+                        message_id = f"<imap-{num.decode()}@{imap_host}>"
+                    if not message_id.startswith('<'):
+                        message_id = f"<{message_id}>"
+                    if len(message_id) > 250:
+                        message_id = message_id[:240] + f"-{num.decode()}@msg>"
+
+                    # If already in DB and linked, skip downloading full body
+                    existing_msg = RFQEmailMessage.objects.filter(message_id=message_id).first()
+                    if existing_msg and existing_msg.rfq:
+                        continue
+
+                    subject = _clean_header_str(msg_header.get('Subject'))
+                    if subject and len(subject) > 490:
+                        subject = subject[:490]
+
+                    from_str = _clean_header_str(msg_header.get('From'))
+                    if from_str and len(from_str) > 250:
+                        from_str = from_str[:250]
+
+                    to_str = _clean_header_str(msg_header.get('To'))
+                    cc_str = _clean_header_str(msg_header.get('Cc'))
+                    in_reply_to = _clean_header_str(msg_header.get('In-Reply-To'))
+                    if in_reply_to and len(in_reply_to) > 250:
+                        in_reply_to = in_reply_to[:240] + ">"
+                    references = _clean_header_str(msg_header.get('References'))
+
+                    # Check if headers match any RFQ before downloading full email body
+                    matched_rfq = _match_email_to_rfq(
+                        subject=subject,
+                        body='',
+                        from_str=from_str,
+                        to_str=to_str,
+                        in_reply_to=in_reply_to,
+                        references=references,
+                        target_rfq=rfq
+                    )
+
+                    if not matched_rfq:
+                        continue
+
+                    if existing_msg:
+                        if existing_msg.rfq != matched_rfq:
+                            existing_msg.rfq = matched_rfq
+                            existing_msg.save(update_fields=['rfq'])
+                            synced_count += 1
+                        continue
+
+                    # Now fetch full RFC822 body only for new matching email
+                    status, msg_data = mail.fetch(num, '(RFC822)')
+                    if status != 'OK' or not msg_data or not msg_data[0]:
+                        continue
+                    raw_email = msg_data[0][1]
+                    if not isinstance(raw_email, bytes):
+                        continue
+                    msg = email.message_from_bytes(raw_email)
+
+                    date_str = msg.get('Date')
+                    sent_at = timezone.now()
+                    if date_str:
+                        try:
+                            dt = parsedate_to_datetime(date_str)
+                            if timezone.is_naive(dt):
+                                dt = timezone.make_aware(dt)
+                            sent_at = dt
+                        except Exception:
+                            pass
+
+                    body = _extract_email_body(msg)
+
+                    has_attachments = False
+                    attachment_names = []
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            disposition = str(part.get("Content-Disposition"))
+                            if "attachment" in disposition:
+                                has_attachments = True
+                                filename = part.get_filename()
+                                if filename:
+                                    attachment_names.append(_clean_header_str(filename))
+
+                    RFQEmailMessage.objects.create(
+                        rfq=matched_rfq,
+                        message_id=message_id,
+                        in_reply_to=in_reply_to or None,
+                        references=references or None,
+                        sender=from_str,
+                        recipients=to_str,
+                        cc_recipients=cc_str,
+                        subject=subject or "(No Subject)",
+                        body=body,
+                        direction='IN',
+                        sent_at=sent_at,
+                        has_attachments=has_attachments,
+                        attachment_names=", ".join(attachment_names) if attachment_names else ""
+                    )
                     synced_count += 1
-                continue
-
-            # Now fetch full RFC822 body only for new matching email
-            status, msg_data = mail.fetch(num, '(RFC822)')
-            if status != 'OK' or not msg_data or not msg_data[0]:
-                continue
-            raw_email = msg_data[0][1]
-            if not isinstance(raw_email, bytes):
-                continue
-            msg = email.message_from_bytes(raw_email)
-
-            date_str = msg.get('Date')
-            sent_at = timezone.now()
-            if date_str:
-                try:
-                    dt = parsedate_to_datetime(date_str)
-                    if timezone.is_naive(dt):
-                        dt = timezone.make_aware(dt)
-                    sent_at = dt
-                except Exception:
-                    pass
-
-            body = _extract_email_body(msg)
-
-            has_attachments = False
-            attachment_names = []
-            if msg.is_multipart():
-                for part in msg.walk():
-                    disposition = str(part.get("Content-Disposition"))
-                    if "attachment" in disposition:
-                        has_attachments = True
-                        filename = part.get_filename()
-                        if filename:
-                            attachment_names.append(_clean_header_str(filename))
-
-            RFQEmailMessage.objects.create(
-                rfq=matched_rfq,
-                message_id=message_id,
-                in_reply_to=in_reply_to or None,
-                references=references or None,
-                sender=from_str,
-                recipients=to_str,
-                cc_recipients=cc_str,
-                subject=subject or "(No Subject)",
-                body=body,
-                direction='IN',
-                sent_at=sent_at,
-                has_attachments=has_attachments,
-                attachment_names=", ".join(attachment_names) if attachment_names else ""
-            )
-            synced_count += 1
 
         mail.logout()
         return synced_count, None
