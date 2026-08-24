@@ -2752,15 +2752,9 @@ def customer_order_edit(request, dpr_id):
         customer_id = request.POST.get('customer')
         customer = Customer.objects.get(id=customer_id)
         region = request.POST.get('region')
-        if customer.region != region:
-            messages.error(request, 'Select a customer from the chosen region.')
-            products = CustomerProduct.objects.filter(dpr=dpr)
-            return render(request, 'customer_order.html', {
-                'customers': customers,
-                'dpr': dpr,
-                'products': products,
-                'is_edit': True,
-            })
+        if region in ('Chennai', 'Hosur') and customer.region != region:
+            customer.region = region
+            customer.save(update_fields=['region'])
 
         dpr.customer = customer
         dpr.enquiry_attachment = (
@@ -3425,7 +3419,28 @@ def customer_details(request):
     customers = Customer.objects.order_by('customer_name')
     if search_query:
         customers = customers.filter(customer_name__icontains=search_query)
-    return render(request, 'customer_details.html', {'customers': customers, 'search_query': search_query})
+
+    prefill_data = {
+        'customer_name': request.GET.get('customer_name', '').strip(),
+        'region': request.GET.get('region', '').strip(),
+        'email': request.GET.get('email', '').strip(),
+        'phone_number': request.GET.get('phone_number', '').strip(),
+        'state_code': request.GET.get('state_code', '').strip() or ('33' if request.GET.get('region', '').strip() in ('Chennai', 'Hosur') else ''),
+        'from_email_id': request.GET.get('from_email_id', '').strip(),
+        'mail_date_param': request.GET.get('mail_date_param', '').strip(),
+        'enquiry_details_param': request.GET.get('enquiry_details_param', '').strip(),
+        'product_name_param': request.GET.get('product_name_param', '').strip(),
+        'product_type_param': request.GET.get('product_type_param', '').strip(),
+        'quantity_param': request.GET.get('quantity_param', '').strip(),
+        'unit_param': request.GET.get('unit_param', '').strip(),
+        'product_remarks_param': request.GET.get('product_remarks_param', '').strip(),
+    }
+
+    return render(request, 'customer_details.html', {
+        'customers': customers,
+        'search_query': search_query,
+        'prefill_data': prefill_data
+    })
 
 
 @role_required('ADMIN', 'SALES')
@@ -4233,6 +4248,10 @@ def supplier_details(request):
 def customer_order(request):
 
     customers = Customer.objects.all()
+    for c in customers:
+        if c.clean_customer_name != c.customer_name:
+            c.customer_name = c.clean_customer_name
+            c.save(update_fields=['customer_name'])
 
     if request.method == 'POST':
 
@@ -4250,13 +4269,8 @@ def customer_order(request):
                 'is_edit': False,
             })
         if customer.region != region:
-            messages.error(request, 'Select a customer from the chosen region.')
-            return render(request, 'customer_order.html', {
-                'customers': customers,
-                'dpr': None,
-                'products': None,
-                'is_edit': False,
-            })
+            customer.region = region
+            customer.save(update_fields=['region'])
 
         quotation_number = request.POST.get('quotation_number')
 
@@ -4587,6 +4601,37 @@ def add_supplier(request):
     return JsonResponse({'status': 'error'})
 
 
+def _get_product_category_key(pname, ptype=''):
+    pname_clean = (pname or '').strip().lower()
+    ptype_clean = (ptype or '').strip().lower()
+
+    if ptype_clean == 'spares' or pname_clean == 'spares':
+        return 'SPARES'
+    if ptype_clean == 'amc' or pname_clean == 'amc':
+        return 'AMC'
+    if ptype_clean == 'service' or pname_clean == 'service':
+        return 'SERVICE'
+    if any(k in pname_clean for k in ('hammer', 'bat', 'gloves', 'pencil box', 'box')):
+        return pname_clean
+
+    text = f"{pname_clean} {ptype_clean}"
+
+    if re.search(r'\b(air\s+plug|apg|sapg)\b', text): return 'APG'
+    if re.search(r'\b(air\s+ring|arg|sarg)\b', text): return 'ARG'
+    if re.search(r'\b(thread\s+plug|tpg|stpg)\b', text): return 'TPG'
+    if re.search(r'\b(thread\s+ring|trg|strg)\b', text): return 'TRG'
+    if re.search(r'\b(plain\s+plug|ppg|sppg)\b', text): return 'PPG'
+    if re.search(r'\b(plain\s+ring|prg|sprg)\b', text): return 'PRG'
+    if re.search(r'\b(multi[- ]gauge)\b', text): return 'MULTI_GAUGE'
+    if re.search(r'\b(lvdt)\b', text): return 'LVDT'
+    if re.search(r'\b(air\s+unit|unit\s+air|air\s+gauge\s+unit)\b', text): return 'AIR_UNIT'
+    if re.search(r'\b(comparator)\b', text): return 'COMPARATOR'
+    if re.search(r'\b(pin\s+gauge)\b', text): return 'PIN'
+
+    clean_name = re.sub(r'[\d\.\sØømm]+', '', pname_clean).strip()
+    return clean_name or 'OTHER'
+
+
 @role_required('ADMIN', 'SALES', 'PURCHASE')
 def get_customer_quotations(request):
     import re
@@ -4595,23 +4640,47 @@ def get_customer_quotations(request):
     customer_id = request.GET.get('customer_id')
     product_name = (request.GET.get('product_name') or '').strip()
 
+    target_category = _get_product_category_key(product_name, product_name) if product_name else None
+
     rfqs_qs = RFQ.objects.none()
+
     if customer_id:
-        try:
-            customer = Customer.objects.get(id=customer_id)
-            rfqs_qs = rfqs_qs | RFQ.objects.filter(customer=customer)
-        except Customer.DoesNotExist:
-            pass
+        customer_rfqs = RFQ.objects.filter(customer_id=customer_id)
+        if target_category and target_category != 'OTHER':
+            matching_ids = []
+            for rfq in customer_rfqs.prefetch_related('products'):
+                cats = [_get_product_category_key(p.product_name, p.product_type) for p in rfq.products.all()]
+                if target_category in cats:
+                    matching_ids.append(rfq.id)
+            rfqs_qs = customer_rfqs.filter(id__in=matching_ids)
+        elif product_name:
+            words = [w for w in re.split(r'[\s\-_\/]+', product_name) if len(w) >= 3 and w.lower() not in ('steel', 'carbide', 'unit', 'set', 'nos', 'gauge', 'gauges')]
+            if words:
+                q_filter = Q()
+                for w in words:
+                    q_filter |= Q(products__product_name__icontains=w) | Q(products__product_type__icontains=w)
+                rfqs_qs = customer_rfqs.filter(q_filter)
+            else:
+                rfqs_qs = customer_rfqs
+        else:
+            rfqs_qs = customer_rfqs
 
-    if product_name:
-        words = [w for w in re.split(r'[\s\-_\/]+', product_name) if len(w) >= 3 and w.lower() not in ('steel', 'carbide', 'unit', 'set', 'nos')]
-        q_filter = Q(products__product_name__icontains=product_name) | Q(products__product_type__icontains=product_name)
-        for w in words:
-            q_filter |= Q(products__product_name__icontains=w) | Q(products__product_type__icontains=w)
-        rfqs_qs = rfqs_qs | RFQ.objects.filter(q_filter)
-
-    if not customer_id and not product_name:
+    if not rfqs_qs.exists():
         rfqs_qs = RFQ.objects.all()
+        if target_category and target_category != 'OTHER':
+            matching_ids = []
+            for rfq in rfqs_qs.prefetch_related('products'):
+                cats = [_get_product_category_key(p.product_name, p.product_type) for p in rfq.products.all()]
+                if target_category in cats:
+                    matching_ids.append(rfq.id)
+            rfqs_qs = rfqs_qs.filter(id__in=matching_ids)
+        elif product_name:
+            words = [w for w in re.split(r'[\s\-_\/]+', product_name) if len(w) >= 3 and w.lower() not in ('steel', 'carbide', 'unit', 'set', 'nos', 'gauge', 'gauges')]
+            if words:
+                q_filter = Q()
+                for w in words:
+                    q_filter |= Q(products__product_name__icontains=w) | Q(products__product_type__icontains=w)
+                rfqs_qs = rfqs_qs.filter(q_filter)
 
     rfqs = rfqs_qs.distinct().prefetch_related('products', 'quotations').order_by('-created_at')
 
@@ -4628,6 +4697,10 @@ def get_customer_quotations(request):
                     product_data['quotation_prepared'] = True
                     product_data['prepared_not_emailed'] = prepared_not_emailed
                     products_list.append(product_data)
+
+                if target_category and target_category != 'OTHER':
+                    if not any(_get_product_category_key(p.get('product_name') or p.get('name'), p.get('product_type') or p.get('type')) == target_category for p in products_list):
+                        continue
 
                 if products_list:
                     quotations.append({
@@ -4661,6 +4734,10 @@ def get_customer_quotations(request):
                 'quotation_prepared': p.quotation_prepared,
                 'prepared_not_emailed': prepared_not_emailed,
             })
+
+        if target_category and target_category != 'OTHER':
+            if not any(_get_product_category_key(p['product_name'], p['product_type']) == target_category for p in products_list):
+                continue
 
         if products_list:
             quotations.append({

@@ -101,7 +101,7 @@
                                     data-region="{{ customer.region|default:'' }}"
                                     {% if dpr and dpr.customer.id == customer.id %}selected{% endif %}>
 
-                                {{ customer.customer_name }}
+                                {{ customer.clean_customer_name }}
 
                             </option>
 
@@ -866,10 +866,18 @@ function loadCustomerQuotations() {
         menu.appendChild(item);
     };
 
-    const firstRowProdInput = document.querySelector('#productTable tbody tr:first-child input[name="product_name[]"]');
     const urlParams = new URLSearchParams(window.location.search);
-    const productNameParam = urlParams.get('product_name') || '';
-    const currentProdName = (firstRowProdInput && firstRowProdInput.value.trim()) ? firstRowProdInput.value.trim() : productNameParam;
+    const prodNames = [];
+    const prodTypes = [];
+    document.querySelectorAll('#productTable tbody tr').forEach(row => {
+        const nameEl = row.querySelector('input[name="product_name[]"]');
+        const typeEl = row.querySelector('select[name="product_type[]"], input[name="product_type[]"]');
+        if (nameEl && nameEl.value.trim()) prodNames.push(nameEl.value.trim());
+        if (typeEl && typeEl.value.trim()) prodTypes.push(typeEl.value.trim());
+    });
+    if (urlParams.get('product_name')) prodNames.push(urlParams.get('product_name'));
+    if (urlParams.get('product_type')) prodTypes.push(urlParams.get('product_type'));
+    const currentProdName = [...new Set([...prodNames, ...prodTypes])].join(' ').trim();
 
     if (!customerId && !currentProdName) {
         if (selectedQuotes.length > 0) {
@@ -924,15 +932,21 @@ function filterCustomersByRegion() {
     const region = document.getElementById('regionDropdown').value;
     const dropdown = document.getElementById('customerDropdown');
     const selectedOption = dropdown.options[dropdown.selectedIndex];
+    const currentVal = dropdown.value;
 
     Array.from(dropdown.options).forEach(option => {
         if (!option.value) return;
-        option.hidden = !region || option.dataset.region !== region;
+        const isSelected = option.value === currentVal;
+        const hasNoRegion = !option.dataset.region;
+        const matchesRegion = option.dataset.region === region;
+        option.hidden = region ? (!isSelected && !hasNoRegion && !matchesRegion) : false;
     });
 
     if (
         selectedOption
         && selectedOption.value
+        && selectedOption.dataset.region
+        && region
         && selectedOption.dataset.region !== region
     ) {
         dropdown.value = '';
@@ -943,6 +957,11 @@ function filterCustomersByRegion() {
 
 document.getElementById('regionDropdown').addEventListener('change', filterCustomersByRegion);
 document.getElementById('customerDropdown').addEventListener('change', loadCustomerQuotations);
+document.addEventListener('change', function(e) {
+    if (e.target && (e.target.name === 'product_name[]' || e.target.name === 'product_type[]')) {
+        loadCustomerQuotations();
+    }
+});
 filterCustomersByRegion();
 
 document.addEventListener('input', function (e) {

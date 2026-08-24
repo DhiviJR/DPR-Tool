@@ -22,25 +22,41 @@
         <form method="post" class="row g-3 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
+            {% if prefill_data.from_email_id %}
+            <input type="hidden" name="from_email_id" value="{{ prefill_data.from_email_id }}">
+            <input type="hidden" name="mail_date_param" value="{{ prefill_data.mail_date_param }}">
+            <input type="hidden" name="enquiry_details_param" value="{{ prefill_data.enquiry_details_param }}">
+            <input type="hidden" name="product_name_param" value="{{ prefill_data.product_name_param }}">
+            <input type="hidden" name="product_type_param" value="{{ prefill_data.product_type_param }}">
+            <input type="hidden" name="quantity_param" value="{{ prefill_data.quantity_param }}">
+            <input type="hidden" name="unit_param" value="{{ prefill_data.unit_param }}">
+            <input type="hidden" name="product_remarks_param" value="{{ prefill_data.product_remarks_param }}">
+            <div class="col-12 mb-2">
+                <div class="alert alert-info py-2 px-3 mb-0 small rounded-3 border-info-subtle">
+                    <i class="bi bi-info-circle-fill me-1 text-info"></i> <strong>New Customer from Email:</strong> Complete and save customer details below to automatically proceed to Add RFQ.
+                </div>
+            </div>
+            {% endif %}
+
             <div class="col-lg">
                 <label class="form-label">Customer Name *</label>
-                <input type="text" name="customer_name" class="form-control" required>
+                <input type="text" name="customer_name" class="form-control" value="{{ prefill_data.customer_name|default:'' }}" required>
             </div>
             <div class="col-lg">
                 <label class="form-label">Region *</label>
                 <select name="region" class="form-select" required>
                     <option value="">Select</option>
-                    <option value="Chennai">Chennai</option>
-                    <option value="Hosur">Hosur</option>
+                    <option value="Chennai" {% if prefill_data.region == 'Chennai' %}selected{% endif %}>Chennai</option>
+                    <option value="Hosur" {% if prefill_data.region == 'Hosur' %}selected{% endif %}>Hosur</option>
                 </select>
             </div>
             <div class="col-lg">
                 <label class="form-label">Email</label>
-                <input type="email" name="email" class="form-control">
+                <input type="email" name="email" class="form-control" value="{{ prefill_data.email|default:'' }}">
             </div>
             <div class="col-lg">
                 <label class="form-label">Phone Number</label>
-                <input type="tel" name="phone_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric">
+                <input type="tel" name="phone_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric" value="{{ prefill_data.phone_number|default:'' }}">
             </div>
             <div class="col-lg">
                 <label class="form-label">GSTIN</label>
@@ -48,7 +64,7 @@
             </div>
             <div class="col-lg">
                 <label class="form-label">State Code *</label>
-                <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10" required>
+                <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10" value="{{ prefill_data.state_code|default:'' }}" required>
             </div>
             <div class="col-lg">
                 <label class="form-label">SEZ</label>

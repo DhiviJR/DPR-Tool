@@ -300,10 +300,32 @@ def _clean_company_name(cname):
     if not cname:
         return ''
     clean = cname.strip(' "\'#*>-_\t\r\n')
-    clean = re.sub(r'^(?:po\s+items\s+pending\s+supplies|new\s+po\s*\d*|po\s*copy|po\s*no\s*\d*|for|m/s|m/s\.|m_s_|request|requst|requirement|quote|quotation|rfq|enquiry|inquiry)[:\-\s_]+', '', clean, flags=re.IGNORECASE).strip()
+    clean = re.split(r'[\,;\s]+\bformerly\b', clean, flags=re.IGNORECASE)[0].strip()
+    clean = re.split(r'\s*\(\s*formerly\b', clean, flags=re.IGNORECASE)[0].strip()
+    clean = re.sub(
+        r'^(?:our\s+company\s+(?:name\s+)?(?:was\s+)?(?:upgraded|changed|renamed)\s+(?:to\s+)?|company\s+name\s*:?|customer\s+name\s*:?|customer\s*:?|formerly\s+(?:known\s+as\s+)?|fka\b|aka\b|ex\s+name\s*:?|old\s+name\s*:?|new\s+name\s*:?|upgraded\s+to\s+|renamed\s+to\s+|changed\s+to\s+|to\s+|was\s+|as\s+|for\s+|from\s+|scm\s*\|\||m/s\.?|m_s_)\s*',
+        '',
+        clean,
+        flags=re.IGNORECASE
+    ).strip()
+    clean = re.sub(
+        r'^(?:po\s+items\s+pending\s+supplies|new\s+po\s*\d*|po\s*copy|po\s*no\s*\d*|quote|quotation|rfq|enquiry|inquiry|request|requirement|the\s+confirmation\s+from\s+us\s+pls\s+start\s+manufacturing)[:\-\s_]+',
+        '',
+        clean,
+        flags=re.IGNORECASE
+    ).strip()
     clean = re.sub(r'_(Quotation|MES|Quote).*', '', clean, flags=re.IGNORECASE).replace('_', ' ').strip()
-    clean = re.sub(r'[\-\s]+(Padappai|Ranipet|Hosur|Chennai|Plant\s*\d*)$', '', clean, flags=re.IGNORECASE).strip()
+    clean = re.sub(r'[\-\s,\.]+(Padappai|Ranipet|Hosur|Chennai|Oragadam|Mannur|Plant\s*\d*)$', '', clean, flags=re.IGNORECASE).strip()
     if _is_own_company(clean):
+        return ''
+    PRODUCT_NOISE = r'(?i)\b(urgent|nil\s+stock|stock|spares|air\s+plug|thread\s+plug|ring|plug|apg|tpg|trg|lvd|spc|confirmation|order|purchase)\b'
+    if re.search(PRODUCT_NOISE, clean) and not re.search(r'(?i)\b(technologies|industries|solutions|works|limited|ltd|pvt|inc|corp)\b', clean):
+        return ''
+    if clean.lower() in ('gauges', 'tools', 'spares', 'air plug gauge', 'nil stock gauges', 'urgent & nil stock gauges'):
+        return ''
+    if clean.lower().startswith(('i have', 'we are', 'please', 'kindly', 'dear', 'thanks', 'regards', 'our', 'your', 'this', 'on ', 'the confirmation', 'e-mail', 'facility', 'in-house', 'taken every', 'reserves the')):
+        return ''
+    if len(clean) < 3 or not any(c.isalpha() for c in clean):
         return ''
     return clean
 
@@ -313,14 +335,22 @@ def _clean_sender_name(sender_name):
     name = sender_name.strip(' "\'')
     name = re.sub(r'^(re|fwd|fw)[:\-\s]+', '', name, flags=re.IGNORECASE).strip()
     name = re.sub(r'^\d+[\s\-_]+', '', name).strip()
-    name = re.sub(r'^(?:materials[-\d]*|dept|purchase|sales|quality|npd)\s+', '', name, flags=re.IGNORECASE).strip()
+    name = re.sub(r'^(?:materials[-\d]*|dept|purchase|sales|quality|npd)\s*', '', name, flags=re.IGNORECASE).strip()
+    name = re.sub(r'^\d+[\s\-_]+', '', name).strip()
+    name = re.sub(r'[\-\s]*\b\d{7,12}\b', '', name).strip()
+    name = re.sub(r'[\-\s]*\b\d+\b', '', name).strip()
+    name = re.sub(r'[\s\-_]*\d+$', '', name).strip()
 
     parts = re.split(r'\s*[\-\|/()\[\]]\s*', name)
     if parts:
         first = parts[0].strip()
-        if len(first) >= 2 and first.lower() not in GENERIC_SENDER_WORDS:
+        first_no_num = re.sub(r'\d+', '', first).strip(' -_')
+        if len(first_no_num) >= 2 and first_no_num.lower() not in GENERIC_SENDER_WORDS:
+            return first_no_num
+        elif len(first) >= 2 and first.lower() not in GENERIC_SENDER_WORDS:
             return first
-    return name if name.lower() not in GENERIC_SENDER_WORDS else ''
+    name_no_num = re.sub(r'\d+', '', name).strip(' -_')
+    return name_no_num if name_no_num.lower() not in GENERIC_SENDER_WORDS else ''
 
 def _extract_person_name(body_text):
     if not body_text:
@@ -345,6 +375,10 @@ def _extract_person_name(body_text):
             if re.search(r'(?i)\b(manager|lead|engineer|dept|department|quality|npd|purchase|sales|sourcing|technologies|solutions|works|ltd|pvt|private|limited|industries|inc|corp|llp|team|office|co\.?)\b', clean):
                 continue
             if len(clean) >= 2 and len(clean) <= 35:
+                clean_name = re.sub(r'[\-\s]*\b\d{7,12}\b', '', clean).strip(' -_')
+                clean_name = re.sub(r'\d+', '', clean_name).strip(' -_')
+                if len(clean_name) >= 2:
+                    return clean_name
                 return clean
     return ''
 
@@ -360,15 +394,43 @@ def _extract_company_and_region(body_text, subject_text, sender_name, sender_ema
             region = reg
             break
 
-    company_keywords = r'(?:Engineering\s+Solutions|Engineering\s+Works|Industries|Technologies|Pvt\s+Ltd|Private\s+Limited|Limited|Ltd|Enterprises|Solutions|Tools|Gauges|Machining|Automation|Works|Mfg|Manufacturing|Forgings)'
-    for line in combined_text.splitlines():
-        line_clean = line.strip(' *,#>\r\n\t')
-        comp_match = re.search(rf'([A-Za-z0-9\s&\._\-]{{3,50}}\b{company_keywords}\b)', line_clean, re.IGNORECASE)
-        if comp_match:
-            cname = _clean_company_name(comp_match.group(1))
-            if cname and not cname.lower().startswith(('i have', 'we are', 'please', 'kindly', 'dear', 'thanks', 'regards', 'our', 'your', 'this', 'on ')):
+    # First check signature block lines (after Thanks & Regards)
+    lines = clean_body.splitlines()
+    in_sig = False
+    sig_lines = []
+    for line in lines:
+        lclean = line.strip(' *,#>-_\t\r\n\'"[]()')
+        if re.search(r'(?i)(?:thanks\s*&\s*regards|regards|best\s*regards|warm\s*regards|cheers|thanks)', lclean):
+            in_sig = True
+            continue
+        if in_sig:
+            if not lclean or lclean.startswith('http') or lclean.startswith('www') or '@' in lclean or 'image' in lclean.lower() or lclean.lower().startswith(('wrote:', 'on ', 're:', 'fwd:', 'for ', 'caution', 'disclaimer')):
+                continue
+            if '****************' in lclean or 'PRIVILEGED AND CONFIDENTIAL' in lclean:
+                break
+            sig_lines.append(lclean)
+
+    for line in sig_lines:
+        cname = _clean_company_name(line)
+        if cname and not re.search(r'(?i)\b(manager|lead|engineer|dept|department|quality|npd|purchase|sales|sourcing|purchase\s+dept)\b', cname):
+            if any(w in cname.lower() for w in ('technologies', 'industries', 'solutions', 'works', 'ltd', 'limited', 'pvt', 'inc', 'corp', 'group', 'systems', 'components', 'forgings', 'mfg', 'manufacturing')) or (sender_email and '@' in sender_email and sender_email.split('@')[1].split('.')[0].lower() in cname.lower().replace(' ', '').replace('-', '')):
                 company_name = cname
                 break
+
+    if not company_name:
+        company_keywords = r'(?:Engineering\s+Solutions|Engineering\s+Works|Industries|Technologies|Pvt\s+Ltd|Private\s+Limited|Limited|Ltd|Enterprises|Solutions|Tools|Gauges|Machining|Automation|Works|Mfg|Manufacturing|Forgings)'
+        for line in combined_text.splitlines():
+            line_clean = line.strip(' *,#>\r\n\t')
+            if '****************' in line_clean or 'CAUTION - Disclaimer' in line_clean:
+                break
+            line_preclean = re.split(r'[\,;\s]+\bformerly\b', line_clean, flags=re.IGNORECASE)[0].strip()
+            line_preclean = re.sub(r'^(?:our\s+company\s+(?:name\s+)?(?:was\s+)?(?:upgraded|changed|renamed)\s+(?:to\s+)?)\s*', '', line_preclean, flags=re.IGNORECASE).strip()
+            comp_match = re.search(rf'([A-Za-z0-9\s&\._\-]{{3,50}}\b{company_keywords}\b)', line_preclean, re.IGNORECASE)
+            if comp_match:
+                cname = _clean_company_name(comp_match.group(1))
+                if cname:
+                    company_name = cname
+                    break
 
     domain_fallback = False
     if not company_name and sender_email and '@' in sender_email:
@@ -624,16 +686,23 @@ def add_rfq_from_email(request, record_id):
     ext_person_name = _extract_person_name(record.body)
     ext_company_name, ext_region, is_domain_fb = _extract_company_and_region(record.body, record.subject, sender_name, sender_email)
 
-    if ext_person_name:
-        target_cust_name = ext_person_name
-    elif ext_company_name and not is_domain_fb:
+    if ext_company_name and not is_domain_fb:
         target_cust_name = ext_company_name
-    elif clean_sname:
+    elif clean_sname and clean_sname.lower() not in GENERIC_SENDER_WORDS:
         target_cust_name = clean_sname
+    elif ext_person_name:
+        target_cust_name = ext_person_name
     elif ext_company_name:
         target_cust_name = ext_company_name
     else:
-        target_cust_name = clean_sname or 'New Customer'
+        target_cust_name = ''
+
+    if target_cust_name:
+        clean_target = re.sub(r'[\-\s]*\b\d{7,12}\b', '', target_cust_name).strip(' -_')
+        clean_target = re.sub(r'^\d+[\s\-_]+', '', clean_target).strip(' -_')
+        clean_target = re.sub(r'[\s\-_]+\d+$', '', clean_target).strip(' -_')
+        if clean_target:
+            target_cust_name = clean_target
 
     customer = None
     if sender_email and not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS):
@@ -642,50 +711,28 @@ def add_rfq_from_email(request, record_id):
     if not customer and target_cust_name:
         customer = Customer.objects.filter(customer_name__iexact=target_cust_name).first()
 
-    if not customer and target_cust_name:
-        customer = Customer.objects.filter(customer_name__icontains=target_cust_name).first()
+    if not customer and ext_company_name:
+        customer = Customer.objects.filter(customer_name__iexact=ext_company_name).first()
 
     if not customer and clean_sname:
-        customer = Customer.objects.filter(customer_name__icontains=clean_sname).first()
+        customer = Customer.objects.filter(customer_name__iexact=clean_sname).first()
 
-    if not customer and ext_person_name:
-        customer = Customer.objects.filter(customer_name__icontains=ext_person_name).first()
+    if not customer and target_cust_name and len(target_cust_name) >= 4:
+        if target_cust_name.lower() not in GENERIC_COMPANY_WORDS and target_cust_name.lower() not in GENERIC_SENDER_WORDS:
+            customer = Customer.objects.filter(customer_name__icontains=target_cust_name).first()
+
+    if not customer and ext_company_name and len(ext_company_name) >= 4:
+        if ext_company_name.lower() not in GENERIC_COMPANY_WORDS:
+            customer = Customer.objects.filter(customer_name__icontains=ext_company_name).first()
 
     if not customer and target_cust_name:
-        words = [w for w in target_cust_name.split() if len(w) >= 2 and w.lower() not in GENERIC_COMPANY_WORDS and w.lower() not in GENERIC_SENDER_WORDS]
-        if words:
+        words = [w for w in target_cust_name.split() if len(w) >= 3 and w.lower() not in GENERIC_COMPANY_WORDS and w.lower() not in GENERIC_SENDER_WORDS]
+        if len(words) >= 2:
             sig_phrase = ' '.join(words[:2])
             customer = Customer.objects.filter(customer_name__icontains=sig_phrase).first()
 
-    if not customer and clean_sname:
-        for word in clean_sname.split():
-            if len(word) >= 3 and word.lower() not in GENERIC_SENDER_WORDS and word.lower() not in GENERIC_COMPANY_WORDS:
-                customer = Customer.objects.filter(customer_name__icontains=word).first()
-                if customer:
-                    break
-
     phone_match = re.search(r'\b[6-9]\d{9}\b', f"{record.subject} {record.body}")
     extracted_phone = phone_match.group(0) if phone_match else ''
-
-    if customer:
-        updated = False
-        if customer.customer_name.lower() in ('new customer', 'unknown', 'sew', '') and target_cust_name:
-            customer.customer_name = target_cust_name
-            updated = True
-        if ext_region and not customer.region:
-            customer.region = ext_region
-            updated = True
-        if updated:
-            customer.save()
-    else:
-        customer = Customer.objects.create(
-            customer_name=target_cust_name or 'New Customer',
-            email=sender_email if not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS) else None,
-            phone_number=extracted_phone or None,
-            region=ext_region or None,
-            state_code='33' if ext_region in ('Chennai', 'Hosur') else None,
-            is_sez='No',
-        )
 
     import json
     all_extracted_products = _extract_all_products(record.subject, record.body)
@@ -698,26 +745,58 @@ def add_rfq_from_email(request, record_id):
 
     mail_date_str = record.received_at.strftime('%Y-%m-%d') if record.received_at else timezone.localdate().strftime('%Y-%m-%d')
 
-    url = reverse('rfq_details')
-    params_dict = {
-        'add_rfq': '1',
-        'from_email_id': record.id,
-        'customer_id': customer.id if customer else '',
-        'mail_date': mail_date_str,
-        'enquiry_details': record.subject,
-        'region': (customer.region if customer else '') or ext_region or '',
-        'product_name': clean_product_name,
-        'product_type': product_type,
-        'quantity': qty,
-        'unit': unit,
-        'product_remarks': product_remarks,
-    }
-    if products_json:
-        request.session['email_prefill_products_json'] = products_json
-        if len(products_json) < 800:
-            params_dict['products_json'] = products_json
+    if customer:
+        if ext_region and not customer.region:
+            customer.region = ext_region
+            customer.save(update_fields=['region'])
 
-    return redirect(f"{url}?{urlencode(params_dict)}")
+        url = reverse('rfq_details')
+        params_dict = {
+            'add_rfq': '1',
+            'from_email_id': record.id,
+            'customer_id': customer.id,
+            'mail_date': mail_date_str,
+            'enquiry_details': record.subject,
+            'region': customer.region or ext_region or '',
+            'product_name': clean_product_name,
+            'product_type': product_type,
+            'quantity': qty,
+            'unit': unit,
+            'product_remarks': product_remarks,
+        }
+        if products_json:
+            request.session['email_prefill_products_json'] = products_json
+            if len(products_json) < 800:
+                params_dict['products_json'] = products_json
+
+        return redirect(f"{url}?{urlencode(params_dict)}")
+    else:
+        cust_name_final = ext_company_name or target_cust_name or clean_sname or 'New Customer'
+        cust_name_final = re.sub(r'[\-\s]*\b\d{7,12}\b', '', cust_name_final).strip(' -_')
+        cust_name_final = re.sub(r'^\d+[\s\-_]+', '', cust_name_final).strip(' -_')
+        cust_name_final = re.sub(r'[\s\-_]+\d+$', '', cust_name_final).strip(' -_')
+
+        if products_json:
+            request.session['email_prefill_products_json'] = products_json
+
+        url = reverse('customer_details')
+        cust_params = {
+            'customer_name': cust_name_final or 'New Customer',
+            'email': sender_email if not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS) else '',
+            'phone_number': extracted_phone or '',
+            'region': ext_region or '',
+            'state_code': '33' if ext_region in ('Chennai', 'Hosur') else '',
+            'from_email_id': record.id,
+            'mail_date_param': mail_date_str,
+            'enquiry_details_param': record.subject,
+            'product_name_param': clean_product_name,
+            'product_type_param': product_type,
+            'quantity_param': qty,
+            'unit_param': unit,
+            'product_remarks_param': product_remarks,
+        }
+        messages.info(request, f'New customer "{cust_name_final}" detected. Please complete customer master details to proceed to Add RFQ.')
+        return redirect(f"{url}?{urlencode(cust_params)}")
 
 
 @login_required
@@ -768,17 +847,20 @@ def add_po_from_email(request, record_id):
     if not quotation and linked_rfq:
         quotation = RFQQuotation.objects.filter(rfq=linked_rfq).order_by('-created_at').first()
 
-    # Prioritize Company Name over Person Name for target customer name
-    if ext_company_name and not is_domain_fb:
-        target_cust_name = ext_company_name
-    elif clean_sname and not ext_person_name:
+    if ext_person_name:
+        target_cust_name = ext_person_name
+    elif clean_sname:
         target_cust_name = clean_sname
     elif ext_company_name:
         target_cust_name = ext_company_name
-    elif ext_person_name:
-        target_cust_name = ext_person_name
     else:
-        target_cust_name = clean_sname or 'New Customer'
+        target_cust_name = 'New Customer'
+    if target_cust_name:
+        clean_target = re.sub(r'[\-\s]*\b\d{7,12}\b', '', target_cust_name).strip(' -_')
+        clean_target = re.sub(r'^\d+[\s\-_]+', '', clean_target).strip(' -_')
+        clean_target = re.sub(r'[\s\-_]+\d+$', '', clean_target).strip(' -_')
+        if clean_target:
+            target_cust_name = clean_target
 
     customer = None
     if quotation and quotation.rfq and quotation.rfq.customer:
@@ -791,6 +873,9 @@ def add_po_from_email(request, record_id):
 
     if not customer and target_cust_name:
         customer = Customer.objects.filter(customer_name__iexact=target_cust_name).first()
+
+    if not customer and target_cust_name:
+        customer = Customer.objects.filter(customer_name__icontains=target_cust_name).first()
 
     if not customer and ext_company_name:
         customer = Customer.objects.filter(customer_name__icontains=ext_company_name).first()
@@ -809,7 +894,13 @@ def add_po_from_email(request, record_id):
 
     if customer:
         updated = False
-        if customer.customer_name.lower() in ('new customer', 'unknown', 'sew', '') and target_cust_name:
+        clean_existing_name = re.sub(r'[\-\s]*\b\d{7,12}\b', '', customer.customer_name).strip(' -_')
+        clean_existing_name = re.sub(r'^\d+[\s\-_]+', '', clean_existing_name).strip(' -_')
+        clean_existing_name = re.sub(r'[\s\-_]+\d+$', '', clean_existing_name).strip(' -_')
+        if clean_existing_name and clean_existing_name != customer.customer_name:
+            customer.customer_name = clean_existing_name
+            updated = True
+        if (customer.customer_name.lower() in ('new customer', 'unknown', 'sew', '') or 'formerly' in customer.customer_name.lower() or (target_cust_name and customer.customer_name.lower() != target_cust_name.lower() and not customer.customer_name.isupper())) and target_cust_name:
             customer.customer_name = target_cust_name
             updated = True
         if ext_region and not customer.region:
@@ -818,8 +909,12 @@ def add_po_from_email(request, record_id):
         if updated:
             customer.save()
     else:
+        cust_name_final = target_cust_name or 'New Customer'
+        cust_name_final = re.sub(r'[\-\s]*\b\d{7,12}\b', '', cust_name_final).strip(' -_')
+        cust_name_final = re.sub(r'^\d+[\s\-_]+', '', cust_name_final).strip(' -_')
+        cust_name_final = re.sub(r'[\s\-_]+\d+$', '', cust_name_final).strip(' -_')
         customer = Customer.objects.create(
-            customer_name=target_cust_name or 'New Customer',
+            customer_name=cust_name_final or 'New Customer',
             email=sender_email if not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS) else None,
             phone_number=extracted_phone or None,
             region=ext_region or None,
