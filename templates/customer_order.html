@@ -1149,142 +1149,106 @@ document.addEventListener(
             return;
         }
 
-        let customerName =
-            document.getElementById(
-                'customerName'
-            ).value;
+        let customerName = document.getElementById('customerName').value;
+        let customerRegion = document.getElementById('customerRegion').value;
+        let customerEmail = document.getElementById('customerEmail')?.value.trim() || '';
+        let customerPhone = document.getElementById('customerPhone').value.trim();
+        let customerGstin = document.getElementById('customerGstin')?.value.trim() || '';
+        let customerStateCode = document.getElementById('customerStateCode')?.value.trim() || '';
+        let customerIsSez = document.getElementById('customerIsSez')?.value || 'No';
+        let customerPaymentTerms = document.getElementById('customerPaymentTerms')?.value.trim() || '';
+        let customerAddress = document.getElementById('customerAddress').value;
 
-        let customerPhone =
-            document.getElementById(
-                'customerPhone'
-            ).value.trim();
+        let customerNameError = document.getElementById('customerNameError');
+        let customerRegionError = document.getElementById('customerRegionError');
+        let customerPhoneError = document.getElementById('customerPhoneError');
+        let customerEmailError = document.getElementById('customerEmailError');
 
-        let customerAddress =
-            document.getElementById(
-                'customerAddress'
-            ).value;
-
-        let customerRegion =
-            document.getElementById(
-                'customerRegion'
-            ).value;
-
-        let customerNameError =
-            document.getElementById(
-                'customerNameError'
-            );
-        let customerRegionError =
-            document.getElementById(
-                'customerRegionError'
-            );
-        let customerPhoneError =
-            document.getElementById(
-                'customerPhoneError'
-            );
-
-        customerNameError.style.display = 'none';
-        customerRegionError.style.display = 'none';
-        customerPhoneError.style.display = 'none';
+        if (customerNameError) customerNameError.style.display = 'none';
+        if (customerRegionError) customerRegionError.style.display = 'none';
+        if (customerPhoneError) customerPhoneError.style.display = 'none';
+        if (customerEmailError) customerEmailError.style.display = 'none';
 
         if (!customerName.trim()) {
-            customerNameError.style.display = 'block';
+            if (customerNameError) customerNameError.style.display = 'block';
             return;
         }
 
         if (!customerRegion) {
-            customerRegionError.style.display = 'block';
+            if (customerRegionError) customerRegionError.style.display = 'block';
+            return;
+        }
+
+        if (customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
+            if (customerEmailError) customerEmailError.style.display = 'block';
             return;
         }
 
         if (customerPhone && !/^\d{10}$/.test(customerPhone)) {
-            customerPhoneError.style.display = 'block';
+            if (customerPhoneError) customerPhoneError.style.display = 'block';
             return;
         }
 
         fetch('/add-customer/', {
-
             method: 'POST',
-
             headers: {
-
-                'X-CSRFToken':
-                    '{{ csrf_token }}',
-
-                'Content-Type':
-                    'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/x-www-form-urlencoded',
             },
-
             body: new URLSearchParams({
                 customer_name: customerName.trim(),
                 region: customerRegion,
+                email: customerEmail,
                 phone_number: customerPhone,
+                gstin: customerGstin,
+                state_code: customerStateCode,
+                is_sez: customerIsSez,
+                payment_terms: customerPaymentTerms,
                 address: customerAddress.trim()
             })
         })
-
         .then(response => response.json())
-
         .then(data => {
-
             if (data.status === 'success') {
-
-                let dropdown =
-                    document.getElementById(
-                        'customerDropdown'
-                    );
-
-                let option =
-                    document.createElement(
-                        'option'
-                    );
-
+                let dropdown = document.getElementById('customerDropdown');
+                let option = document.createElement('option');
                 option.value = data.id;
-
                 option.text = data.name;
-
                 option.dataset.region = data.region;
-
                 option.selected = true;
-
                 dropdown.appendChild(option);
 
                 document.getElementById('regionDropdown').value = data.region;
                 filterCustomersByRegion();
 
-                let modal =
-                    bootstrap.Modal.getInstance(
-                        document.getElementById(
-                            'customerModal'
-                        )
-                    );
+                let modal = bootstrap.Modal.getInstance(document.getElementById('customerModal'));
+                if (modal) modal.hide();
 
-                modal.hide();
+                document.getElementById('customerName').value = '';
+                document.getElementById('customerRegion').value = '';
+                if (document.getElementById('customerEmail')) document.getElementById('customerEmail').value = '';
+                document.getElementById('customerPhone').value = '';
+                if (document.getElementById('customerGstin')) document.getElementById('customerGstin').value = '';
+                if (document.getElementById('customerStateCode')) document.getElementById('customerStateCode').value = '';
+                if (document.getElementById('customerIsSez')) document.getElementById('customerIsSez').value = 'No';
+                if (document.getElementById('customerPaymentTerms')) document.getElementById('customerPaymentTerms').value = '';
+                document.getElementById('customerAddress').value = '';
 
-                document.getElementById(
-                    'customerName'
-                ).value = '';
-
-                document.getElementById(
-                    'customerPhone'
-                ).value = '';
-
-                document.getElementById(
-                    'customerAddress'
-                ).value = '';
-                document.getElementById(
-                    'customerRegion'
-                ).value = '';
-                customerPhoneError.style.display = 'none';
-                customerRegionError.style.display = 'none';
+                if (customerPhoneError) customerPhoneError.style.display = 'none';
+                if (customerRegionError) customerRegionError.style.display = 'none';
+                if (customerEmailError) customerEmailError.style.display = 'none';
             } else {
                 const errorMessage = data.message || 'Unable to save customer';
-                if (data.field === 'phone_number') {
+                if (data.field === 'phone_number' && customerPhoneError) {
                     customerPhoneError.textContent = errorMessage;
                     customerPhoneError.style.display = 'block';
-                } else if (data.field === 'region') {
+                } else if (data.field === 'email' && customerEmailError) {
+                    customerEmailError.textContent = errorMessage;
+                    customerEmailError.style.display = 'block';
+                } else if (data.field === 'region' && customerRegionError) {
                     customerRegionError.textContent = errorMessage;
                     customerRegionError.style.display = 'block';
-                } else {
+                } else if (customerNameError) {
                     customerNameError.textContent = errorMessage;
                     customerNameError.style.display = 'block';
                 }
@@ -1578,132 +1542,80 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <!-- CUSTOMER MODAL -->
-
-<div class="modal fade"
-     id="customerModal"
-     tabindex="-1">
-
-    <div class="modal-dialog">
-
+<div class="modal fade" id="customerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-
-            <div class="modal-header bg-primary text-white">
-
-                <h5 class="modal-title">
-
-                    Add Customer
-
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title fs-6 fw-semibold">
+                    <i class="bi bi-person-plus-fill me-2"></i>Add Customer
                 </h5>
-
-                <button type="button"
-                        class="btn-close btn-close-white"
-                        data-bs-dismiss="modal">
-
-                </button>
-
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-
-            <div class="modal-body">
-
-                <div class="mb-3">
-
-    <label>
-        Customer Name *
-    </label>
-
-    <input type="text"
-           id="customerName"
-           class="form-control">
-
-    <div id="customerNameError"
-         class="text-danger mt-1"
-         style="display:none;">
-
-        Customer Name is required
-
-    </div>
-
-</div>
-
-                <div class="mb-3">
-
-                    <label>
-                        Region *
-                    </label>
-
-                    <select id="customerRegion"
-                            class="form-control">
-                        <option value="">Select Region</option>
-                        <option value="Chennai">Chennai</option>
-                        <option value="Hosur">Hosur</option>
-                    </select>
-
-                    <div id="customerRegionError"
-                         class="text-danger mt-1"
-                         style="display:none;">
-                        Region is required.
+            <div class="modal-body p-3">
+                <div class="row g-3">
+                    <!-- Customer Name & Region -->
+                    <div class="col-md-8">
+                        <label class="form-label small fw-semibold">Customer Name <span class="text-danger">*</span></label>
+                        <input type="text" id="customerName" class="form-control form-control-sm" placeholder="e.g. Rajaguru. N">
+                        <div id="customerNameError" class="text-danger small mt-1" style="display:none;">Customer Name is required</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Region <span class="text-danger">*</span></label>
+                        <select id="customerRegion" class="form-select form-select-sm">
+                            <option value="">Select Region</option>
+                            <option value="Chennai">Chennai</option>
+                            <option value="Hosur">Hosur</option>
+                        </select>
+                        <div id="customerRegionError" class="text-danger small mt-1" style="display:none;">Region is required.</div>
                     </div>
 
-                </div>
-
-                <div class="mb-3">
-
-                    <label>
-                        Phone Number
-                    </label>
-
-                    <input type="text"
-                           id="customerPhone"
-                           class="form-control"
-                           maxlength="10"
-                           inputmode="numeric"
-                           autocomplete="tel"
-                           placeholder="10 digit mobile number">
-
-                    <div id="customerPhoneError"
-                         class="text-danger mt-1"
-                         style="display:none;">
-                        Enter a valid 10-digit mobile number.
+                    <!-- Email & Phone Number -->
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Email Address</label>
+                        <input type="email" id="customerEmail" class="form-control form-control-sm" placeholder="customer@company.com">
+                        <div id="customerEmailError" class="text-danger small mt-1" style="display:none;">Enter a valid customer email address.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Phone Number</label>
+                        <input type="text" id="customerPhone" class="form-control form-control-sm" maxlength="10" inputmode="numeric" placeholder="10 digit mobile number">
+                        <div id="customerPhoneError" class="text-danger small mt-1" style="display:none;">Enter a valid 10-digit mobile number.</div>
                     </div>
 
+                    <!-- GSTIN, State Code, SEZ, Payment Terms -->
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">GSTIN</label>
+                        <input type="text" id="customerGstin" class="form-control form-control-sm" maxlength="15" placeholder="e.g. 33AAAAA0000A1Z5" style="text-transform:uppercase;">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">State Code</label>
+                        <input type="text" id="customerStateCode" class="form-control form-control-sm" maxlength="20" placeholder="e.g. 33">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold">SEZ</label>
+                        <select id="customerIsSez" class="form-select form-select-sm">
+                            <option value="No" selected>No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Payment Terms</label>
+                        <input type="text" id="customerPaymentTerms" class="form-control form-control-sm" placeholder="e.g. 30 Days">
+                    </div>
+
+                    <!-- Address -->
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Address</label>
+                        <textarea id="customerAddress" class="form-control form-control-sm" rows="2" placeholder="Full address details..."></textarea>
+                    </div>
                 </div>
-
-                <div class="mb-3">
-
-                    <label>
-                        Address
-                    </label>
-
-                    <textarea id="customerAddress"
-                              class="form-control"></textarea>
-
-                </div>
-
             </div>
-
-            <div class="modal-footer">
-
-                <button type="button"
-                        class="btn btn-secondary"
-                        data-bs-dismiss="modal">
-
-                    Close
-
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success btn-sm" id="saveCustomerBtn">
+                    <i class="bi bi-check-circle me-1"></i>Save Customer
                 </button>
-
-                <button type="button"
-                        class="btn btn-success"
-                        id="saveCustomerBtn">
-
-                    Save Customer
-
-                </button>
-
             </div>
-
         </div>
-
     </div>
-
 </div>
 {% endblock %}

@@ -48,6 +48,62 @@
         min-height: 260px;
         resize: vertical;
     }
+
+    .field-validation-popover {
+        position: absolute;
+        z-index: 1060;
+        background: #ffffff;
+        border: 1px solid #767676;
+        border-radius: 3px;
+        padding: 4px 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+        font-size: 12px;
+        font-family: inherit;
+        color: #222222;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        pointer-events: auto;
+    }
+
+    .field-validation-popover::before {
+        content: '';
+        position: absolute;
+        top: -7px;
+        left: 15px;
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-bottom: 7px solid #767676;
+    }
+
+    .field-validation-popover::after {
+        content: '';
+        position: absolute;
+        top: -6px;
+        left: 16px;
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-bottom: 6px solid #ffffff;
+    }
+
+    .field-validation-icon {
+        background-color: #e65100;
+        color: #ffffff;
+        font-weight: bold;
+        font-size: 11px;
+        width: 16px;
+        height: 16px;
+        border-radius: 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
 </style>
 
 <div class="modal fade" id="addRfqModal" tabindex="-1">
@@ -76,7 +132,7 @@
                     <div class="row g-3 align-items-end">
                         <div class="col-lg-2">
                             <label class="form-label">RFQ No</label>
-                            <input type="text" class="form-control" id="rfqNoDisplay" value="Auto Generated" readonly>
+                            <input type="text" class="form-control" id="rfqNoDisplay" value="{{ next_rfq_no|default:'Auto Generated' }}" readonly>
                         </div>
                         <div class="col-lg-2">
                             <label class="form-label">Mail Date *</label>
@@ -309,6 +365,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div id="paramsModalAlertContainer"></div>
                 <div class="alert alert-info py-2 mb-3 small d-flex align-items-center justify-content-between">
                     <span>Configuring parameters for <strong id="modalParamCategoryTitle">Gauge</strong></span>
                     <span class="badge bg-primary fs-6" id="modalParamTypeBadge">APG</span>
@@ -600,7 +657,7 @@
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table id="rfqTable" class="table table-hover align-middle mb-0" style="min-width: 1350px;">
+            <table id="rfqTable" class="table table-hover align-middle mb-0" style="min-width: 1400px;">
                 <thead>
                     <tr>
                         <th class="sortable" data-col="0" data-sort-type="number">S.No <i class="sort-icon bi bi-arrow-down-up"></i></th>
@@ -613,7 +670,7 @@
                         <th class="sortable" data-col="7" data-sort-type="text">Remarks <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="8" data-sort-type="text">Attachment <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="9" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="10" data-sort-type="text">Quotation <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable text-nowrap" data-col="10" data-sort-type="text" style="min-width: 230px;">Quotation <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -776,23 +833,18 @@
                                 </button>
                             </form>
                         </td>
-                        <td data-sort-value="prepare quotation send email" class="text-nowrap">
-                            <div class="d-flex flex-wrap gap-2">
+                        <td data-sort-value="send email" class="text-nowrap" style="min-width: 230px;">
+                            <div class="d-flex align-items-center gap-2 flex-nowrap">
                                 <button type="button"
-                                        class="btn btn-outline-success btn-sm rfq-prepare-quotation-btn"
+                                        class="btn btn-outline-primary btn-sm rfq-send-quotation-email-btn text-nowrap"
                                         data-rfq-id="{{ rfq.id }}"
-                                        data-rfq-prepared="{% if rfq.quotation_prepared or rfq.quotations.exists %}true{% else %}false{% endif %}"
-                                        disabled>
-                                    <i class="bi bi-file-earmark-pdf me-1"></i>{% if rfq.quotation_prepared or rfq.quotations.exists %}Prepare Revised Quotation{% else %}Prepare Quotation{% endif %}
-                                </button>
-                                <button type="button"
-                                        class="btn btn-outline-primary btn-sm rfq-send-quotation-email-btn"
-                                        data-rfq-id="{{ rfq.id }}"
-                                        {% if not rfq.quotation_prepared %}disabled{% endif %}>
+                                        data-rfq-no="{{ rfq.rfq_no }}"
+                                        data-has-sent-email="{% if rfq.has_sent_email %}true{% else %}false{% endif %}"
+                                        {% if not rfq.products.exists or not rfq.has_prices %}disabled{% endif %}>
                                     <i class="bi bi-envelope-plus me-1"></i>New Email
                                 </button>
                                 <button type="button"
-                                        class="btn btn-outline-dark btn-sm rfq-email-chain-btn"
+                                        class="btn btn-outline-dark btn-sm rfq-email-chain-btn text-nowrap d-inline-flex align-items-center gap-1"
                                         data-rfq-id="{{ rfq.id }}"
                                         data-rfq-no="{{ rfq.rfq_no }}">
                                     <i class="bi bi-reply-all me-1"></i>Reply Email
@@ -1183,8 +1235,8 @@ function openQuotationEmailModal(button) {
 
     let selectedItems = getSelectedQuotationItems(row);
     if (selectedItems.productIds.length === 0) {
-        // Automatically check all prepared products and their supplier prices
-        row.querySelectorAll('.rfq-quotation-product[data-prepared="true"]').forEach(cb => {
+        // Automatically check all products that have finalized prices and their supplier prices
+        row.querySelectorAll('.rfq-quotation-product:not(:disabled)').forEach(cb => {
             cb.checked = true;
             const productId = cb.value;
             const radios = row.querySelectorAll(`.rfq-quotation-supplier-price[data-product-id="${productId}"]`);
@@ -1202,50 +1254,78 @@ function openQuotationEmailModal(button) {
 
     const validationMessage = validateSelectedQuotationItems(rfq, selectedItems);
     if (validationMessage) {
-        showQuotationSelectionWarning(row, 'Cannot Send Email', validationMessage, 'alert-danger');
+        showQuotationSelectionWarning(row, 'Cannot Prepare Quotation', validationMessage, 'alert-danger');
         return;
     }
 
-    const selectedProductIds = new Set(selectedItems.productIds.map(String));
-    const notPrepared = Array.from(selectedProductIds).some(productId => {
-        const checkbox = row.querySelector(`.rfq-quotation-product[value="${productId}"]`);
-        return !checkbox || checkbox.dataset.prepared !== 'true';
-    });
-    if (notPrepared) {
-        showQuotationSelectionWarning(row, 'Cannot Send Email', 'Prepare quotation before sending email.', 'alert-danger');
-        return;
+    // Check if quotation mail was already sent for this RFQ (second time click)
+    const hasSentEmail = Boolean(
+        button.dataset.hasSentEmail === 'true' ||
+        (rfq && rfq.has_sent_email) ||
+        (rfq && rfq.products && rfq.products.some(p => p.quotation_email_sent)) ||
+        (rfq && rfq.quotation_no && rfq.quotation_no !== '-')
+    );
+
+    if (hasSentEmail) {
+        const confirmMsg = "The quotation mail was already sent for this RFQ. This will create and send a Revised Quotation.\n\nDo you want to continue?";
+        if (!confirm(confirmMsg)) {
+            return;
+        }
     }
 
     row.querySelector('.rfq-quotation-selection-warning')?.remove();
-    const form = document.getElementById('quotationEmailForm');
+
+    // Populate and open prepareQuotationModal
+    const form = document.getElementById('prepareQuotationForm');
     form.reset();
-    document.getElementById('quotationEmailRfqId').value = rfq.id;
-    document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
-    document.getElementById('quotationEmailSubject').value = `Quotation for ${rfq.rfq_no || 'RFQ'}`;
-    document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, selectedItems);
+    form.dataset.rfqId = String(rfq.id);
+    form.dataset.hasSentEmail = hasSentEmail ? 'true' : 'false';
 
-    const productInputs = document.getElementById('quotationEmailProductInputs');
-    productInputs.innerHTML = '';
+    const titleEl = document.getElementById('prepareQuotationModalLabel');
+    if (titleEl) {
+        titleEl.textContent = hasSentEmail ? `Prepare Revised Quotation - ${rfq.rfq_no}` : `Prepare Quotation - ${rfq.rfq_no}`;
+    }
+
+    const submitBtn = document.getElementById('prepareQuotationSubmitBtn');
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i class="bi bi-arrow-right-circle me-1"></i>Continue to Compose Email';
+    }
+
+    const tbody = document.querySelector('#prepareQuotationTable tbody');
+    tbody.innerHTML = '';
+    const datalist = document.getElementById('rfqProductsDatalist');
+    if (datalist) {
+        datalist.innerHTML = '';
+        (rfq.products || []).forEach(product => {
+            const option = document.createElement('option');
+            option.value = product.product_name || '';
+            datalist.appendChild(option);
+        });
+    }
+
     selectedItems.productIds.forEach(productId => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'quotation_product_ids';
-        input.value = productId;
-        productInputs.appendChild(input);
-    });
-    selectedItems.supplierPriceIds.forEach(priceId => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'quotation_supplier_price_ids';
-        input.value = priceId;
-        productInputs.appendChild(input);
+        const product = (rfq.products || []).find(item => String(item.id) === String(productId));
+        if (!product) return;
+        let rate = parseFloat(product.rate_per_unit) || 0;
+        let supplierValue = parseFloat(product.value) || 0;
+        let supplierPriceId = '';
+        const checkedSupplierPrice = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${product.id}"]:checked`);
+        if (checkedSupplierPrice) {
+            const supplierPrice = (product.supplier_prices || []).find(price => String(price.id) === String(checkedSupplierPrice.value));
+            if (supplierPrice) {
+                rate = parseFloat(supplierPrice.price) || rate;
+                supplierValue = parseFloat(supplierPrice.value) || supplierValue;
+                supplierPriceId = String(supplierPrice.id);
+            }
+        }
+        addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId);
     });
 
-    const selectedCount = selectedItems.productIds.length;
-    const note = document.getElementById('quotationAutoAttachmentNote');
-    note.textContent = `Latest prepared quotation/revision for ${selectedCount} selected product(s) will be attached automatically.`;
+    checkDeliveryWeeksVisibility();
+    checkInstallationChargeVisibility();
+    checkProfitWarning();
 
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('quotationEmailModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal')).show();
 }
 
 document.addEventListener('click', function (e) {
@@ -1259,9 +1339,17 @@ document.getElementById('previewQuotationAttachmentBtn')?.addEventListener('clic
     if (!rfqId) return;
     const prodInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_product_ids"]'));
     const spInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_supplier_price_ids"]'));
+    const mesRateInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="mes_rates"]'));
+    const dwInput = document.querySelector('#quotationEmailProductInputs input[name="delivery_weeks"]');
+    const icInput = document.querySelector('#quotationEmailProductInputs input[name="installation_charge"]');
+
     const params = new URLSearchParams();
     prodInputs.forEach(inp => params.append('product_ids', inp.value));
     spInputs.forEach(inp => params.append('supplier_price_ids', inp.value));
+    mesRateInputs.forEach(inp => params.append('mes_rates', inp.value));
+    if (dwInput && dwInput.value) params.append('delivery_weeks', dwInput.value);
+    if (icInput && icInput.value) params.append('installation_charge', icInput.value);
+
     const qs = params.toString();
     window.open(`/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`, '_blank');
 });
@@ -1524,30 +1612,104 @@ document.addEventListener('input', function (e) {
 document.addEventListener('submit', function (e) {
     const form = e.target.closest('#prepareQuotationForm');
     if (!form) return;
-    
-    document.cookie = 'rfq_quotation_downloaded=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const originalText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Downloading...';
-    
-    const checkTimer = setInterval(function() {
-        if (document.cookie.indexOf('rfq_quotation_downloaded=true') !== -1) {
-            clearInterval(checkTimer);
-            document.cookie = 'rfq_quotation_downloaded=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-            
-            const modalEl = document.getElementById('prepareQuotationModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) {
-                modal.hide();
-            }
-            
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-            window.location.reload();
+    e.preventDefault();
+
+    const rfqId = form.dataset.rfqId;
+    const rfq = rfqData.find(item => String(item.id) === String(rfqId));
+    if (!rfq) return;
+
+    const rows = form.querySelectorAll('#prepareQuotationTable tbody tr');
+    if (rows.length === 0) {
+        alert('Please select at least one product row.');
+        return;
+    }
+
+    const productIds = [];
+    const supplierPriceIds = [];
+    const mesRates = [];
+
+    rows.forEach(row => {
+        const prodIdInput = row.querySelector('input[name="product_ids"]');
+        const spIdInput = row.querySelector('input[name="supplier_price_ids"]');
+        const mesRateInput = row.querySelector('.prepare-quote-mes-rate');
+        const baseRateInput = row.querySelector('.prepare-quote-rate');
+
+        if (prodIdInput && prodIdInput.value) {
+            productIds.push(prodIdInput.value);
+            supplierPriceIds.push(spIdInput ? spIdInput.value : '');
+            const rateVal = mesRateInput && mesRateInput.value ? mesRateInput.value : (baseRateInput ? baseRateInput.value : '0');
+            mesRates.push(rateVal);
         }
-    }, 100);
+    });
+
+    const deliveryWeeks = document.getElementById('deliveryWeeksInput')?.value || '';
+    const installationCharge = document.getElementById('installationChargeInput')?.value || '';
+
+    // Hide prepare quotation modal
+    const modalEl = document.getElementById('prepareQuotationModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) {
+        modal.hide();
+    }
+
+    // Populate quotation email form
+    const emailForm = document.getElementById('quotationEmailForm');
+    emailForm.reset();
+    document.getElementById('quotationEmailRfqId').value = rfq.id;
+    document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
+    document.getElementById('quotationEmailSubject').value = `Quotation for ${rfq.rfq_no || 'RFQ'}`;
+    document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, {
+        productIds: productIds,
+        supplierPriceIds: supplierPriceIds.filter(Boolean)
+    });
+
+    const productInputs = document.getElementById('quotationEmailProductInputs');
+    productInputs.innerHTML = '';
+    productIds.forEach((productId, idx) => {
+        const pInput = document.createElement('input');
+        pInput.type = 'hidden';
+        pInput.name = 'quotation_product_ids';
+        pInput.value = productId;
+        productInputs.appendChild(pInput);
+
+        const spId = supplierPriceIds[idx];
+        if (spId) {
+            const spInput = document.createElement('input');
+            spInput.type = 'hidden';
+            spInput.name = 'quotation_supplier_price_ids';
+            spInput.value = spId;
+            productInputs.appendChild(spInput);
+        }
+
+        const mInput = document.createElement('input');
+        mInput.type = 'hidden';
+        mInput.name = 'mes_rates';
+        mInput.value = mesRates[idx] || '';
+        productInputs.appendChild(mInput);
+    });
+
+    if (deliveryWeeks) {
+        const dwInput = document.createElement('input');
+        dwInput.type = 'hidden';
+        dwInput.name = 'delivery_weeks';
+        dwInput.value = deliveryWeeks;
+        productInputs.appendChild(dwInput);
+    }
+    if (installationCharge) {
+        const icInput = document.createElement('input');
+        icInput.type = 'hidden';
+        icInput.name = 'installation_charge';
+        icInput.value = installationCharge;
+        productInputs.appendChild(icInput);
+    }
+
+    const hasSentEmail = form.dataset.hasSentEmail === 'true';
+    const note = document.getElementById('quotationAutoAttachmentNote');
+    note.textContent = hasSentEmail
+        ? `Revised quotation PDF for ${productIds.length} product(s) with entered MES rates will be generated and attached automatically upon sending.`
+        : `Quotation PDF for ${productIds.length} product(s) with entered MES rates will be generated and attached automatically upon sending.`;
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('quotationEmailModal')).show();
 });
 
 
@@ -1842,7 +2004,7 @@ function syncRfqPriceMode(row) {
     if (rateInput) {
         rateInput.disabled = !priceKnown;
         rateInput.readOnly = !priceKnown;
-        rateInput.required = priceKnown && !hasPriceDetails;
+        rateInput.required = false;
         rateInput.classList.add('d-none');
         if (!priceKnown && !hasPriceDetails) rateInput.value = '';
     }
@@ -1978,7 +2140,7 @@ function resetRfqForm() {
     document.getElementById('rfqFormAction').value = 'add';
     document.getElementById('rfqFormId').value = '';
     document.getElementById('rfqFormTitle').textContent = 'Add RFQ';
-    document.getElementById('rfqNoDisplay').value = 'Auto Generated';
+    document.getElementById('rfqNoDisplay').value = '{{ next_rfq_no|escapejs }}';
     document.getElementById('supplierEmailTo').value = '';
     document.getElementById('supplierEmailCc').value = '';
     document.getElementById('supplierEmailSubject').value = defaultSupplierEmailSubject;
@@ -2214,6 +2376,149 @@ document.getElementById('addRfqForm').addEventListener('input', function (e) {
     refreshSupplierEmailBody();
 });
 
+function showFieldValidationPopover(targetEl, message = 'Please fill out this field.') {
+    removeFieldValidationPopover();
+    if (!targetEl) return;
+
+    targetEl.focus();
+    targetEl.style.borderColor = '#86b7fe';
+    targetEl.style.boxShadow = '0 0 0 0.25rem rgba(13, 110, 253, 0.25)';
+
+    const container = targetEl.closest('.rfq-modal-body') || targetEl.closest('.modal-body') || document.body;
+    if (getComputedStyle(container).position === 'static') {
+        container.style.position = 'relative';
+    }
+
+    const popover = document.createElement('div');
+    popover.id = 'fieldValidationPopover';
+    popover.className = 'field-validation-popover';
+    popover.innerHTML = `
+        <span class="field-validation-icon">!</span>
+        <span>${escapeHtml(message)}</span>
+    `;
+
+    const rect = targetEl.getBoundingClientRect();
+    const parentRect = container.getBoundingClientRect();
+
+    popover.style.top = (rect.bottom - parentRect.top + container.scrollTop + 6) + 'px';
+    popover.style.left = Math.max(10, (rect.left - parentRect.left + container.scrollLeft + 4)) + 'px';
+
+    container.appendChild(popover);
+
+    const removeHandler = function (e) {
+        if (e && e.target && popover.contains(e.target)) return;
+        removeFieldValidationPopover();
+        document.removeEventListener('click', removeHandler);
+        document.removeEventListener('input', removeHandler);
+        document.removeEventListener('keydown', removeHandler);
+    };
+
+    setTimeout(() => {
+        document.addEventListener('click', removeHandler);
+        document.addEventListener('input', removeHandler);
+        document.addEventListener('keydown', removeHandler);
+    }, 150);
+}
+
+function removeFieldValidationPopover() {
+    const existing = document.getElementById('fieldValidationPopover');
+    if (existing) existing.remove();
+    document.querySelectorAll('.rfq-add-supplier-price, .rfq-rate, .rfq-price-known, .rfq-supplier-price-input, .rfq-supplier-price-supplier').forEach(el => {
+        el.style.borderColor = '';
+        el.style.boxShadow = '';
+    });
+}
+
+function validateRfqFormPrices() {
+    const rows = document.querySelectorAll('#rfqProductTable tbody tr');
+    for (let index = 0; index < rows.length; index++) {
+        const row = rows[index];
+        const nameInput = row.querySelector('input[name="product_name[]"]');
+        const productName = nameInput ? nameInput.value.trim() : `Product ${index + 1}`;
+        const priceKnownSelect = row.querySelector('.rfq-price-known');
+        const isPriceKnown = priceKnownSelect && priceKnownSelect.value !== 'no';
+
+        // Mandatory Params / Specs Validation
+        const specInput = row.querySelector('.rfq-product-spec-input');
+        let hasSpecs = false;
+        if (specInput && specInput.value && specInput.value.trim() !== '' && specInput.value.trim() !== '{}') {
+            try {
+                const parsed = JSON.parse(specInput.value);
+                if (typeof parsed === 'object' && parsed !== null && Object.keys(parsed).length > 0) {
+                    hasSpecs = true;
+                }
+            } catch (err) {
+                hasSpecs = false;
+            }
+        }
+        if (!hasSpecs) {
+            const specBtn = row.querySelector('.rfq-edit-spec-btn');
+            return {
+                valid: false,
+                row: row,
+                targetEl: specBtn,
+                message: 'Please fill out this field.'
+            };
+        }
+
+        if (isPriceKnown) {
+            const priceRows = row.querySelectorAll('.rfq-supplier-price-row');
+            if (priceRows.length === 0) {
+                return {
+                    valid: false,
+                    row: row,
+                    targetEl: row.querySelector('.rfq-add-supplier-price'),
+                    message: 'Please fill out this field.'
+                };
+            }
+
+            for (let pIdx = 0; pIdx < priceRows.length; pIdx++) {
+                const pRow = priceRows[pIdx];
+                const supplierSelect = pRow.querySelector('.rfq-supplier-price-supplier');
+                const priceInput = pRow.querySelector('.rfq-supplier-price-input');
+                if (!supplierSelect || !supplierSelect.value) {
+                    return {
+                        valid: false,
+                        row: row,
+                        targetEl: supplierSelect,
+                        message: 'Please fill out this field.'
+                    };
+                }
+                if (!priceInput || !priceInput.value || parseFloat(priceInput.value) <= 0) {
+                    return {
+                        valid: false,
+                        row: row,
+                        targetEl: priceInput,
+                        message: 'Please fill out this field.'
+                    };
+                }
+            }
+        }
+    }
+    return { valid: true };
+}
+
+const addRfqFormEl = document.getElementById('addRfqForm');
+if (addRfqFormEl) {
+    addRfqFormEl.addEventListener('submit', function (e) {
+        document.querySelectorAll('.rfq-rate.d-none').forEach(el => {
+            el.required = false;
+        });
+
+        const validation = validateRfqFormPrices();
+        if (!validation.valid) {
+            e.preventDefault();
+            if (typeof hideLoading === 'function') {
+                hideLoading();
+            }
+
+            const target = validation.targetEl || (validation.row ? validation.row.querySelector('.rfq-add-supplier-price') : null);
+            showFieldValidationPopover(target, validation.message || 'Please fill out this field.');
+            return false;
+        }
+    });
+}
+
 
 
 const submitBtn = document.getElementById('rfqSubmitBtn');
@@ -2321,18 +2626,7 @@ if (sendFromDraftBtn) {
     });
 }
 
-{% if messages %}
-document.addEventListener('DOMContentLoaded', function () {
-    const hasError = !!document.querySelector('#rfqModalAlertContainer .alert-danger, #rfqModalAlertContainer .alert-error');
-    if (hasError) {
-        const modalEl = document.getElementById('addRfqModal');
-        if (modalEl) {
-            const addModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-            addModal.show();
-        }
-    }
-});
-{% endif %}
+
 
 document.addEventListener('DOMContentLoaded', function () {
     const urlParams = new URLSearchParams(window.location.search);
@@ -2442,44 +2736,19 @@ function updateCrossRowSelectionState() {
 }
 
 function updateRowButtons(row, activeRow) {
-    const prepareButton = row.querySelector('.rfq-prepare-quotation-btn');
-    if (prepareButton) {
-        const checkedProducts = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
-        const hasSelection = checkedProducts.length > 0;
-        const hasPreparedSelection = checkedProducts.some(cb => {
-            const pid = cb.value;
-            const checkedRadio = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${pid}"]:checked`);
-            return cb.dataset.prepared === 'true' || (checkedRadio && checkedRadio.dataset.prepared === 'true');
-        });
-        prepareButton.disabled = !hasSelection;
-        prepareButton.innerHTML = hasPreparedSelection
-            ? '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Revised Quotation'
-            : '<i class="bi bi-file-earmark-pdf me-1"></i>Prepare Quotation';
-        prepareButton.title = "";
-    }
-
     const sendEmailBtn = row.querySelector('.rfq-send-quotation-email-btn');
     if (sendEmailBtn) {
-        const checkedProducts = Array.from(row.querySelectorAll('.rfq-quotation-product:checked'));
-        const isRfqPrepared = row.dataset.rfqPrepared === 'true' || sendEmailBtn.dataset.rfqPrepared === 'true';
-        let allPrepared;
+        const allProductCbs = Array.from(row.querySelectorAll('.rfq-quotation-product'));
+        const hasKnownPrices = allProductCbs.some(cb => !cb.disabled);
+
         if (activeRow && row !== activeRow) {
-            allPrepared = false;
-        } else if (checkedProducts.length === 0) {
-            allPrepared = isRfqPrepared;
+            sendEmailBtn.disabled = true;
+            sendEmailBtn.title = "";
+        } else if (!hasKnownPrices && allProductCbs.length > 0) {
+            sendEmailBtn.disabled = true;
+            sendEmailBtn.title = "Waiting for price details.";
         } else {
-            allPrepared = checkedProducts.every(cb => {
-                const pid = cb.value;
-                const checkedRadio = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${pid}"]:checked`);
-                const isCbPrepared = cb.dataset.prepared === 'true';
-                const isRadioPrepared = checkedRadio ? checkedRadio.dataset.prepared === 'true' : false;
-                return isCbPrepared || isRadioPrepared;
-            });
-        }
-        sendEmailBtn.disabled = !allPrepared;
-        if (!allPrepared && checkedProducts.length > 0) {
-            sendEmailBtn.title = "Quotation has not been prepared for the selected supplier/product options. Please prepare quotation first.";
-        } else {
+            sendEmailBtn.disabled = false;
             sendEmailBtn.title = "";
         }
     }
@@ -2566,7 +2835,7 @@ document.addEventListener('click', function(e) {
     const modalEl = document.getElementById('emailChainModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
-    loadEmailThread(rfqId);
+    loadEmailThread(rfqId, true);
 });
 
 // Toggle Smart Filter ON/OFF
@@ -2581,7 +2850,7 @@ document.getElementById('toggleSmartFilterCheck')?.addEventListener('change', fu
     }
 });
 
-function loadEmailThread(rfqId) {
+function loadEmailThread(rfqId, autoSync = false) {
     const listEl = document.getElementById('ecEmailList');
     listEl.innerHTML = `<div class="text-center py-5 text-muted">
         <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
@@ -2591,7 +2860,13 @@ function loadEmailThread(rfqId) {
 
     const filterCheck = document.getElementById('toggleSmartFilterCheck');
     const isFiltered = filterCheck ? filterCheck.checked : true;
-    const url = `/rfq/${rfqId}/email-thread/` + (isFiltered ? '' : '?all=1');
+    let url = `/rfq/${rfqId}/email-thread/`;
+    const queryParams = [];
+    if (!isFiltered) queryParams.push('all=1');
+    if (autoSync) queryParams.push('sync=1');
+    if (queryParams.length > 0) {
+        url += '?' + queryParams.join('&');
+    }
 
     fetch(url)
         .then(r => r.json())
@@ -3224,8 +3499,22 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
     if (rem) specs["Remarks"] = rem;
 
     const hiddenInput = activeParamRow.querySelector('.rfq-product-spec-input');
+    if (Object.keys(specs).length === 0) {
+        if (modalAlertContainer) {
+            modalAlertContainer.innerHTML = `
+                <div class="alert alert-warning alert-dismissible fade show mb-3 shadow-sm rounded-3" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2 text-warning fs-6"></i>
+                    <strong>Specification Required:</strong> Product specification parameters are mandatory. Please fill in at least one parameter before saving.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            modalAlertContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return;
+    }
+
     if (hiddenInput) {
-        hiddenInput.value = Object.keys(specs).length ? JSON.stringify(specs) : '';
+        hiddenInput.value = JSON.stringify(specs);
     }
 
     updateSpecPreview(activeParamRow);
@@ -3234,6 +3523,41 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
     const modalEl = document.getElementById('productParamsModal');
     if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
 });
+
+const productParamsModalEl = document.getElementById('productParamsModal');
+if (productParamsModalEl) {
+    productParamsModalEl.addEventListener('hide.bs.modal', function () {
+        if (!activeParamRow) return;
+        const specInput = activeParamRow.querySelector('.rfq-product-spec-input');
+        let hasSpecs = false;
+        if (specInput && specInput.value && specInput.value.trim() !== '' && specInput.value.trim() !== '{}') {
+            try {
+                const parsed = JSON.parse(specInput.value);
+                if (typeof parsed === 'object' && parsed !== null && Object.keys(parsed).length > 0) {
+                    hasSpecs = true;
+                }
+            } catch (e) {}
+        }
+        if (!hasSpecs) {
+            const specBtn = activeParamRow.querySelector('.rfq-edit-spec-btn');
+            const alertContainer = document.getElementById('rfqModalAlertContainer');
+            if (alertContainer) {
+                alertContainer.innerHTML = `
+                    <div class="alert alert-warning alert-dismissible fade show mb-3 shadow-sm rounded-3" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-2 text-warning fs-6"></i>
+                        <strong>Specification Required:</strong> Product specification parameters are mandatory for all products. You will not be able to add this RFQ until specifications are configured.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+            }
+            setTimeout(() => {
+                if (specBtn) {
+                    showFieldValidationPopover(specBtn, 'Please fill out this field.');
+                }
+            }, 250);
+        }
+    });
+}
 
 document.addEventListener('change', function(e) {
     if (e.target.matches('[name="product_type[]"]')) {

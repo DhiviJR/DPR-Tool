@@ -209,6 +209,7 @@ window.escapeHtml = function(value) {
     document.addEventListener('submit', function(e) {
         const form = e.target;
         if (form.target === '_blank') return;
+        if (e.defaultPrevented) return;
         if (form.checkValidity && !form.checkValidity()) return;
 
         showLoading();

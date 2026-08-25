@@ -24,6 +24,7 @@ class EmailRecord(models.Model):
     received_at = models.DateTimeField(default=timezone.now)
     reviewed = models.BooleanField(default=False)
     is_added_to_rfq = models.BooleanField(default=False, help_text="Indicates if enquiry email has been added to RFQ system")
+    is_added_to_po = models.BooleanField(default=False, help_text="Indicates if order email has been added to PO system")
 
     @property
     def displayed_category(self):

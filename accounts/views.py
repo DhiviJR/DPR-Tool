@@ -27,6 +27,7 @@ from pathlib import PurePath
 from zipfile import ZIP_DEFLATED, ZipFile
 from types import SimpleNamespace
 import re
+import html
 
 
 def _pct(part, whole):
@@ -3573,8 +3574,8 @@ def rfq_details(request):
                 if not product_type or quantity_raw in ('', None):
                     messages.error(request, f'Product Type and Qty are required in product row {i + 1}.')
                     return redirect('rfq_details')
-                if price_known and rate_raw in ('', None):
-                    messages.error(request, f'Add at least one supplier price detail in product row {i + 1}.')
+                if price_known and (not supplier_price_rows and rate_raw in ('', None, '0', '0.00', '0.0')):
+                    messages.error(request, f'Price details required for product row {i + 1}. Please click "+ Add Price Details" to enter price, or set "Price Known?" to "Not Known".')
                     return redirect('rfq_details')
                 try:
                     quantity, rate_per_unit, value = _calculate_product_line_value(
@@ -3606,10 +3607,20 @@ def rfq_details(request):
                 spec_raw = product_specs[i] if i < len(product_specs) else ''
                 spec_dict = {}
                 if spec_raw:
-                    try:
-                        spec_dict = json.loads(spec_raw) if isinstance(spec_raw, str) else spec_raw
-                    except Exception:
-                        spec_dict = {}
+                    clean_spec_raw = html.unescape(str(spec_raw)).strip()
+                    if clean_spec_raw:
+                        try:
+                            spec_dict = json.loads(clean_spec_raw) if isinstance(clean_spec_raw, str) else clean_spec_raw
+                        except Exception:
+                            spec_dict = {"Specification": clean_spec_raw}
+
+                if (not spec_dict or len(spec_dict) == 0) and action == 'edit' and i < len(product_ids) and product_ids[i]:
+                    existing_p = RFQProduct.objects.filter(pk=product_ids[i]).first()
+                    if existing_p and existing_p.product_specifications:
+                        spec_dict = existing_p.product_specifications
+
+                if not spec_dict or not isinstance(spec_dict, dict) or len(spec_dict) == 0:
+                    spec_dict = {"Specification": "As per enquiry"}
 
                 product_rows.append({
                     'id': product_id,
@@ -3799,6 +3810,9 @@ def rfq_details(request):
             quotation_attachment = request.FILES.get('quotation_email_attachment')
             quotation_product_ids = request.POST.getlist('quotation_product_ids')
             quotation_supplier_price_ids = request.POST.getlist('quotation_supplier_price_ids')
+            mes_rates = request.POST.getlist('mes_rates')
+            delivery_weeks = request.POST.get('delivery_weeks')
+            installation_charge = request.POST.get('installation_charge')
 
             customer_emails = [
                 email.strip()
@@ -3821,7 +3835,10 @@ def rfq_details(request):
             quotation_products, quotation_product_ids_to_mark = _build_selected_quotation_products(
                 rfq,
                 quotation_product_ids,
-                quotation_supplier_price_ids
+                quotation_supplier_price_ids,
+                mes_rates=mes_rates,
+                delivery_weeks=delivery_weeks,
+                installation_charge=installation_charge
             )
             if quotation_product_ids or quotation_supplier_price_ids:
                 if not quotation_products:
@@ -3851,22 +3868,16 @@ def rfq_details(request):
             try:
                 attachments_to_send = []
                 if quotation_products:
+                    # Check if there is an unsent quotation record prepared for this exact selection
                     quotation_record = _find_latest_matching_quotation(
                         rfq,
                         quotation_product_ids_to_mark,
                         email_sent=False
                     )
-                    if quotation_record is None:
-                        quotation_record = _find_latest_matching_quotation(
-                            rfq,
-                            quotation_product_ids_to_mark,
-                            email_sent=None
-                        )
                     if quotation_record is not None:
-                        quotation_products = _deserialize_quotation_products(quotation_record.products_snapshot)
-                        if quotation_product_ids_to_mark:
-                            pid_set = {int(x) for x in quotation_product_ids_to_mark if str(x).isdigit()}
-                            quotation_products = [p for p in quotation_products if getattr(p, 'id', None) in pid_set]
+                        # Update the existing unsent quotation record with the newly entered quotation products snapshot
+                        quotation_record.products_snapshot = _serialize_quotation_products(quotation_products)
+                        quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
                     else:
                         quotation_record = _create_rfq_quotation_record(
                             rfq,
@@ -3909,7 +3920,8 @@ def rfq_details(request):
 
                     if quotation_record:
                         quotation_record.email_sent = True
-                        quotation_record.save(update_fields=['email_sent', 'updated_at'])
+                        quotation_record.products_snapshot = _serialize_quotation_products(quotation_products)
+                        quotation_record.save(update_fields=['email_sent', 'products_snapshot', 'updated_at'])
 
                 rfq.email_sent_date = timezone.now()
                 rfq.quotation_due_date = timezone.localdate() + timedelta(days=3)
@@ -3971,6 +3983,14 @@ def rfq_details(request):
             or is_po_confirmed
         )
 
+        rfq.has_prices = any(p.price_known and p.value and p.value > 0 for p in rfq.products.all())
+        rfq.has_sent_email = (
+            bool(rfq.email_sent_date)
+            or rfq.quotation_email_sent
+            or rfq.quotations.filter(email_sent=True).exists()
+            or any(p.quotation_email_sent for p in rfq.products.all())
+        )
+
         if is_quote_submitted:
             rfq.order_status = 'confirmed'
             confirmed_rfqs.append(rfq)
@@ -4026,12 +4046,15 @@ def rfq_details(request):
             'remarks': rfq.remarks or '',
             'attachment_url': rfq.attachment.url if rfq.attachment else '',
             'attachment_name': rfq.attachment.name.split('/')[-1] if rfq.attachment else '',
+            'has_sent_email': rfq.has_sent_email,
+            'has_prices': rfq.has_prices,
             'row_class': row_class,  # Row highlighting class for color-based alerts
             'products': [
                 {
                     'id': product.id,
                     'product_name': product.product_name,
                     'product_type': product.product_type or '',
+                    'product_specifications': product.product_specifications or {},
                     'price_known': product.price_known,
                     'quotation_email_sent': product.quotation_email_sent,
                     'quotation_prepared': product.quotation_prepared,
@@ -4058,6 +4081,10 @@ def rfq_details(request):
         })
     customers = Customer.objects.order_by('customer_name')
     suppliers = Supplier.objects.order_by('supplier_name')
+    last_rfq = RFQ.objects.order_by('-id').first()
+    next_rfq_id = (last_rfq.id + 1) if last_rfq else 1
+    next_rfq_no = f"RFQ-{timezone.now().year}-{next_rfq_id:04d}"
+
     return render(request, 'rfq_details.html', {
         'rfqs': rfqs_to_display,
         'customers': customers,
@@ -4068,6 +4095,7 @@ def rfq_details(request):
         'default_supplier_email_body': _get_default_supplier_email_body(),
         'status_filter': status_filter,
         'tab_counts': tab_counts,
+        'next_rfq_no': next_rfq_no,
     })
 
 
@@ -4093,8 +4121,19 @@ def rfq_quotation_download(request, rfq_id):
                 temp_prods, pids_to_mark = _build_selected_quotation_products(rfq, int_pids, int_spids)
                 latest_quotation = _find_latest_matching_quotation(rfq, pids_to_mark, email_sent=None)
 
+        mes_rates = request.GET.getlist('mes_rates')
+        delivery_weeks = request.GET.get('delivery_weeks')
+        installation_charge = request.GET.get('installation_charge')
+
         if req_product_ids or req_supplier_price_ids:
-            products, _ = _build_selected_quotation_products(rfq, req_product_ids, req_supplier_price_ids)
+            products, _ = _build_selected_quotation_products(
+                rfq,
+                req_product_ids,
+                req_supplier_price_ids,
+                mes_rates=mes_rates,
+                delivery_weeks=delivery_weeks,
+                installation_charge=installation_charge
+            )
             quote_no = latest_quotation.quotation_number if latest_quotation else _get_mes_quote_no(rfq)
         elif latest_quotation:
             products = _deserialize_quotation_products(latest_quotation.products_snapshot)
@@ -4433,6 +4472,11 @@ def customer_order(request):
         dpr.cust_qty_ordered = total_products
         dpr.save(update_fields=['po_value', 'cust_qty_ordered'])
 
+        from_email_id_val = request.POST.get('from_email_id') or request.GET.get('from_email_id')
+        if from_email_id_val and str(from_email_id_val).isdigit():
+            from email_classifier.models import EmailRecord
+            EmailRecord.objects.filter(pk=int(from_email_id_val)).update(is_added_to_po=True)
+
         messages.success(
             request,
             'Customer Order Saved Successfully'
@@ -4495,6 +4539,15 @@ def add_customer(request):
             'state_code'
         , '').strip().upper()
 
+        is_sez_raw = request.POST.get(
+            'is_sez'
+        , 'No').strip()
+        is_sez = 'Yes' if is_sez_raw.lower() == 'yes' else 'No'
+
+        payment_terms = request.POST.get(
+            'payment_terms'
+        , '').strip()
+
         if not customer_name:
             return JsonResponse({
                 'status': 'error',
@@ -4539,7 +4592,11 @@ def add_customer(request):
 
             gstin=gstin or None,
 
-            state_code=state_code or None
+            state_code=state_code or None,
+
+            is_sez=is_sez,
+
+            payment_terms=payment_terms or None
         )
 
         return JsonResponse({
@@ -4548,7 +4605,7 @@ def add_customer(request):
 
             'id': customer.id,
 
-            'name': customer.customer_name,
+            'name': customer.clean_customer_name,
 
             'region': customer.region,
 
@@ -6226,16 +6283,45 @@ def get_rfq_email_thread(request, rfq_id):
         return JsonResponse({'status': 'error', 'message': 'RFQ not found.'}, status=404)
 
     if request.GET.get('sync') == '1':
-        sync_rfq_inbox(rfq)
+        try:
+            sync_rfq_inbox(rfq)
+        except Exception as e:
+            logger.warning(f"Error syncing inbox for RFQ {rfq_id}: {e}")
 
     show_all = request.GET.get('all') == '1'
     if show_all:
-        email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:150]
+        email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:500]
     else:
-        email_messages = rfq.email_messages.all().order_by('sent_at')
+        from django.db.models import Q
+        query_conds = Q(rfq=rfq)
+        if rfq.rfq_no:
+            query_conds |= Q(subject__icontains=rfq.rfq_no) | Q(body__icontains=rfq.rfq_no)
+
+        for quote in rfq.quotations.all():
+            if quote.quotation_number:
+                query_conds |= Q(subject__icontains=quote.quotation_number) | Q(body__icontains=quote.quotation_number)
+
+        if rfq.customer and rfq.customer.email:
+            c_email = rfq.customer.email.strip()
+            if c_email and 'mbt-corporation' not in c_email and 'hostinger' not in c_email:
+                query_conds |= Q(sender__icontains=c_email) | Q(recipients__icontains=c_email)
+
+        matched_msgs = RFQEmailMessage.objects.filter(query_conds).distinct()
+        unlinked = matched_msgs.filter(rfq__isnull=True)
+        if unlinked.exists():
+            unlinked.update(rfq=rfq)
+
+        email_messages = matched_msgs.order_by('sent_at')
 
     data = []
+    seen_keys = set()
     for msg in email_messages:
+        key = (
+            (msg.subject or '').strip().lower(),
+            (msg.sender or '').strip().lower(),
+            msg.sent_at.strftime('%Y-%m-%d %H:%M') if msg.sent_at else ''
+        )
+        seen_keys.add(key)
         data.append({
             'id': msg.id,
             'message_id': msg.message_id,
@@ -6249,7 +6335,41 @@ def get_rfq_email_thread(request, rfq_id):
             'sent_at': timezone.localtime(msg.sent_at).strftime('%b %d, %Y %I:%M %p') if msg.sent_at else '',
             'has_attachments': msg.has_attachments,
             'attachment_names': msg.attachment_names or '',
+            '_sort_date': msg.sent_at or timezone.now()
         })
+
+    if show_all:
+        try:
+            from email_classifier.models import EmailRecord
+            for er in EmailRecord.objects.all().order_by('-received_at')[:500]:
+                er_key = (
+                    (er.subject or '').strip().lower(),
+                    (er.sender or '').strip().lower(),
+                    er.received_at.strftime('%Y-%m-%d %H:%M') if er.received_at else ''
+                )
+                if er_key not in seen_keys:
+                    seen_keys.add(er_key)
+                    data.append({
+                        'id': f"er_{er.id}",
+                        'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
+                        'in_reply_to': '',
+                        'sender': er.sender or '',
+                        'recipients': 'info@mesinstruments.co.in',
+                        'cc_recipients': '',
+                        'subject': er.subject or '(No Subject)',
+                        'body': er.body or '',
+                        'direction': 'IN',
+                        'sent_at': timezone.localtime(er.received_at).strftime('%b %d, %Y %I:%M %p') if er.received_at else '',
+                        'has_attachments': False,
+                        'attachment_names': '',
+                        '_sort_date': er.received_at or timezone.now()
+                    })
+            data.sort(key=lambda x: x.get('_sort_date') or timezone.now(), reverse=True)
+        except Exception as e:
+            logger.warning(f"Could not merge EmailRecord into RFQ all mails: {e}")
+
+    for item in data:
+        item.pop('_sort_date', None)
 
     return JsonResponse({
         'status': 'success',
@@ -6347,8 +6467,8 @@ def sync_rfq_email_inbox(request, rfq_id=0):
     if rfq_id and int(rfq_id) > 0:
         rfq = RFQ.objects.filter(id=rfq_id).first()
 
-    # Pass rfq=None so sync_rfq_inbox fetches and matches emails globally across ALL RFQs
-    synced_count, err = sync_rfq_inbox(rfq=None)
+    # Pass target rfq into sync_rfq_inbox so it matches specifically for target_rfq if provided
+    synced_count, err = sync_rfq_inbox(rfq=rfq)
 
     if err:
         return JsonResponse({'status': 'warning', 'message': f'Sync notice: {err}', 'synced_count': synced_count})
@@ -6405,12 +6525,19 @@ def get_supplier_email_thread(request, dpr_id):
         )
 
     if show_all:
-        email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:150]
+        email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:500]
     else:
         email_messages = messages_query.order_by('sent_at')
 
     data = []
+    seen_keys = set()
     for msg in email_messages:
+        key = (
+            (msg.subject or '').strip().lower(),
+            (msg.sender or '').strip().lower(),
+            msg.sent_at.strftime('%Y-%m-%d %H:%M') if msg.sent_at else ''
+        )
+        seen_keys.add(key)
         data.append({
             'id': msg.id,
             'message_id': msg.message_id,
@@ -6424,7 +6551,41 @@ def get_supplier_email_thread(request, dpr_id):
             'sent_at': timezone.localtime(msg.sent_at).strftime('%b %d, %Y %I:%M %p') if msg.sent_at else '',
             'has_attachments': msg.has_attachments,
             'attachment_names': msg.attachment_names or '',
+            '_sort_date': msg.sent_at or timezone.now()
         })
+
+    if show_all:
+        try:
+            from email_classifier.models import EmailRecord
+            for er in EmailRecord.objects.all().order_by('-received_at')[:500]:
+                er_key = (
+                    (er.subject or '').strip().lower(),
+                    (er.sender or '').strip().lower(),
+                    er.received_at.strftime('%Y-%m-%d %H:%M') if er.received_at else ''
+                )
+                if er_key not in seen_keys:
+                    seen_keys.add(er_key)
+                    data.append({
+                        'id': f"er_{er.id}",
+                        'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
+                        'in_reply_to': '',
+                        'sender': er.sender or '',
+                        'recipients': 'info@mesinstruments.co.in',
+                        'cc_recipients': '',
+                        'subject': er.subject or '(No Subject)',
+                        'body': er.body or '',
+                        'direction': 'IN',
+                        'sent_at': timezone.localtime(er.received_at).strftime('%b %d, %Y %I:%M %p') if er.received_at else '',
+                        'has_attachments': False,
+                        'attachment_names': '',
+                        '_sort_date': er.received_at or timezone.now()
+                    })
+            data.sort(key=lambda x: x.get('_sort_date') or timezone.now(), reverse=True)
+        except Exception as e:
+            logger.warning(f"Could not merge EmailRecord into Supplier all mails: {e}")
+
+    for item in data:
+        item.pop('_sort_date', None)
 
     return JsonResponse({
         'status': 'success',
@@ -6497,9 +6658,21 @@ def send_supplier_email_reply(request, dpr_id):
         ))
 
     try:
+        rfq = None
+        if parent_message_id:
+            parent_record = RFQEmailMessage.objects.filter(message_id=parent_message_id).first()
+            if parent_record and parent_record.rfq:
+                rfq = parent_record.rfq
+
+        if not rfq and dpr.quotation_number:
+            from rfq.models import RFQQuotation
+            q_record = RFQQuotation.objects.filter(quotation_number=dpr.quotation_number).first()
+            if q_record and q_record.rfq:
+                rfq = q_record.rfq
+
         from .email_services import send_threaded_rfq_email
         msg_record = send_threaded_rfq_email(
-            rfq=None,
+            rfq=rfq,
             subject=subject,
             body=body,
             to_emails=to_emails,

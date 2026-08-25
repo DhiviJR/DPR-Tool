@@ -1425,7 +1425,7 @@ function openSupplierEmailChainModal(matchingPo) {
   loadSupplierEmailThread(dprId, matchingPo ? matchingPo.supplier_id : '');
 }
 
-function loadSupplierEmailThread(dprId, supplierId) {
+function loadSupplierEmailThread(dprId, supplierId, autoSync = false) {
   const listEl = document.getElementById('supplierEcEmailList');
   listEl.innerHTML = `<div class="text-center py-5 text-muted">
       <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
@@ -1433,7 +1433,12 @@ function loadSupplierEmailThread(dprId, supplierId) {
 
   const filterCheck = document.getElementById('toggleSupplierSmartFilterCheck');
   const isFiltered = filterCheck ? filterCheck.checked : true;
-  const url = `/dpr/${dprId}/supplier-email-thread/?supplier_id=${supplierId || ''}` + (isFiltered ? '' : '&all=1');
+  const queryParams = [];
+  if (supplierId) queryParams.push(`supplier_id=${encodeURIComponent(supplierId)}`);
+  if (!isFiltered) queryParams.push('all=1');
+  if (autoSync) queryParams.push('sync=1');
+
+  const url = `/dpr/${dprId}/supplier-email-thread/` + (queryParams.length > 0 ? '?' + queryParams.join('&') : '');
 
   fetch(url)
     .then(r => r.json())
@@ -1646,8 +1651,8 @@ document.getElementById('supplierSyncInboxBtn')?.addEventListener('click', funct
   const suppId = document.getElementById('supplierEmailChainSupplierId').value;
   const spinner = document.getElementById('supplierSyncSpinner');
   if (spinner) spinner.classList.add('spin');
-  loadSupplierEmailThread(dprId, suppId);
-  setTimeout(() => { if (spinner) spinner.classList.remove('spin'); }, 1500);
+  loadSupplierEmailThread(dprId, suppId, true);
+  setTimeout(() => { if (spinner) spinner.classList.remove('spin'); }, 2000);
 });
 
 document.getElementById('maximizeSupplierEmailChainBtn')?.addEventListener('click', function() {

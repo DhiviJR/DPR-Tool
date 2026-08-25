@@ -1,8 +1,10 @@
+import datetime
 import re
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from .forms import EmailPasteForm, ReviewForm
 from .models import EmailRecord
@@ -22,11 +24,49 @@ def dashboard(request):
     if selected_category == 'ENQUIRY':
         selected_category = 'QUOTATION_REQUEST'
 
+    date_filter = request.GET.get('date_filter', 'all')
+    start_date = request.GET.get('start_date', '')
+    end_date = request.GET.get('end_date', '')
+
     non_cust_q = Q()
     for pat in NON_CUSTOMER_SENDER_PATTERNS:
         non_cust_q |= Q(sender__icontains=pat)
 
-    records = EmailRecord.objects.order_by('-received_at', '-id')
+    base_records = EmailRecord.objects.all()
+
+    # Smart Date Filtering
+    now = timezone.now()
+    local_now = timezone.localtime(now)
+    today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if date_filter == 'today':
+        base_records = base_records.filter(received_at__gte=today_start)
+    elif date_filter == 'yesterday':
+        yesterday_start = today_start - datetime.timedelta(days=1)
+        base_records = base_records.filter(received_at__gte=yesterday_start, received_at__lt=today_start)
+    elif date_filter == 'week':
+        week_start = today_start - datetime.timedelta(days=today_start.weekday())
+        base_records = base_records.filter(received_at__gte=week_start)
+    elif date_filter == 'month':
+        month_start = today_start.replace(day=1)
+        base_records = base_records.filter(received_at__gte=month_start)
+    elif date_filter == 'custom':
+        if start_date:
+            try:
+                s_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+                s_dt = timezone.make_aware(datetime.datetime.combine(s_date, datetime.time.min))
+                base_records = base_records.filter(received_at__gte=s_dt)
+            except ValueError:
+                pass
+        if end_date:
+            try:
+                e_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+                e_dt = timezone.make_aware(datetime.datetime.combine(e_date, datetime.time.max))
+                base_records = base_records.filter(received_at__lte=e_dt)
+            except ValueError:
+                pass
+
+    records = base_records.order_by('-received_at', '-id')
     total_emails_count = records.count()
 
     if selected_category == 'QUOTATION_REQUEST':
@@ -44,7 +84,7 @@ def dashboard(request):
     else:
         selected_category = ''
 
-    counts_raw = {item['ai_category']: item['total'] for item in EmailRecord.objects.values('ai_category').annotate(total=Count('id'))}
+    counts_raw = {item['ai_category']: item['total'] for item in base_records.values('ai_category').annotate(total=Count('id'))}
     category_order = [
         'CUSTOMER_ORDER',
         'PAYMENT_INVOICE',
@@ -54,7 +94,7 @@ def dashboard(request):
     ]
     counts = {cat: counts_raw.get(cat, 0) for cat in category_order}
 
-    enquiry_qs = EmailRecord.objects.filter(
+    enquiry_qs = base_records.filter(
         (Q(ai_category__in=['QUOTATION_REQUEST', 'ENQUIRY']) & ~non_cust_q) |
         Q(final_category__in=['QUOTATION_REQUEST', 'ENQUIRY'])
     )
@@ -63,7 +103,7 @@ def dashboard(request):
     enquiry_pending_count = enquiry_total_count - enquiry_added_count
     counts['QUOTATION_REQUEST'] = enquiry_total_count
 
-    cust_order_qs = EmailRecord.objects.filter(
+    cust_order_qs = base_records.filter(
         (Q(ai_category='CUSTOMER_ORDER') & ~non_cust_q) |
         Q(final_category='CUSTOMER_ORDER')
     )
@@ -77,6 +117,9 @@ def dashboard(request):
         'enquiry_total_count': enquiry_total_count,
         'enquiry_added_count': enquiry_added_count,
         'enquiry_pending_count': enquiry_pending_count,
+        'date_filter': date_filter,
+        'start_date': start_date,
+        'end_date': end_date,
     })
 
 
