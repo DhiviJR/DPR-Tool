@@ -5,12 +5,8 @@ from suppliers.models import Supplier
 
 class CustomerProduct(models.Model):
     PRODUCT_TYPE_CHOICES = (
-        ('APG steel', 'APG steel'),
-        ('ARG steel', 'ARG steel'),
-        ('APG carbide', 'APG carbide'),
-        ('ARG carbide', 'ARG carbide'),
-        ('SAPG', 'SAPG'),
-        ('SARG', 'SARG'),
+        ('APG', 'APG'),
+        ('ARG', 'ARG'),
         ('Multi-Gauge', 'Multi-Gauge'),
         ('unit Std Air', 'unit Std Air'),
         ('unit SPC Air', 'unit SPC Air'),
@@ -21,12 +17,8 @@ class CustomerProduct(models.Model):
         ('Spares', 'Spares'),
         ('TPG', 'TPG'),
         ('TRG', 'TRG'),
-        ('STPG', 'STPG'),
-        ('STRG', 'STRG'),
         ('PPG', 'PPG'),
         ('PRG', 'PRG'),
-        ('SPPG', 'SPPG'),
-        ('SPRG', 'SPRG'),
     )
     STATUS_CHOICES = (
         ('delivered', 'Delivered'),
@@ -53,6 +45,23 @@ class CustomerProduct(models.Model):
     mes_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     remarks = models.TextField(blank=True, null=True)
+    product_specifications = models.JSONField(blank=True, null=True, default=dict)
+
+    def get_formatted_specifications(self):
+        if not self.product_specifications or not isinstance(self.product_specifications, dict):
+            return ""
+        items = []
+        for k, v in self.product_specifications.items():
+            if v and str(v).strip():
+                items.append(f"{k}: {v}")
+        return " | ".join(items)
+
+    @property
+    def display_name(self):
+        specs = self.get_formatted_specifications()
+        if specs:
+            return f"{self.product_name} ({specs})"
+        return self.product_name
 
     attachment = models.FileField(
         upload_to='product_attachments/',
@@ -66,6 +75,12 @@ class CustomerProduct(models.Model):
         null=True,
         default=None
     )
+    PAYMENT_STATUS_CHOICES = (
+        ('not_received', 'Not Received'),
+        ('partially_received', 'Partially Received'),
+        ('amount_received', 'Amount Received'),
+    )
+
     quantity_delivered = models.IntegerField(default=0)
     delivery_detail_type = models.CharField(max_length=20, blank=True, null=True)
     invoice_dc_number = models.CharField(max_length=150, blank=True, null=True)
@@ -74,6 +89,23 @@ class CustomerProduct(models.Model):
         blank=True,
         null=True
     )
+    address_attachment = models.FileField(
+        upload_to='address_attachments/',
+        blank=True,
+        null=True
+    )
+
+    invoice_date = models.DateField(blank=True, null=True)
+    payment_status = models.CharField(
+        max_length=25,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='not_received'
+    )
+    received_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_received_date = models.DateField(blank=True, null=True)
+    payment_notes = models.TextField(blank=True, null=True)
+    expected_payment_date = models.DateField(blank=True, null=True)
+    follow_up_remarks = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return self.product_name
@@ -100,9 +132,18 @@ class SupplierProduct(models.Model):
     po_number = models.CharField(max_length=100)
 
     po_attachment = models.FileField(upload_to='supplier_po/', blank=True, null=True)
+    po_email_sent = models.BooleanField(default=False)
+    po_pdf_generated = models.BooleanField(default=False)  # True only after Generate PO & Update is clicked
+    PAYMENT_STATUS_CHOICES = (
+        ('not_received', 'Not Received'),
+        ('partially_received', 'Partially Received'),
+        ('amount_received', 'Amount Received'),
+    )
+
     quantity_received = models.IntegerField(default=0)
     quantity_not_ok = models.IntegerField(default=0)
     not_ok_reason = models.TextField(blank=True, null=True)
+    rework_sent_date = models.DateField(blank=True, null=True)
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -110,6 +151,33 @@ class SupplierProduct(models.Model):
         null=True,
         default=None
     )
+    invoice_dc_number = models.CharField(max_length=150, blank=True, null=True)
+    supplier_invoice_number = models.CharField(max_length=150, blank=True, null=True)
+    supplier_bill_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, blank=True, null=True)
+    bill_attachment = models.FileField(upload_to='supplier_bills/', blank=True, null=True)
+    invoice_date = models.DateField(blank=True, null=True)
+    payment_status = models.CharField(
+        max_length=25,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='not_received'
+    )
+    received_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_received_date = models.DateField(blank=True, null=True)
+    payment_notes = models.TextField(blank=True, null=True)
+    expected_payment_date = models.DateField(blank=True, null=True)
+    follow_up_remarks = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return self.po_number
+
+
+class CustomerInvoice(models.Model):
+    customer_product = models.ForeignKey(CustomerProduct, on_delete=models.CASCADE, related_name='invoices')
+    invoice_number = models.CharField(max_length=100)
+    quantity = models.IntegerField(default=0)
+    invoice_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.invoice_number} (Qty: {self.quantity})"
+

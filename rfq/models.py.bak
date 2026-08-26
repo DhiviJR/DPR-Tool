@@ -1,0 +1,107 @@
+from django.db import models
+from datetime import datetime
+
+from customers.models import Customer
+from products.models import CustomerProduct
+from suppliers.models import Supplier
+
+
+class RFQ(models.Model):
+    rfq_no = models.CharField(max_length=100, unique=True, blank=True, null=True)
+    mail_date = models.DateField()
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='rfqs')
+    enquiry_details = models.TextField()
+    remarks = models.TextField(blank=True, null=True)
+    attachment = models.FileField(upload_to='rfq_attachments/', blank=True, null=True)
+    
+    # Email Follow-up Alert System Fields
+    # Tracks when the quotation email was sent to the customer
+    email_sent_date = models.DateTimeField(null=True, blank=True, help_text="Date and time when quotation email was sent to customer")
+    
+    # Calculated deadline for customer quotation confirmation (email_sent_date + 3 days)
+    quotation_due_date = models.DateField(null=True, blank=True, help_text="Deadline for customer to confirm quotation (email_sent_date + 3 days)")
+    
+    # Flag to track if quotation email has been sent
+    quotation_email_sent = models.BooleanField(default=False, help_text="Indicates if quotation email has been sent to customer")
+    
+    # Flag to track if customer has confirmed the quotation
+    customer_confirmed = models.BooleanField(default=False, help_text="Indicates if customer has confirmed the quotation")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-mail_date', '-created_at']
+
+    def __str__(self):
+        return self.rfq_no
+
+    def save(self, *args, **kwargs):
+        if not self.rfq_no:
+            year = datetime.now().year
+            last_record = RFQ.objects.order_by('-id').first()
+            next_id = last_record.id + 1 if last_record else 1
+            self.rfq_no = f"RFQ-{year}-{next_id:04d}"
+        super().save(*args, **kwargs)
+
+
+class RFQProduct(models.Model):
+    rfq = models.ForeignKey(RFQ, on_delete=models.CASCADE, related_name='products')
+    product_name = models.CharField(max_length=255)
+    product_type = models.CharField(
+        max_length=50,
+        choices=CustomerProduct.PRODUCT_TYPE_CHOICES,
+        blank=True,
+        null=True
+    )
+    price_known = models.BooleanField(default=True)
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name='rfq_price_requests'
+    )
+    suppliers = models.ManyToManyField(
+        Supplier,
+        blank=True,
+        related_name='rfq_multi_price_requests'
+    )
+    quantity = models.IntegerField(default=0)
+    rate_per_unit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    value = models.DecimalField(max_digits=12, decimal_places=2)
+    quotation_email_sent = models.BooleanField(
+        default=False,
+        help_text="Indicates if quotation email has been sent for this product"
+    )
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.rfq.rfq_no} - {self.product_name}"
+
+
+class RFQSupplierPrice(models.Model):
+    product = models.ForeignKey(
+        RFQProduct,
+        on_delete=models.CASCADE,
+        related_name='supplier_prices'
+    )
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.PROTECT,
+        related_name='rfq_supplier_prices'
+    )
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('product', 'supplier')
+        ordering = ['supplier__supplier_name']
+
+    def __str__(self):
+        return f"{self.product} - {self.supplier}: {self.price}"
+
+
+

@@ -13,7 +13,14 @@
         </h1>
         <p class="dpr-page-subtitle mb-0">Manage DPR records, products, and supplier linkage</p>
     </div>
-    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+    <div class="d-flex flex-wrap gap-2">
+        {% if can_view_customer_order %}
+        <a href="{% url 'customer_order' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i>Create DPR
+        </a>
+        {% endif %}
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+    </div>
 </div>
 
 <div class="dpr-card dpr-table-card">
@@ -53,11 +60,13 @@
                         <th class="sortable" data-col="2" data-sort-type="text">Customer Name <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="3" data-sort-type="text">Region <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="4" data-sort-type="text">PO Number <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="5" data-sort-type="text">Supplier/Customer Qty Ordered <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="6" data-sort-type="text">Supplier/Customer Qty Delivered <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="7" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="8" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="9" data-sort-type="text">Download <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="5" data-sort-type="date">PO Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="6" data-sort-type="date">Mail Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="7" data-sort-type="text">Supplier/Customer Qty Ordered <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="8" data-sort-type="text">Supplier/Customer Qty Delivered <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="10" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="11" data-sort-type="text">Download <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -68,15 +77,22 @@
                         <td data-sort-value="{{ dpr.customer.customer_name|default:''|lower }}">{{ dpr.customer.customer_name }}</td>
                         <td data-sort-value="{{ dpr.customer.region|default:''|lower }}">{{ dpr.customer.region|default:'-' }}</td>
                         <td data-sort-value="{{ dpr.po_number|default:''|lower }}">{{ dpr.po_number|default:'-' }}</td>
+                        {% if dpr.confirmation_type == 'Mail Confirmation' %}
+                            <td data-sort-value="">-</td>
+                            <td data-sort-value="{{ dpr.po_date|date:'Y-m-d'|default:'' }}">{{ dpr.po_date|date:'Y-m-d'|default:'-' }}</td>
+                        {% else %}
+                            <td data-sort-value="{{ dpr.po_date|date:'Y-m-d'|default:'' }}">{{ dpr.po_date|date:'Y-m-d'|default:'-' }}</td>
+                            <td data-sort-value="">-</td>
+                        {% endif %}
                         <td data-sort-value="{{ dpr.supplier_quantity_ordered }}/{{ dpr.total_quantity_ordered }}">{{ dpr.supplier_quantity_ordered }}/{{ dpr.total_quantity_ordered }}</td>
                         <td data-sort-value="{{ dpr.supplier_qty_received }}/{{ dpr.customer_qty_delivered }}">{{ dpr.supplier_qty_received }}/{{ dpr.customer_qty_delivered }}</td>
                         <td data-sort-value="{{ dpr.po_value|default:0 }}">{{ dpr.po_value|default:'-' }}</td>
                         <td data-sort-value="action">
-                            <div class="d-flex flex-wrap gap-2">
+                            <div class="d-flex flex-wrap gap-2 {% if dpr.filter_state == 'completed' %}justify-content-center{% endif %}">
                                 <button type="button" class="btn btn-info btn-sm btn-product-list">Product List</button>
+                                {% if dpr.filter_state != 'completed' %}
                                 <button type="button" class="btn btn-primary btn-sm btn-edit-dpr">Edit</button>
                                 <button type="button" class="btn btn-warning btn-sm btn-edit-supplier">Edit Supplier</button>
-                                {% if dpr.filter_state != 'completed' %}
                                 <select class="form-select form-select-sm dpr-status-select" style="width: 120px;">
                                     <option value="" {% if not dpr.status %}selected{% endif %}>Select</option>
                                     <option value="hold" {% if dpr.status == 'hold' %}selected{% endif %}>Hold</option>
@@ -95,7 +111,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="10" class="text-center">No DPR records found.</td>
+                        <td colspan="12" class="text-center">No DPR records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

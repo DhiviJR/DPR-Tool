@@ -95,7 +95,7 @@ function initPoTableTools(options) {
         getDataRows().forEach((row) => {
             if (row.style.display === 'none') return;
             index += 1;
-            const serialCell = row.cells[0];
+            const serialCell = row.querySelector('td.serial-cell') || row.cells[0];
             if (serialCell && !serialCell.querySelector('input, select, button')) {
                 serialCell.textContent = index;
             }
@@ -165,6 +165,9 @@ function initPoTableTools(options) {
         renumberVisibleRows();
         noResultsRow.style.display = rows.length > 0 && visibleCount === 0 ? '' : 'none';
         updateRowCount(visibleCount, rows.length);
+        if (typeof options.onUpdate === 'function') {
+            options.onUpdate(visibleCount, rows.length);
+        }
     }
 
     headers.forEach((th) => {

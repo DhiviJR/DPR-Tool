@@ -13,6 +13,13 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -33,13 +40,13 @@ ALLOWED_HOSTS = [
     host.strip()
     for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
     if host.strip()
-]
+] or ['*']
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
     if origin.strip()
-]
+] or ['http://127.0.0.1:8000', 'http://localhost:8000']
 
 
 # Application definition
@@ -58,6 +65,7 @@ INSTALLED_APPS = [
     'dpr',
     'products',
     'rfq',
+    'email_classifier',
 ]
 AUTH_USER_MODEL = 'accounts.CustomUser'
 MIDDLEWARE = [
@@ -82,12 +90,14 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'accounts.context_processors.rbac_context',
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'DPR_Project.wsgi.application'
+
 
 
 # Database
@@ -161,24 +171,37 @@ LOGOUT_REDIRECT_URL = '/login/'
 
 EMAIL_BACKEND = os.environ.get(
     'DJANGO_EMAIL_BACKEND',
-    'django.core.mail.backends.filebased.EmailBackend'
+    'django.core.mail.backends.smtp.EmailBackend'
 )
-EMAIL_FILE_PATH = os.path.join(BASE_DIR, 'sent_emails')
-EMAIL_HOST = os.environ.get('DJANGO_EMAIL_HOST', '')
-EMAIL_PORT = int(os.environ.get('DJANGO_EMAIL_PORT', '25'))
-EMAIL_HOST_USER = os.environ.get('DJANGO_EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', '')
+# EMAIL_FILE_PATH = os.path.join(BASE_DIR, 'sent_emails')
+EMAIL_HOST = os.environ.get('DJANGO_EMAIL_HOST', 'mail.mesinstruments.co.in')
+EMAIL_PORT = int(os.environ.get('DJANGO_EMAIL_PORT', '465'))
+EMAIL_HOST_USER = os.environ.get('DJANGO_EMAIL_HOST_USER', 'info@mesinstruments.co.in')
+EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', 'Info@987654321')
 EMAIL_USE_TLS = os.environ.get('DJANGO_EMAIL_USE_TLS', 'False').lower() == 'true'
-EMAIL_USE_SSL = os.environ.get('DJANGO_EMAIL_USE_SSL', 'False').lower() == 'true'
-EMAIL_TIMEOUT = int(os.environ.get('DJANGO_EMAIL_TIMEOUT', '20'))
+EMAIL_USE_SSL = os.environ.get('DJANGO_EMAIL_USE_SSL', 'True').lower() == 'true'
+EMAIL_TIMEOUT = int(os.environ.get('DJANGO_EMAIL_TIMEOUT', '30'))
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DJANGO_DEFAULT_FROM_EMAIL',
     'info@mesinstruments.co.in'
 )
+# IMAP Settings for Inbox Sync
+EMAIL_IMAP_HOST = os.environ.get('DJANGO_EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
+EMAIL_IMAP_PORT = int(os.environ.get('DJANGO_EMAIL_IMAP_PORT', '993'))
+
+# Email Classifier Settings
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
+OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+EMAIL_CLASSIFIER_BACKEND = os.environ.get('EMAIL_CLASSIFIER_BACKEND', 'rules')
+EMAIL_IMAP_USERNAME = os.environ.get('EMAIL_IMAP_USERNAME', EMAIL_HOST_USER)
+EMAIL_IMAP_PASSWORD = os.environ.get('EMAIL_IMAP_PASSWORD', EMAIL_HOST_PASSWORD)
+EMAIL_IMAP_MAILBOX = os.environ.get('EMAIL_IMAP_MAILBOX', 'INBOX')
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+
 
 

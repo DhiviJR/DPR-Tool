@@ -4,19 +4,79 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
     <div>
-        <h1 class="dpr-page-title mb-1">Customer PO Product Details</h1>
+        <h1 class="dpr-page-title mb-1">Material Status</h1>
         <p class="dpr-page-subtitle mb-0">Track delivery status, validity, and supplier linkage</p>
     </div>
     <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
 </div>
 
-<div class="dpr-card dpr-table-card">
+<!-- KPI Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon blue"><i class="bi bi-bag-check"></i></div>
+                <div>
+                    <div class="dpr-kpi-value text-dark">{{ total_products }}</div>
+                    <div class="dpr-kpi-label">Total Product Items</div>
+                    <div class="small text-muted mt-1">Ordered Qty: {{ total_ordered_qty }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon green"><i class="bi bi-check-circle-fill"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value text-success">{{ delivered_count }}</div>
+                        <div class="dpr-kpi-label">Products Delivered</div>
+                        <div class="small text-muted mt-1">Delivered Qty: {{ total_delivered_qty }}</div>
+                    </div>
+                </div>
+                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 fw-semibold">Delivered</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dpr-kpi-icon red"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div>
+                        <div class="dpr-kpi-value text-danger">{{ not_delivered_count }}</div>
+                        <div class="dpr-kpi-label">Products Pending</div>
+                        <div class="small text-muted mt-1">Pending Qty: {{ total_pending_qty }}</div>
+                    </div>
+                </div>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1 fw-semibold">Pending</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="dpr-card p-3 h-100 border-0 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <div class="dpr-kpi-icon purple"><i class="bi bi-pie-chart-fill"></i></div>
+                <div class="flex-grow-1">
+                    <div class="dpr-kpi-value text-dark">{{ delivery_pct }}%</div>
+                    <div class="dpr-kpi-label">Delivery Completion Rate</div>
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ delivery_pct }}%;" aria-valuenow="{{ delivery_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="dpr-card dpr-table-card border-0 shadow-sm">
     <div class="dpr-table-toolbar">
         <div class="row g-2 align-items-center">
             <div class="col-lg-5">
                 <div class="input-group">
-                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input type="search" id="customerPoSearch" class="form-control"
+                    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="search" id="customerPoSearch" class="form-control border-start-0 ps-0"
                            placeholder="Search DPR, product, customer, dates, quantities…" autocomplete="off">
                 </div>
             </div>
@@ -33,14 +93,14 @@
                 </select>
             </div>
             <div class="col-lg-4 text-lg-end">
-                <span id="customerPoRowCount" class="text-muted small"></span>
+                <span id="customerPoRowCount" class="text-muted small fw-semibold"></span>
             </div>
         </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table id="customerPoTable" class="table table-hover align-middle mb-0">
-                <thead>
+                <thead class="table-light">
                     <tr>
                         <th class="sortable" data-col="0" data-sort-type="number">S.No <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="1" data-sort-type="text">DPR Serial No <i class="sort-icon bi bi-arrow-down-up"></i></th>
@@ -52,9 +112,8 @@
                         <th class="sortable" data-col="7" data-sort-type="number">Quantity Delivered <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="8" data-sort-type="date">PO Validity <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="10" data-sort-type="date">Expected Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="11" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="12" data-sort-type="text">Delivery Status <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="10" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable text-nowrap" data-col="11" data-sort-type="text" style="width: 1%; white-space: nowrap;">Delivery Status <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -67,13 +126,12 @@
                         <td data-sort-value="{{ product.dpr.serial_number|default:''|lower }}">{{ product.dpr.serial_number }}</td>
                         <td data-sort-value="{{ product.dpr.customer.customer_name|default:''|lower }}">{{ product.dpr.customer.customer_name }}</td>
                         <td data-sort-value="{{ product.dpr.po_number|default:''|lower }}">{{ product.dpr.po_number|default:'-' }}</td>
-                        <td data-sort-value="{{ product.product_name|default:''|lower }}">{{ product.product_name }}</td>
+                        <td data-sort-value="{{ product.display_name|default:''|lower }}">{{ product.display_name }}</td>
                         <td data-sort-value="{{ product.dpr.po_date|date:'Y-m-d'|default:'' }}">{{ product.dpr.po_date|date:'Y-m-d'|default:'-' }}</td>
                         <td data-sort-value="{{ product.quantity_ordered }}">{{ product.quantity_ordered }}</td>
                         <td class="quantity-delivered-cell" data-sort-value="{{ product.quantity_delivered }}">{{ product.quantity_delivered }}</td>
                         <td data-sort-value="{{ product.dpr.po_validity|date:'Y-m-d'|default:'' }}">{{ product.dpr.po_validity|date:'Y-m-d'|default:'-' }}</td>
                         <td data-sort-value="{{ product.dpr.po_value|default:0 }}">{{ product.dpr.po_value|default:'-' }}</td>
-                        <td data-sort-value="">-</td>
                         <td data-sort-value="view supplier status">
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="button" class="btn btn-info btn-sm btn-supplier-status">
@@ -81,21 +139,72 @@
                                 </button>
                             </div>
                         </td>
-                        <td data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'invoice_pending' %}invoice pending{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
-                            <select class="form-select form-select-sm customer-product-status" style="width: 160px;" data-prev-status="{{ product.status|default:'' }}">
-                                <option value="" {% if not product.status %}selected{% endif %}>Select</option>
-                                <option value="delivered" {% if product.status == 'delivered' %}selected{% endif %}>Closed</option>
-                                <option value="partially_delivered" {% if product.status == 'partially_delivered' %}selected{% endif %}>Partially Closed</option>
-                                <option value="cancelled" {% if product.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                                {% if product.status == 'invoice_pending' %}
-                                <option value="invoice_pending" selected hidden>Invoice Pending</option>
+                        <td class="text-nowrap" style="white-space: nowrap;" data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'invoice_pending' %}invoice pending{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
+                            {% if product.status == 'delivered' or product.quantity_delivered >= product.quantity_ordered %}
+                            <div class="d-flex align-items-center justify-content-center gap-1 flex-wrap">
+                                {% if product.generated_invoices %}
+                                    {% for inv in product.generated_invoices %}
+                                    <a href="{% url 'generate_customer_invoice_pdf' product.id inv.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" style="min-width: 140px;" title="Open Generated Invoice PDF (Qty: {{ inv.quantity }})">
+                                        <i class="bi bi-file-earmark-pdf me-1"></i>{{ inv.invoice_number }}
+                                    </a>
+                                    {% endfor %}
+                                {% elif product.quantity_delivered > 0 %}
+                                    <a href="{% url 'generate_customer_invoice' product.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" style="min-width: 140px;" title="Open Generated Invoice PDF">
+                                        <i class="bi bi-file-earmark-pdf me-1"></i>{{ product.generated_invoice_number }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
                                 {% endif %}
-                            </select>
+                            </div>
+                            {% else %}
+                            <div class="d-inline-flex align-items-center gap-1 text-nowrap">
+                                <div class="d-inline-flex flex-column gap-1">
+                                    {% if product.material_status_code == 'pending' %}
+                                    <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="The item is not received from supplier">
+                                        <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed; pointer-events: none;" data-product-id="{{ product.id }}" disabled title="The item is not received from supplier">
+                                            Generate Invoice
+                                        </button>
+                                    </span>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a;" data-product-id="{{ product.id }}">
+                                        Generate Invoice
+                                    </button>
+                                    {% endif %}
+
+                                     <a href="{% url 'print_customer_address_pdf' product.id %}" target="_blank" class="btn btn-sm text-white text-nowrap" style="background-color: #0284c7; border-color: #0284c7;" title="View Auto-Generated Address Printout">
+                                         <i class="bi bi-printer me-1"></i>Address printout
+                                     </a>
+
+                                    {% if product.generated_invoices %}
+                                        {% for inv in product.generated_invoices %}
+                                        <a href="{% url 'generate_customer_invoice_pdf' product.id inv.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF (Qty: {{ inv.quantity }})">
+                                            <i class="bi bi-file-earmark-pdf me-1"></i>{{ inv.invoice_number }}
+                                        </a>
+                                        {% endfor %}
+                                    {% elif product.quantity_delivered > 0 %}
+                                        <a href="{% url 'generate_customer_invoice' product.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF">
+                                            <i class="bi bi-file-earmark-pdf me-1"></i>{{ product.generated_invoice_number }}
+                                        </a>
+                                    {% endif %}
+                                </div>
+                                {% if product.status != 'delivered' and product.quantity_delivered < product.quantity_ordered %}
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-danger btn-cancel-customer-order"
+                                        data-product-id="{{ product.id }}"
+                                        {% if product.status == 'cancelled' %}disabled{% endif %}>
+                                    {% if product.status == 'cancelled' %}Cancelled{% else %}Cancel Order{% endif %}
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="13" class="text-center">No product records found.</td>
+                        <td colspan="12" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-2 text-secondary"></i>
+                            No product records found.
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -127,9 +236,11 @@
                                 <th>S.No</th>
                                 <th>Supplier</th>
                                 <th>Qty</th>
+                                <th>Qty Received</th>
                                 <th>PO Number</th>
                                 <th>PO Value</th>
                                 <th>PO Date</th>
+                                <th>Expected Date</th>
                                 <th>PO Validity</th>
                             </tr>
                         </thead>
@@ -149,9 +260,26 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <label for="partialDeliveredQty" class="form-label">Enter quantity delivered</label>
-                <input type="number" min="1" id="partialDeliveredQty" class="form-control">
-                <div class="form-text" id="partialDeliveryHint"></div>
+                <div class="mb-3">
+                    <label for="partialDeliveredQty" class="form-label">Enter quantity delivered</label>
+                    <input type="number" min="1" id="partialDeliveredQty" class="form-control">
+                    <div class="form-text" id="partialDeliveryHint"></div>
+                </div>
+                <div class="mb-3">
+                    <label for="partialDeliveryDetailType" class="form-label">Delivery Detail</label>
+                    <select id="partialDeliveryDetailType" class="form-select">
+                        <option value="invoice">Invoice</option>
+                        <option value="dc">DC</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="partialInvoiceDcNumber" class="form-label" id="partialInvoiceDcNumberLabel">Invoice number</label>
+                    <input type="text" id="partialInvoiceDcNumber" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label for="partialInvoiceDcAttachment" class="form-label">Attachment</label>
+                    <input type="file" id="partialInvoiceDcAttachment" class="form-control">
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -303,7 +431,7 @@ function postStatusUpdate(row, selectElement, status, payload = {}) {
             quantityDeliveredCell.textContent = '0';
             quantityDeliveredCell.setAttribute('data-sort-value', '0');
         }
-        const inwardCell = row.cells[12];
+        const inwardCell = row.cells[11];
         if (inwardCell) {
             const statusLabels = {
                 delivered: 'closed',
@@ -331,7 +459,7 @@ document.addEventListener('click', function (e) {
             const tbody = document.getElementById('supplierStatusBody');
             tbody.innerHTML = '';
             if (!data.supplier_rows.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No supplier records found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center">No supplier records found.</td></tr>';
             } else {
                 data.supplier_rows.forEach((item, index) => {
                     const tr = document.createElement('tr');
@@ -339,25 +467,87 @@ document.addEventListener('click', function (e) {
                         <td>${index + 1}</td>
                         <td>${item.supplier_name}</td>
                         <td>${item.quantity}</td>
+                        <td>${item.quantity_received}</td>
                         <td>${item.po_number}</td>
                         <td>${item.po_value}</td>
                         <td>${item.po_date}</td>
+                        <td>${item.expected_date}</td>
                         <td>${item.po_validity}</td>
                     `;
                     tbody.appendChild(tr);
                 });
             }
 
-            const modal = new bootstrap.Modal(document.getElementById('supplierStatusModal'));
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierStatusModal'));
             modal.show();
         });
 });
 
+document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('btn-cancel-customer-order')) return;
+    const button = e.target;
+    const productId = button.getAttribute('data-product-id');
+    const row = button.closest('tr[data-product-id]');
+
+    if (!confirm('Are you sure you want to cancel this order?')) return;
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    const formData = new FormData();
+    formData.append('status', 'cancelled');
+
+    fetch(`/customer-product/${productId}/status/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            button.textContent = 'Cancelled';
+            button.disabled = true;
+            if (row) {
+                const qtyDelCell = row.querySelector('.quantity-delivered-cell');
+                if (qtyDelCell) {
+                    qtyDelCell.textContent = '0';
+                }
+            }
+        } else {
+            alert(data.message || 'Error cancelling order.');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('An error occurred while cancelling order.');
+    });
+});
+
+document.addEventListener('mousedown', function (e) {
+    if (!e.target.classList.contains('customer-product-status')) return;
+    const select = e.target;
+    if (select.value === 'partially_delivered' || select.value === 'delivered') {
+        select.dataset.tempReset = select.value;
+        select.value = '';
+    }
+});
+
+document.addEventListener('blur', function (e) {
+    if (!e.target.classList.contains('customer-product-status')) return;
+    const select = e.target;
+    if (select.value === '' && select.dataset.tempReset) {
+        updateDeliveryStatusDropdown(select, select.dataset.tempReset);
+        delete select.dataset.tempReset;
+    }
+}, true);
+
 document.addEventListener('change', function (e) {
     if (!e.target.classList.contains('customer-product-status')) return;
+    delete e.target.dataset.tempReset;
     const row = e.target.closest('tr[data-product-id]');
     const status = e.target.value;
     const quantityOrdered = parseInt(row.children[6].textContent || '0', 10);
+    const currentDelivered = row.querySelector('.quantity-delivered-cell')?.textContent.trim() || '';
 
     if (status === 'partially_delivered') {
         pendingPartialUpdate = {
@@ -368,7 +558,11 @@ document.addEventListener('change', function (e) {
         document.getElementById('partialDeliveredQty').value = '';
         document.getElementById('partialDeliveryHint').textContent =
             `Quantity must be greater than 0 and less than ${quantityOrdered}.`;
-        const modal = new bootstrap.Modal(document.getElementById('partialDeliveryModal'));
+        document.getElementById('partialDeliveryDetailType').value = 'invoice';
+        updatePartialDeliveryDetailNumberLabel();
+        document.getElementById('partialInvoiceDcNumber').value = '';
+        document.getElementById('partialInvoiceDcAttachment').value = '';
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('partialDeliveryModal'));
         modal.show();
         return;
     }
@@ -382,13 +576,23 @@ document.addEventListener('change', function (e) {
         updateDeliveryDetailNumberLabel();
         document.getElementById('invoiceDcNumber').value = '';
         document.getElementById('invoiceDcAttachment').value = '';
-        const modal = new bootstrap.Modal(document.getElementById('deliveredDetailsModal'));
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deliveredDetailsModal'));
         modal.show();
         return;
     }
 
     postStatusUpdate(row, e.target, status);
 });
+
+function updatePartialDeliveryDetailNumberLabel() {
+    const deliveryDetailType = document.getElementById('partialDeliveryDetailType')?.value;
+    const label = document.getElementById('partialInvoiceDcNumberLabel');
+    if (label) {
+        label.textContent = deliveryDetailType === 'dc' ? 'DC Number' : 'Invoice number';
+    }
+}
+
+document.getElementById('partialDeliveryDetailType')?.addEventListener('change', updatePartialDeliveryDetailNumberLabel);
 
 document.getElementById('savePartialDeliveryBtn').addEventListener('click', function () {
     if (!pendingPartialUpdate) return;
@@ -401,15 +605,34 @@ document.getElementById('savePartialDeliveryBtn').addEventListener('click', func
         return;
     }
 
+    const deliveryDetailType = document.getElementById('partialDeliveryDetailType').value;
+    const invoiceDcNumber = document.getElementById('partialInvoiceDcNumber').value.trim();
+    const invoiceDcAttachment = document.getElementById('partialInvoiceDcAttachment').files[0];
+    const numberLabel = deliveryDetailType === 'dc' ? 'DC Number' : 'Invoice number';
+
+    if (!invoiceDcNumber) {
+        alert(`${numberLabel} is required.`);
+        return;
+    }
+    if (!invoiceDcAttachment) {
+        alert('Invoice/DC attachment is required.');
+        return;
+    }
+
     postStatusUpdate(
         pendingPartialUpdate.row,
         pendingPartialUpdate.selectElement,
         'partially_delivered',
-        { quantityDelivered: enteredQty }
+        {
+            quantityDelivered: enteredQty,
+            deliveryDetailType: deliveryDetailType,
+            invoiceDcNumber: invoiceDcNumber,
+            invoiceDcAttachment: invoiceDcAttachment
+        }
     );
 
     const modalEl = document.getElementById('partialDeliveryModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.hide();
     pendingPartialUpdate = null;
 });
@@ -450,7 +673,7 @@ document.getElementById('saveDeliveredDetailsBtn').addEventListener('click', fun
     );
 
     const modalEl = document.getElementById('deliveredDetailsModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.hide();
     pendingDeliveredUpdate = null;
 });
@@ -467,6 +690,331 @@ document.getElementById('deliveredDetailsModal').addEventListener('hidden.bs.mod
     const selectElement = pendingDeliveredUpdate.selectElement;
     selectElement.value = selectElement.dataset.prevStatus || '';
     pendingDeliveredUpdate = null;
+});
+
+// Generate Invoice Modal Logic (Vanilla JS)
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        tooltipTriggerList.forEach(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+    }
+
+    const generateInvoiceForm = document.getElementById('generateInvoiceForm');
+
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-generate-invoice');
+        if (!btn) return;
+
+        const productId = btn.getAttribute('data-product-id');
+        const form = document.getElementById('generateInvoiceForm');
+        form.action = `/customer-product/${productId}/invoice/`;
+
+        const valError = document.getElementById('invoiceModalValidationError');
+        if (valError) valError.classList.add('d-none');
+
+        const productsBody = document.getElementById('invoiceModalProductsBody');
+        const headerInfo = document.getElementById('invoiceModalHeaderInfo');
+
+        if (productsBody) {
+            productsBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Loading products...</td></tr>';
+        }
+        if (headerInfo) {
+            headerInfo.innerHTML = 'Loading order details...';
+        }
+
+        window.currentInvoiceProductId = productId;
+
+        const modalEl = document.getElementById('generateInvoiceModal');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+
+        fetch(`/customer-product/${productId}/invoice-modal-data/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    let totalDelivered = 0;
+                    if (data.products && data.products.length > 0) {
+                        data.products.forEach(p => {
+                            totalDelivered += (p.quantity_delivered || 0);
+                        });
+                    }
+
+                    if (headerInfo) {
+                        let headerText = `<strong>DPR Serial:</strong> ${data.dpr_serial} &nbsp;|&nbsp; <strong>Customer:</strong> ${data.customer_name}`;
+                        if (totalDelivered > 0) {
+                            headerText += `<div class="mt-1 text-primary fw-semibold"><i class="bi bi-info-circle-fill me-1"></i>An invoice has already been generated for ${totalDelivered} quantity.</div>`;
+                        }
+                        headerInfo.innerHTML = headerText;
+                    }
+
+                    if (productsBody) {
+                        let rowsHtml = '';
+                        data.products.forEach((p, idx) => {
+                            const deliveredQty = p.quantity_delivered || 0;
+                            const remainingQty = (p.remaining_qty !== undefined) ? p.remaining_qty : Math.max(p.quantity_ordered - deliveredQty, 0);
+                            const defaultQty = remainingQty;
+                            const alreadyInvoicedNotice = deliveredQty > 0 
+                                ? `<div class="text-muted small mt-1" style="font-size: 0.8rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>An invoice has already been generated for ${deliveredQty} quantity.</div>` 
+                                : '';
+                            rowsHtml += `
+                                <tr>
+                                    <td class="text-center">
+                                        ${idx + 1}
+                                        <input type="hidden" name="selected_products" value="${p.id}">
+                                    </td>
+                                    <td>
+                                        <strong>${p.product_name}</strong>
+                                        ${alreadyInvoicedNotice}
+                                    </td>
+                                    <td class="text-center">${p.quantity_ordered}</td>
+                                    <td class="text-center">
+                                        <input type="number" name="qty_${p.id}" value="${defaultQty}" min="${remainingQty > 0 ? 1 : 0}" max="${remainingQty}" class="form-control form-control-sm text-center qty-delivered-input" style="max-width: 75px; margin: 0 auto;" data-prod-id="${p.id}" ${remainingQty <= 0 ? 'disabled' : ''}>
+                                    </td>
+                                    <td class="text-center invoice-qty-display-${p.id}">
+                                        ${defaultQty}
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        productsBody.innerHTML = rowsHtml;
+                    }
+                } else {
+                    if (productsBody) {
+                        productsBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Failed to load products.</td></tr>';
+                    }
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                if (productsBody) {
+                    productsBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Error loading products.</td></tr>';
+                }
+            });
+    });
+
+    document.addEventListener('input', function(e) {
+        if (e.target && e.target.classList.contains('qty-delivered-input')) {
+            const prodId = e.target.getAttribute('data-prod-id');
+            const displayEl = document.querySelector(`.invoice-qty-display-${prodId}`);
+            if (displayEl) {
+                displayEl.textContent = e.target.value || '0';
+            }
+        }
+    });
+
+    if (generateInvoiceForm) {
+        generateInvoiceForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitGenerateInvoiceBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+            }
+
+            const formData = new FormData(generateInvoiceForm);
+            const actionUrl = generateInvoiceForm.action;
+
+            fetch(actionUrl, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+                },
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to generate invoice');
+                }
+                const disposition = response.headers.get('Content-Disposition') || '';
+                let filename = 'Tax_Invoice.pdf';
+                const filenameMatch = disposition.match(/filename="?([^";]+)"?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                }
+                return response.blob().then(blob => ({ blob, filename }));
+            })
+            .then(({ blob, filename }) => {
+                const blobUrl = window.URL.createObjectURL(blob);
+                const win = window.open(blobUrl, '_blank');
+                if (!win) {
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                }
+
+                const modalEl = document.getElementById('generateInvoiceModal');
+                if (modalEl && typeof bootstrap !== 'undefined') {
+                    const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                    if (modalInstance) modalInstance.hide();
+                }
+
+                setTimeout(() => {
+                    window.location.reload();
+                }, 400);
+            })
+            .catch(err => {
+                console.error('Invoice generation error:', err);
+                alert('An error occurred while generating the invoice.');
+            })
+            .finally(() => {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-printer me-1"></i> Generate Invoice';
+                }
+            });
+        });
+    }
+});
+</script>
+
+<!-- Generate Invoice Modal -->
+<div class="modal fade" id="generateInvoiceModal" tabindex="-1" aria-labelledby="generateInvoiceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="generateInvoiceModalLabel">
+                    <i class="bi bi-file-earmark-pdf text-success me-2"></i>Enter Quantity for Invoice
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="generateInvoiceForm" method="POST" action="" target="_blank">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div id="invoiceModalHeaderInfo" class="alert alert-info py-2 mb-3 small">
+                        <!-- Filled by JS -->
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 55px;" class="text-center">S.No</th>
+                                    <th>Product Name</th>
+                                    <th style="width: 110px;" class="text-center">Qty Ordered</th>
+                                    <th style="width: 110px;" class="text-center">Qty Delivered</th>
+                                    <th style="width: 130px;" class="text-center">Invoice Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoiceModalProductsBody">
+                                <!-- Filled by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success" id="submitGenerateInvoiceBtn">
+                        <i class="bi bi-printer me-1"></i> Generate Invoice
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Address Printout Modal -->
+<div class="modal fade" id="addAddressPrintoutModal" tabindex="-1" aria-labelledby="addAddressPrintoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header text-white" style="background-color: #0284c7;">
+                <h5 class="modal-title" id="addAddressPrintoutModalLabel">
+                    <i class="bi bi-paperclip me-2"></i>Add Address Printout
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addAddressPrintoutForm" method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="product_id" id="addressPrintoutProductId">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Select Address Printout Attachment:</label>
+                        <input type="file" name="address_attachment" id="addressPrintoutFileInput" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" required>
+                    </div>
+                    <div id="addressPrintoutPreviewContainer" class="d-none alert alert-light border">
+                        <span class="small text-muted d-block mb-1">Current Attachment:</span>
+                        <a href="#" id="addressPrintoutCurrentViewLink" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-file-earmark-pdf me-1"></i>View Attached File
+                        </a>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white" id="submitAddressPrintoutBtn" style="background-color: #0284c7; border-color: #0284c7;">
+                        <i class="bi bi-upload me-1"></i> Attach & View
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-open-add-address-modal');
+        if (btn) {
+            let pid = btn.getAttribute('data-product-id');
+            if (!pid) {
+                pid = window.currentInvoiceProductId;
+            }
+            if (!pid) return;
+
+            document.getElementById('addressPrintoutProductId').value = pid;
+            const fileInput = document.getElementById('addressPrintoutFileInput');
+            if (fileInput) fileInput.value = '';
+
+            const attachmentUrl = btn.getAttribute('data-attachment-url');
+            const previewContainer = document.getElementById('addressPrintoutPreviewContainer');
+            const previewLink = document.getElementById('addressPrintoutCurrentViewLink');
+            if (attachmentUrl && previewContainer && previewLink) {
+                previewLink.href = attachmentUrl;
+                previewContainer.classList.remove('d-none');
+            } else if (previewContainer) {
+                previewContainer.classList.add('d-none');
+            }
+
+            const modalEl = document.getElementById('addAddressPrintoutModal');
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+    });
+
+    const addAddressForm = document.getElementById('addAddressPrintoutForm');
+    if (addAddressForm) {
+        addAddressForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const pid = document.getElementById('addressPrintoutProductId').value;
+            const fileInput = document.getElementById('addressPrintoutFileInput');
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+
+            const file = fileInput.files[0];
+            const fileBlobUrl = URL.createObjectURL(file);
+            window.open(fileBlobUrl, '_blank');
+
+            const formData = new FormData(addAddressForm);
+            fetch(`/customer-product/${pid}/address-attachment/`, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            }).then(res => res.json()).then(data => {
+                if (data.status === 'success') {
+                    const modalEl = document.getElementById('addAddressPrintoutModal');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                    window.location.reload();
+                }
+            }).catch(err => {
+                console.error(err);
+                const modalEl = document.getElementById('addAddressPrintoutModal');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            });
+        });
+    }
 });
 </script>
 {% endblock %}

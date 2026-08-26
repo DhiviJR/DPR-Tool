@@ -1,0 +1,526 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h3 class="mb-3">
+  {% if is_edit %}Edit Supplier Order{% else %}Supplier Order Details{% endif %} - {{ dpr.serial_number }}
+</h3>
+
+<div class="card shadow">
+  <div class="card-body">
+    {% if messages %}
+      {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}">
+        {% if message.tags == 'error' %}
+          <strong class="text-danger">{{ message }}</strong>
+        {% else %}
+          {{ message }}
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" id="supplierOrderForm">
+      {% csrf_token %}
+      <div class="table-responsive">
+        <table class="table table-bordered" id="supplierTable">
+          <thead class="table-light">
+            <tr>
+              <th>S.No</th>
+              <th>Product</th>
+              <th>Supplier</th>
+              <th>Rate Per Unit</th>
+              <th>Quantity</th>
+              <th>PO Value</th>
+              <th>PO Number</th>
+              <th>PO Date</th>
+              <th>Validity</th>
+              <th>PO Attachment</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if supplier_orders %}
+              {% for sp in supplier_orders %}
+              <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>
+                  <input type="hidden" name="supplier_product_id[]" value="{{ sp.id }}">
+                  <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
+                    <option value="">Select</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" {% if p.id == sp.customer_product.id %}selected{% endif %}>{{ p.product_name }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <div class="d-flex">
+                    <select name="supplier[]" class="form-select supplier-dropdown" style="min-width: 250px;" required>
+                      <option value="">Select</option>
+                      {% for s in suppliers %}
+                      <option value="{{ s.id }}" {% if s.id == sp.supplier.id %}selected{% endif %}>{{ s.supplier_name }}</option>
+                      {% endfor %}
+                    </select>
+                    <button type="button"
+                            class="btn btn-success btn-sm ms-2 addSupplierBtn"
+                            data-bs-toggle="modal"
+                            data-bs-target="#supplierModal">+</button>
+                  </div>
+                </td>
+                <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" value="{{ sp.rate_per_unit }}" required></td>
+                <td>
+                  <div class="d-flex align-items-center">
+                    <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" value="{{ sp.quantity }}" required>
+                    <span class="ms-2 quantity-max-label">/(0)</span>
+                  </div>
+                </td>
+                <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" value="{{ sp.po_value }}" readonly required></td>
+                <td><input type="text" name="po_number[]" class="form-control" value="{{ sp.po_number }}" required></td>
+                <td><input type="date" name="po_date[]" class="form-control" value="{{ sp.po_date|date:'Y-m-d' }}" required></td>
+                <td><input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" required></td>
+                <td>
+                  <input type="file" name="po_attachment_{{ forloop.counter0 }}" class="form-control" style="min-width: 200px;">
+                  {% if sp.po_attachment %}
+                  <small class="text-muted d-block mt-1">Current: {{ sp.po_attachment.name }}</small>
+                  {% endif %}
+                </td>
+                <td>
+                  <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td>1</td>
+                <td>
+                  <input type="hidden" name="supplier_product_id[]" value="">
+                  <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
+                    <option value="">Select</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}">{{ p.product_name }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <div class="d-flex">
+                    <select name="supplier[]" class="form-select supplier-dropdown" style="min-width: 250px;" required>
+                      <option value="">Select</option>
+                      {% for s in suppliers %}
+                      <option value="{{ s.id }}">{{ s.supplier_name }}</option>
+                      {% endfor %}
+                    </select>
+                    <button type="button"
+                            class="btn btn-success btn-sm ms-2 addSupplierBtn"
+                            data-bs-toggle="modal"
+                            data-bs-target="#supplierModal">+</button>
+                  </div>
+                </td>
+                <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" required></td>
+                <td>
+                  <div class="d-flex align-items-center">
+                    <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" required>
+                    <span class="ms-2 quantity-max-label">/(0)</span>
+                  </div>
+                </td>
+                <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
+                <td><input type="text" name="po_number[]" class="form-control" required></td>
+                <td><input type="date" name="po_date[]" class="form-control" required></td>
+                <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
+                <td><input type="file" name="po_attachment_0" class="form-control" style="min-width: 200px;" required></td>
+                <td>
+                  <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-end mb-3">
+        <strong>
+          Total Quantity (Supplier/Customer):
+          <span id="totalSupplierQty">{{ total_supplier_quantity|default:0 }}</span>/{{ total_customer_quantity }}
+        </strong>
+      </div>
+      {% if not is_fully_allocated %}
+      <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow">Add Row</button>
+      {% endif %}
+      <div>
+        <button type="submit" class="btn btn-success">{% if is_edit %}Update{% else %}Submit{% endif %}</button>
+        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{ rfq_rate_map|json_script:'rfq-rate-map' }}
+{{ product_default_rate_map|json_script:'product-default-rate-map' }}
+<script>
+const rfqRateMap = JSON.parse(document.getElementById('rfq-rate-map').textContent);
+const productDefaultRateMap = JSON.parse(document.getElementById('product-default-rate-map').textContent);
+
+function getNextRowIndex() {
+  return document.querySelectorAll('#supplierTable tbody tr').length;
+}
+
+document.getElementById('addSupplierRow')?.addEventListener('click', function () {
+  const tbody = document.querySelector('#supplierTable tbody');
+  const rowCount = tbody.rows.length + 1;
+  const rowIndex = getNextRowIndex();
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td>${rowCount}</td>
+    <td>
+      <input type="hidden" name="supplier_product_id[]" value="">
+      <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
+        <option value="">Select</option>
+        {% for p in products %}
+        <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}">{{ p.product_name }}</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td>
+      <div class="d-flex">
+        <select name="supplier[]" class="form-select supplier-dropdown" style="min-width: 250px;" required>
+          <option value="">Select</option>
+          {% for s in suppliers %}
+          <option value="{{ s.id }}">{{ s.supplier_name }}</option>
+          {% endfor %}
+        </select>
+        <button type="button"
+                class="btn btn-success btn-sm ms-2 addSupplierBtn"
+                data-bs-toggle="modal"
+                data-bs-target="#supplierModal">+</button>
+      </div>
+    </td>
+    <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" required></td>
+    <td>
+      <div class="d-flex align-items-center">
+        <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" required>
+        <span class="ms-2 quantity-max-label">/(0)</span>
+      </div>
+    </td>
+    <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
+    <td><input type="text" name="po_number[]" class="form-control" required></td>
+    <td><input type="date" name="po_date[]" class="form-control" required></td>
+    <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
+    <td><input type="file" name="po_attachment_${rowIndex}" class="form-control" style="min-width: 200px;" required></td>
+    <td>
+      <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+    </td>
+  `;
+  tbody.appendChild(row);
+  updateQuantityLimits();
+  updateSupplierRowValues();
+});
+
+let activeSupplierRow = null;
+
+document.addEventListener('click', function (e) {
+  if (e.target.classList.contains('removeRow')) {
+    e.target.closest('tr').remove();
+    renumberSupplierRows();
+    updateSupplierRowValues();
+    updateOverallSupplierQty();
+  }
+  if (e.target.classList.contains('addSupplierBtn')) {
+    activeSupplierRow = e.target.closest('tr');
+  }
+});
+
+document.addEventListener('click', function (e) {
+  if (e.target.id !== 'saveSupplierBtn') {
+    return;
+  }
+
+  const supplierName = document.getElementById('supplierName').value.trim();
+  const supplierPhone = document.getElementById('supplierPhone').value.trim();
+  const supplierAddress = document.getElementById('supplierAddress').value.trim();
+  const supplierNameError = document.getElementById('supplierNameError');
+  const supplierPhoneError = document.getElementById('supplierPhoneError');
+
+  if (!supplierName) {
+    supplierNameError.style.display = 'block';
+    return;
+  }
+  supplierNameError.style.display = 'none';
+
+  if (supplierPhone && !/^\d{10}$/.test(supplierPhone)) {
+    supplierPhoneError.style.display = 'block';
+    return;
+  }
+  supplierPhoneError.style.display = 'none';
+
+  fetch('/add-supplier/', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': '{{ csrf_token }}',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      supplier_name: supplierName,
+      phone_number: supplierPhone,
+      address: supplierAddress
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.status === 'success') {
+      const allDropdowns = document.querySelectorAll('.supplier-dropdown');
+      allDropdowns.forEach(dropdown => {
+        const option = document.createElement('option');
+        option.value = data.id;
+        option.text = data.name;
+        dropdown.appendChild(option);
+      });
+
+      if (activeSupplierRow) {
+        const rowDropdown = activeSupplierRow.querySelector('.supplier-dropdown');
+        if (rowDropdown) {
+          rowDropdown.value = data.id;
+        }
+      }
+
+      const modalEl = document.getElementById('supplierModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      modal.hide();
+
+      document.getElementById('supplierName').value = '';
+      document.getElementById('supplierPhone').value = '';
+      document.getElementById('supplierAddress').value = '';
+      activeSupplierRow = null;
+    } else {
+      supplierNameError.textContent = data.message || 'Unable to save supplier';
+      supplierNameError.style.display = 'block';
+    }
+  })
+  .catch(() => {
+    supplierNameError.textContent = 'Something went wrong while saving supplier';
+    supplierNameError.style.display = 'block';
+  });
+});
+
+function renumberSupplierRows() {
+  document.querySelectorAll('#supplierTable tbody tr').forEach((row, index) => {
+    const serialCell = row.cells[0];
+    if (serialCell) {
+      serialCell.textContent = index + 1;
+    }
+  });
+}
+
+const supplierPhoneInput = document.getElementById('supplierPhone');
+if (supplierPhoneInput) {
+  supplierPhoneInput.addEventListener('input', function (e) {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+  });
+}
+
+document.addEventListener('change', function (e) {
+  const productSelect = e.target.closest('.product-select');
+  const supplierSelect = e.target.closest('.supplier-dropdown');
+  if (!productSelect && !supplierSelect) {
+    return;
+  }
+
+  const row = e.target.closest('tr');
+  updateRateFromRfq(row);
+  updateQuantityLimits();
+  updateSupplierRowValues();
+  updateOverallSupplierQty();
+});
+
+document.addEventListener('input', function (e) {
+  if (
+    e.target.classList.contains('quantity-input')
+    || e.target.classList.contains('rate-input')
+  ) {
+    updateSupplierRowValues();
+  }
+
+  if (e.target.classList.contains('quantity-input')) {
+    updateQuantityLimits();
+    updateOverallSupplierQty();
+  }
+});
+
+function updateRateFromRfq(row) {
+  if (!row) return;
+
+  const productSelect = row.querySelector('.product-select');
+  const supplierSelect = row.querySelector('.supplier-dropdown');
+  const rateInput = row.querySelector('.rate-input');
+  if (!productSelect || !supplierSelect || !rateInput) return;
+
+  const productId = String(productSelect.value);
+  if (!productId) return;
+
+  const supplierId = String(supplierSelect.value);
+
+  // First try: supplier-specific rate from RFQ supplier prices
+  if (supplierId) {
+    const productRates = rfqRateMap[productId] || {};
+    const rfqRate = productRates[supplierId];
+    if (rfqRate !== undefined && rfqRate !== null && rfqRate !== '') {
+      rateInput.value = Number(rfqRate).toFixed(2);
+      return;
+    }
+  }
+
+  // Second try: default rate from RFQ product (works for both known and unknown price products)
+  const defaultRate = productDefaultRateMap[productId];
+  if (defaultRate !== undefined && defaultRate !== null && defaultRate !== '') {
+    rateInput.value = Number(defaultRate).toFixed(2);
+  }
+}
+
+function updateSupplierRowValues() {
+  const rows = document.querySelectorAll('#supplierTable tbody tr');
+
+  rows.forEach(row => {
+    const qtyInput = row.querySelector('.quantity-input');
+    const rateInput = row.querySelector('.rate-input');
+    const valueInput = row.querySelector('.po-value-input');
+    if (!qtyInput || !rateInput || !valueInput) {
+      return;
+    }
+
+    const quantity = Number(qtyInput.value) || 0;
+    const rate = Number(rateInput.value) || 0;
+    valueInput.value = (quantity * rate).toFixed(2);
+  });
+}
+
+function updateQuantityLimits() {
+  const rows = document.querySelectorAll('#supplierTable tbody tr');
+  const usedByProduct = {};
+
+  rows.forEach(row => {
+    const productSelect = row.querySelector('.product-select');
+    const quantityInput = row.querySelector('.quantity-input');
+    if (!productSelect || !productSelect.value) return;
+    const qty = parseInt(quantityInput.value || '0', 10);
+    usedByProduct[productSelect.value] = (usedByProduct[productSelect.value] || 0) + qty;
+  });
+
+  rows.forEach(row => {
+    const productSelect = row.querySelector('.product-select');
+    const quantityInput = row.querySelector('.quantity-input');
+    const label = row.querySelector('.quantity-max-label');
+    if (!productSelect || !quantityInput || !label) return;
+
+    const selectedOption = productSelect.options[productSelect.selectedIndex];
+    const maxQty = selectedOption
+      ? parseInt(selectedOption.dataset.maxQty || selectedOption.getAttribute('data-max-qty') || '0', 10)
+      : 0;
+    const currentQty = parseInt(quantityInput.value || '0', 10);
+    const totalUsed = productSelect.value ? usedByProduct[productSelect.value] || 0 : 0;
+    const remaining = Math.max(0, maxQty - (totalUsed - currentQty));
+
+    quantityInput.max = remaining;
+    quantityInput.placeholder = remaining ? `Max ${remaining}` : '';
+    label.textContent = `/(${remaining})`;
+  });
+}
+
+function updateOverallSupplierQty() {
+  const rows = document.querySelectorAll('#supplierTable tbody tr');
+  let totalSupplierQty = 0;
+
+  rows.forEach(row => {
+    const productSelect = row.querySelector('.product-select');
+    const qtyInput = row.querySelector('.quantity-input');
+    const qty = parseInt(qtyInput.value || '0', 10);
+    if (productSelect.value && qty > 0) {
+      totalSupplierQty += qty;
+    }
+  });
+
+  document.getElementById('totalSupplierQty').textContent = totalSupplierQty;
+}
+
+document.getElementById('supplierOrderForm').addEventListener('submit', function (e) {
+  updateSupplierRowValues();
+
+  const rows = document.querySelectorAll('#supplierTable tbody tr');
+  for (const row of rows) {
+    const productSelect = row.querySelector('.product-select');
+    const quantityInput = row.querySelector('.quantity-input');
+    const selected = productSelect.selectedOptions[0];
+    const maxQty = selected ? parseInt(selected.getAttribute('data-max-qty') || '0', 10) : 0;
+    const enteredQty = parseInt(quantityInput.value || '0', 10);
+    const poValidityInput = row.querySelector('.po-validity-input');
+
+    if (productSelect.value && quantityInput.value && enteredQty <= 0) {
+      e.preventDefault();
+      alert('Quantity must be greater than 0.');
+      quantityInput.focus();
+      return;
+    }
+
+    if (productSelect.value && quantityInput.value && enteredQty > maxQty) {
+      e.preventDefault();
+      alert(`Quantity cannot be greater than ordered quantity (${maxQty}) for selected product.`);
+      quantityInput.focus();
+      return;
+    }
+
+    if ('{{ dpr.po_validity|date:"Y-m-d" }}' && poValidityInput && poValidityInput.value && poValidityInput.value >= '{{ dpr.po_validity|date:"Y-m-d" }}') {
+      e.preventDefault();
+      alert('Supplier PO validity should be before customer PO validity.');
+      poValidityInput.focus();
+      return;
+    }
+  }
+
+  const totalSupplier = parseInt(document.getElementById('totalSupplierQty').textContent || '0', 10);
+  const totalCustomer = parseInt('{{ total_customer_quantity }}', 10);
+  if (totalSupplier > totalCustomer) {
+    e.preventDefault();
+    alert(`Total supplier quantity (${totalSupplier}) cannot exceed total customer quantity (${totalCustomer}).`);
+    return;
+  }
+});
+
+document.querySelectorAll('#supplierTable tbody tr').forEach(updateRateFromRfq);
+updateQuantityLimits();
+updateSupplierRowValues();
+updateOverallSupplierQty();
+</script>
+
+<!-- SUPPLIER MODAL -->
+<div class="modal fade" id="supplierModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Add Supplier</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label>Supplier Name *</label>
+          <input type="text" id="supplierName" class="form-control">
+          <div id="supplierNameError" class="text-danger mt-1" style="display:none;">
+            Supplier Name is required
+          </div>
+        </div>
+        <div class="mb-3">
+          <label>Phone Number</label>
+          <input type="tel" id="supplierPhone" class="form-control" maxlength="10" inputmode="numeric" placeholder="10 digit mobile number">
+          <div id="supplierPhoneError" class="text-danger mt-1" style="display:none;">
+            Enter a valid 10-digit mobile number.
+          </div>
+        </div>
+        <div class="mb-3">
+          <label>Address</label>
+          <textarea id="supplierAddress" class="form-control"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-success" id="saveSupplierBtn">Save Supplier</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

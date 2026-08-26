@@ -4,9 +4,11 @@
 
 <div class="card shadow">
 
-    <div class="card-header bg-primary text-white">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
 
-        <h4>Customer Order Details</h4>
+        <h4 class="mb-0">Customer Order Details</h4>
+
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-light btn-sm">Back to Dashboard</a>
 
     </div>
 
@@ -99,7 +101,7 @@
                                     data-region="{{ customer.region|default:'' }}"
                                     {% if dpr and dpr.customer.id == customer.id %}selected{% endif %}>
 
-                                {{ customer.customer_name }}
+                                {{ customer.clean_customer_name }}
 
                             </option>
 
@@ -142,12 +144,12 @@
 
                 </div>
 
-                <!-- Quotation Number -->
+                <!-- Quotation -->
 
                 <div class="col-md-4 mb-3 position-relative">
 
                     <label class="form-label">
-                        Quotation Number *
+                        Quotation *
                     </label>
 
                     <div class="dropdown" id="quotationDropdownContainer">
@@ -158,7 +160,7 @@
                                 data-bs-auto-close="outside"
                                 aria-expanded="false"
                                 style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            Select Quotation Number
+                            Select Quotation
                         </button>
                         <div class="dropdown-menu w-100 p-2" 
                              id="quotationDropdownMenu" 
@@ -168,13 +170,16 @@
                         </div>
                     </div>
 
+                    <div id="quotationPreviewContainer" class="mt-1.5 d-flex flex-wrap gap-1.5">
+                        <!-- Preview button(s) for selected quotation(s) -->
+                    </div>
+
                     <input type="text"
                            id="quotationNumberInput"
                            name="quotation_number"
                            value="{% if dpr %}{{ dpr.quotation_number|default:'' }}{% endif %}"
-                           style="opacity: 0; position: absolute; bottom: 0; left: 15px; width: 1px; height: 1px; pointer-events: none;"
+                           style="opacity: 0; position: absolute; bottom: 0; left: 15px; width: 1px; height: 1px;"
                            required>
-
 
                     <div id="quotationEmailWarning"
                          class="alert alert-warning py-2 px-3 mt-2 mb-0 d-none"
@@ -242,6 +247,9 @@
                            name="po_number"
                            id="poNumberInput"
                            value="{% if dpr %}{{ dpr.po_number|default:'' }}{% endif %}">
+                    <div id="poNumberExistsError" class="text-danger small mt-1 d-none">
+                        This customer po number was already exist
+                    </div>
 
                 </div>
 
@@ -273,13 +281,14 @@
 
                 <div class="col-md-4 mb-3">
 
-                    <label class="form-label">
+                    <label class="form-label" id="poDateLabel">
                         PO Date
                     </label>
 
                     <input type="date"
                            class="form-control"
                            name="po_date"
+                           id="poDateInput"
                            value="{% if dpr and dpr.po_date %}{{ dpr.po_date|date:'Y-m-d' }}{% endif %}">
 
                 </div>
@@ -342,10 +351,8 @@
                         <th>Product</th>
                         <th>Product Type</th>
                         <th>Quantity Ordered</th>
-                        <th>Rate Per Unit</th>
-                        <th>MES Rate per unit</th>
-                        <th>Supplier value</th>
-                        <th>MES value</th>
+                        <th>MES Rate Per Unit</th>
+                        <th>MES Value</th>
                         <th>Remarks</th>
                         <th>Attachment</th>
                         <th>Action</th>
@@ -368,12 +375,8 @@
                             <td>
                                 <select class="form-control" name="product_type[]">
                                     <option value="">Select Type</option>
-                                    <option value="APG steel" {% if p.product_type == 'APG steel' %}selected{% endif %}>APG steel</option>
-                                    <option value="ARG steel" {% if p.product_type == 'ARG steel' %}selected{% endif %}>ARG steel</option>
-                                    <option value="APG carbide" {% if p.product_type == 'APG carbide' %}selected{% endif %}>APG carbide</option>
-                                    <option value="ARG carbide" {% if p.product_type == 'ARG carbide' %}selected{% endif %}>ARG carbide</option>
-                                    <option value="SAPG" {% if p.product_type == 'SAPG' %}selected{% endif %}>SAPG</option>
-                                    <option value="SARG" {% if p.product_type == 'SARG' %}selected{% endif %}>SARG</option>
+                                    <option value="APG" {% if p.product_type == 'APG' %}selected{% endif %}>APG</option>
+                                    <option value="ARG" {% if p.product_type == 'ARG' %}selected{% endif %}>ARG</option>
                                     <option value="Multi-Gauge" {% if p.product_type == 'Multi-Gauge' %}selected{% endif %}>Multi-Gauge</option>
                                     <option value="unit Std Air" {% if p.product_type == 'unit Std Air' %}selected{% endif %}>unit Std Air</option>
                                     <option value="unit SPC Air" {% if p.product_type == 'unit SPC Air' %}selected{% endif %}>unit SPC Air</option>
@@ -401,24 +404,9 @@
                             <td>
                                 <input type="number"
                                        step="0.01"
-                                       class="form-control rate"
-                                       name="rate_per_unit[]"
-                                       value="{{ p.rate_per_unit }}">
-                            </td>
-                            <td>
-                                <input type="number"
-                                       step="0.01"
                                        class="form-control mes-rate"
                                        name="mes_rate_per_unit[]"
                                        value="{{ p.mes_rate_per_unit }}">
-                            </td>
-                            <td>
-                                <input type="number"
-                                       step="0.01"
-                                       class="form-control value"
-                                       name="value[]"
-                                       value="{{ p.value }}"
-                                       readonly>
                             </td>
                             <td>
                                 <input type="number"
@@ -466,12 +454,8 @@
                             <td>
                                 <select class="form-control" name="product_type[]">
                                     <option value="">Select Type</option>
-                                    <option value="APG steel">APG steel</option>
-                                    <option value="ARG steel">ARG steel</option>
-                                    <option value="APG carbide">APG carbide</option>
-                                    <option value="ARG carbide">ARG carbide</option>
-                                    <option value="SAPG">SAPG</option>
-                                    <option value="SARG">SARG</option>
+                                    <option value="APG">APG</option>
+                                    <option value="ARG">ARG</option>
                                     <option value="Multi-Gauge">Multi-Gauge</option>
                                     <option value="unit Std Air">unit Std Air</option>
                                     <option value="unit SPC Air">unit SPC Air</option>
@@ -498,21 +482,8 @@
                             <td>
                                 <input type="number"
                                        step="0.01"
-                                       class="form-control rate"
-                                       name="rate_per_unit[]">
-                            </td>
-                            <td>
-                                <input type="number"
-                                       step="0.01"
                                        class="form-control mes-rate"
                                        name="mes_rate_per_unit[]">
-                            </td>
-                            <td>
-                                <input type="number"
-                                       step="0.01"
-                                       class="form-control value"
-                                       name="value[]"
-                                       readonly>
                             </td>
                             <td>
                                 <input type="number"
@@ -608,6 +579,15 @@ function updatePoNumberVisibility() {
     const confirmation = document.getElementById('confirmationType').value;
     const poField = document.getElementById('poNumberField');
     const poInput = document.getElementById('poNumberInput');
+    const poDateLabel = document.getElementById('poDateLabel');
+
+    if (poDateLabel) {
+        if (confirmation === 'Mail Confirmation') {
+            poDateLabel.textContent = 'Mail Date';
+        } else {
+            poDateLabel.textContent = 'PO Date';
+        }
+    }
 
     if (confirmation === 'Customer PO') {
         poField.style.display = '';
@@ -624,8 +604,65 @@ function updatePoNumberVisibility() {
 document.getElementById('confirmationType').addEventListener('change', updatePoNumberVisibility);
 updatePoNumberVisibility();
 
+let isPoNumberDuplicate = false;
+let poCheckSequence = 0;
+
+async function checkPoNumberUniqueness() {
+    const confirmation = document.getElementById('confirmationType')?.value;
+    const poInput = document.getElementById('poNumberInput');
+    const errorDiv = document.getElementById('poNumberExistsError');
+    if (!poInput) return false;
+
+    const poVal = poInput.value.trim();
+    if (confirmation === 'Customer PO' && poVal !== '') {
+        const currentSeq = ++poCheckSequence;
+        const dprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
+        try {
+            const resp = await fetch(`/check-customer-po-number/?po_number=${encodeURIComponent(poVal)}&dpr_id=${dprId}`);
+            const data = await resp.json();
+            if (currentSeq !== poCheckSequence) return isPoNumberDuplicate;
+            if (data.exists) {
+                isPoNumberDuplicate = true;
+                poInput.classList.add('is-invalid');
+                if (errorDiv) {
+                    errorDiv.textContent = data.message || 'This customer po number was already exist';
+                    errorDiv.classList.remove('d-none');
+                }
+                return true;
+            } else {
+                isPoNumberDuplicate = false;
+                poInput.classList.remove('is-invalid');
+                if (errorDiv) {
+                    errorDiv.classList.add('d-none');
+                }
+                return false;
+            }
+        } catch (err) {
+            console.error('Error checking PO number uniqueness:', err);
+            return false;
+        }
+    } else {
+        isPoNumberDuplicate = false;
+        poInput.classList.remove('is-invalid');
+        if (errorDiv) {
+            errorDiv.classList.add('d-none');
+        }
+        return false;
+    }
+}
+
+const poInputEl = document.getElementById('poNumberInput');
+if (poInputEl) {
+    poInputEl.addEventListener('input', checkPoNumberUniqueness);
+    poInputEl.addEventListener('blur', checkPoNumberUniqueness);
+    poInputEl.addEventListener('change', checkPoNumberUniqueness);
+}
+document.getElementById('confirmationType')?.addEventListener('change', function() {
+    checkPoNumberUniqueness();
+});
+
 const productTypesList = [
-    "APG steel", "ARG steel", "APG carbide", "ARG carbide", "SAPG", "SARG",
+    "APG", "ARG",
     "Multi-Gauge", "unit Std Air", "unit SPC Air", "unit Std lvdt", "unit SPC lvdt",
     "AMC", "Service", "Spares", "TPG", "TRG", "STPG", "STRG", "PPG", "PRG", "SPPG", "SPRG"
 ];
@@ -634,9 +671,7 @@ function generateProductRow(index, p = {}) {
     const name = p.product_name || '';
     const type = p.product_type || '';
     const qty = p.quantity || p.quantity_ordered || '';
-    const rate = p.rate_per_unit || '';
     const mesRate = p.mes_rate_per_unit || p.rate_per_unit || '';
-    const val = p.value || '';
     const mesVal = p.mes_value || p.value || '';
     const remarks = p.remarks || '';
     
@@ -661,13 +696,7 @@ function generateProductRow(index, p = {}) {
                 <input type="number" class="form-control qty" name="quantity[]" value="${qty}">
             </td>
             <td>
-                <input type="number" step="0.01" class="form-control rate" name="rate_per_unit[]" value="${rate}">
-            </td>
-            <td>
                 <input type="number" step="0.01" class="form-control mes-rate" name="mes_rate_per_unit[]" value="${mesRate}">
-            </td>
-            <td>
-                <input type="number" step="0.01" class="form-control value" name="value[]" value="${val}" readonly>
             </td>
             <td>
                 <input type="number" step="0.01" class="form-control mes-value" name="mes_value[]" value="${mesVal}" readonly>
@@ -721,6 +750,10 @@ function populateProductsFromSelectedQuotations() {
         if (quotationValueInput) {
             quotationValueInput.value = totalQuotationValue.toFixed(2);
         }
+        const poValueInput = document.getElementById('poValueInput');
+        if (poValueInput) {
+            poValueInput.value = totalQuotationValue.toFixed(2);
+        }
     } else {
         tbody.innerHTML = generateProductRow(0);
     }
@@ -754,9 +787,23 @@ function loadCustomerQuotations() {
     const updateDisplay = () => {
         const checkboxes = menu.querySelectorAll('.quote-checkbox');
         const checkedValues = [];
+        const previewContainer = document.getElementById('quotationPreviewContainer');
+        if (previewContainer) previewContainer.innerHTML = '';
+
         checkboxes.forEach(cb => {
             if (cb.checked) {
                 checkedValues.push(cb.value);
+                if (previewContainer && cb.dataset.previewUrl) {
+                    const previewBadge = document.createElement('a');
+                    previewBadge.href = cb.dataset.previewUrl;
+                    previewBadge.target = '_blank';
+                    previewBadge.className = 'btn btn-sm btn-outline-primary py-0.5 px-2.5 rounded-pill d-inline-flex align-items-center gap-1 text-decoration-none shadow-sm';
+                    previewBadge.style.fontSize = '12px';
+                    previewBadge.style.fontWeight = '500';
+                    previewBadge.innerHTML = `<i class="bi bi-file-earmark-pdf text-danger"></i> Preview ${cb.value}`;
+                    previewBadge.title = `Preview Generated Quotation ${cb.value}`;
+                    previewContainer.appendChild(previewBadge);
+                }
             }
         });
         input.value = checkedValues.join(', ');
@@ -764,50 +811,89 @@ function loadCustomerQuotations() {
         if (checkedValues.length > 0) {
             btn.textContent = checkedValues.join(', ');
         } else {
-            btn.textContent = 'Select Quotation Number';
+            btn.textContent = 'Select Quotation';
         }
         updatePreparedEmailWarning(checkedValues);
     };
 
-    const addCheckbox = (value, labelText, checked, preparedNotEmailed = false) => {
+    const addCheckbox = (value, labelText, checked, preparedNotEmailed = false, previewUrl = null) => {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item d-flex align-items-center justify-content-between py-1 px-2 m-0';
+        item.style.cursor = 'default';
+
         const label = document.createElement('label');
-        label.className = 'dropdown-item d-flex align-items-center gap-2 py-1 m-0';
+        label.className = 'd-flex align-items-center gap-2 flex-grow-1 m-0 text-truncate';
         label.style.cursor = 'pointer';
 
         const cb = document.createElement('input');
         cb.type = 'checkbox';
-        cb.className = 'form-check-input quote-checkbox m-0';
+        cb.className = 'form-check-input quote-checkbox m-0 flex-shrink-0';
         cb.value = value;
         cb.checked = checked;
         cb.dataset.preparedNotEmailed = preparedNotEmailed ? 'true' : 'false';
+        if (previewUrl) {
+            cb.dataset.previewUrl = previewUrl;
+        }
         cb.addEventListener('change', () => {
             updateDisplay();
             populateProductsFromSelectedQuotations();
         });
 
         const span = document.createElement('span');
-        span.className = 'ms-1';
+        span.className = 'ms-1 text-truncate';
         span.textContent = labelText;
+        span.title = labelText;
 
         label.appendChild(cb);
         label.appendChild(span);
-        menu.appendChild(label);
+        item.appendChild(label);
+
+        if (previewUrl) {
+            const previewBtn = document.createElement('a');
+            previewBtn.href = previewUrl;
+            previewBtn.target = '_blank';
+            previewBtn.className = 'btn btn-sm btn-outline-primary py-0 px-2 ms-2 text-nowrap quote-item-preview-btn';
+            previewBtn.style.fontSize = '12px';
+            previewBtn.style.borderRadius = '5px';
+            previewBtn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+            previewBtn.title = 'Preview Generated Quotation PDF';
+            previewBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+            item.appendChild(previewBtn);
+        }
+
+        menu.appendChild(item);
     };
 
-    if (!customerId) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const prodNames = [];
+    const prodTypes = [];
+    document.querySelectorAll('#productTable tbody tr').forEach(row => {
+        const nameEl = row.querySelector('input[name="product_name[]"]');
+        const typeEl = row.querySelector('select[name="product_type[]"], input[name="product_type[]"]');
+        if (nameEl && nameEl.value.trim()) prodNames.push(nameEl.value.trim());
+        if (typeEl && typeEl.value.trim()) prodTypes.push(typeEl.value.trim());
+    });
+    if (urlParams.get('product_name')) prodNames.push(urlParams.get('product_name'));
+    if (urlParams.get('product_type')) prodTypes.push(urlParams.get('product_type'));
+    const currentProdName = [...new Set([...prodNames, ...prodTypes])].join(' ').trim();
+
+    if (!customerId && !currentProdName) {
         if (selectedQuotes.length > 0) {
             selectedQuotes.forEach(q => {
                 addCheckbox(q, q, true);
             });
             updateDisplay();
         } else {
-            document.getElementById('quotationDropdownBtn').textContent = 'Select Quotation Number';
+            document.getElementById('quotationDropdownBtn').textContent = 'Select Quotation';
             updatePreparedEmailWarning([]);
         }
         return;
     }
 
-    fetch(`/get-customer-quotations/?customer_id=${customerId}`)
+    const currentDprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
+    fetch(`/get-customer-quotations/?customer_id=${customerId}&product_name=${encodeURIComponent(currentProdName)}&dpr_id=${currentDprId}`)
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
@@ -821,16 +907,20 @@ function loadCustomerQuotations() {
                         q.quotation_number,
                         `${q.quotation_number} (${q.rfq_no})${statusText}`,
                         isChecked,
-                        q.prepared_not_emailed
+                        q.prepared_not_emailed,
+                        q.preview_url
                     );
                 });
 
-                // Preserve any previously selected quotes that are not in the fetched list
-                selectedQuotes.forEach(q => {
-                    if (!fetchedQuotes.includes(q)) {
-                        addCheckbox(q, q, true);
-                    }
-                });
+                // Preserve previously selected quotes when editing existing DPR
+                const isEditPage = '{% if is_edit %}true{% else %}false{% endif %}' === 'true';
+                if (isEditPage) {
+                    selectedQuotes.forEach(q => {
+                        if (!fetchedQuotes.includes(q)) {
+                            addCheckbox(q, q, true);
+                        }
+                    });
+                }
 
                 updateDisplay();
             }
@@ -842,15 +932,21 @@ function filterCustomersByRegion() {
     const region = document.getElementById('regionDropdown').value;
     const dropdown = document.getElementById('customerDropdown');
     const selectedOption = dropdown.options[dropdown.selectedIndex];
+    const currentVal = dropdown.value;
 
     Array.from(dropdown.options).forEach(option => {
         if (!option.value) return;
-        option.hidden = !region || option.dataset.region !== region;
+        const isSelected = option.value === currentVal;
+        const hasNoRegion = !option.dataset.region;
+        const matchesRegion = option.dataset.region === region;
+        option.hidden = region ? (!isSelected && !hasNoRegion && !matchesRegion) : false;
     });
 
     if (
         selectedOption
         && selectedOption.value
+        && selectedOption.dataset.region
+        && region
         && selectedOption.dataset.region !== region
     ) {
         dropdown.value = '';
@@ -861,6 +957,11 @@ function filterCustomersByRegion() {
 
 document.getElementById('regionDropdown').addEventListener('change', filterCustomersByRegion);
 document.getElementById('customerDropdown').addEventListener('change', loadCustomerQuotations);
+document.addEventListener('change', function(e) {
+    if (e.target && (e.target.name === 'product_name[]' || e.target.name === 'product_type[]')) {
+        loadCustomerQuotations();
+    }
+});
 filterCustomersByRegion();
 
 document.addEventListener('input', function (e) {
@@ -920,32 +1021,77 @@ function roundAmount(value) {
 function validatePoValueMatch(options = {}) {
     const showError = options.showError === true;
     const poInput = document.getElementById('poValueInput');
-    const totalValue = document.getElementById('totalValue').value;
+    if (!poInput) return true;
+    const totalValueEl = document.getElementById('totalValue');
+    const totalValue = totalValueEl ? totalValueEl.value : '0.00';
     const errorEl = document.getElementById('poValueError');
-    const match = roundAmount(poInput.value) === roundAmount(totalValue);
+    const diff = Math.abs(roundAmount(poInput.value) - roundAmount(totalValue));
+    const match = diff < 0.01;
 
     if (!match) {
-        if (showError || poInput.value.trim() !== '') {
-            errorEl.textContent = `PO Value must equal Total Value (${totalValue || '0.00'}).`;
-            errorEl.style.display = 'block';
+        if (showError || (poInput.value && poInput.value.trim() !== '')) {
+            if (errorEl) {
+                errorEl.textContent = `PO Value must equal Total Value (${totalValue || '0.00'}).`;
+                errorEl.style.display = 'block';
+            }
             poInput.classList.add('is-invalid');
         }
         return false;
     }
 
-    errorEl.style.display = 'none';
+    if (errorEl) {
+        errorEl.style.display = 'none';
+    }
     poInput.classList.remove('is-invalid');
     return true;
 }
 
-document.getElementById('customerOrderForm').addEventListener('submit', function (e) {
-    renumberProductRows();
-    calculateTotals();
-    if (!validatePoValueMatch({ showError: true })) {
-        e.preventDefault();
-        document.getElementById('poValueInput').focus();
-        document.getElementById('poValueInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+const orderForm = document.getElementById('customerOrderForm');
+if (orderForm) {
+    orderForm.addEventListener('submit', function (e) {
+        renumberProductRows();
+        calculateTotals();
+
+        const confirmation = document.getElementById('confirmationType')?.value;
+        const poInput = document.getElementById('poNumberInput');
+        if (confirmation === 'Customer PO' && isPoNumberDuplicate) {
+            e.preventDefault();
+            alert('This customer po number was already exist');
+            if (poInput) {
+                poInput.focus();
+                poInput.classList.add('is-invalid');
+            }
+            const errorDiv = document.getElementById('poNumberExistsError');
+            if (errorDiv) {
+                errorDiv.classList.remove('d-none');
+            }
+            return false;
+        }
+
+        if (!validatePoValueMatch({ showError: true })) {
+            e.preventDefault();
+            const poValInput = document.getElementById('poValueInput');
+            if (poValInput) {
+                poValInput.focus();
+                poValInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            return false;
+        }
+    });
+}
+
+// Ensure submit buttons immediately dismiss any open dropdown without swallowing clicks
+document.querySelectorAll('#customerOrderForm button[type="submit"]').forEach(btn => {
+    btn.addEventListener('mousedown', function() {
+        const dropdownMenu = document.getElementById('quotationDropdownMenu');
+        if (dropdownMenu && dropdownMenu.classList.contains('show')) {
+            const dropdownBtn = document.getElementById('quotationDropdownBtn');
+            if (dropdownBtn && typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+                const dd = bootstrap.Dropdown.getInstance(dropdownBtn);
+                if (dd) dd.hide();
+            }
+        }
+    });
 });
 
 document.getElementById('poValueInput').addEventListener('input', function () {
@@ -955,7 +1101,6 @@ document.getElementById('poValueInput').addEventListener('input', function () {
 document.addEventListener('input', function (e) {
     if (
         !e.target.classList.contains('qty')
-        && !e.target.classList.contains('rate')
         && !e.target.classList.contains('mes-rate')
     ) {
         return;
@@ -972,24 +1117,19 @@ function calculateTotals() {
 
     document.querySelectorAll('#productTable tbody tr').forEach(row => {
         const qtyInput = row.querySelector('.qty');
-        const rateInput = row.querySelector('.rate');
         const mesRateInput = row.querySelector('.mes-rate');
-        const valueInput = row.querySelector('.value');
         const mesValueInput = row.querySelector('.mes-value');
-        if (!qtyInput || !rateInput || !valueInput || !mesRateInput || !mesValueInput) {
+        if (!qtyInput || !mesRateInput || !mesValueInput) {
             return;
         }
 
         const qty = Number(qtyInput.value) || 0;
-        const rate = Number(rateInput.value) || 0;
         const mesRate = Number(mesRateInput.value) || 0;
-        const lineValue = qty * rate;
         const lineMesValue = qty * mesRate;
 
-        valueInput.value = lineValue.toFixed(2);
         mesValueInput.value = lineMesValue.toFixed(2);
         totalQty += qty;
-        totalValue += lineValue;
+        totalValue += lineMesValue;
 
     });
 
@@ -1009,142 +1149,106 @@ document.addEventListener(
             return;
         }
 
-        let customerName =
-            document.getElementById(
-                'customerName'
-            ).value;
+        let customerName = document.getElementById('customerName').value;
+        let customerRegion = document.getElementById('customerRegion').value;
+        let customerEmail = document.getElementById('customerEmail')?.value.trim() || '';
+        let customerPhone = document.getElementById('customerPhone').value.trim();
+        let customerGstin = document.getElementById('customerGstin')?.value.trim() || '';
+        let customerStateCode = document.getElementById('customerStateCode')?.value.trim() || '';
+        let customerIsSez = document.getElementById('customerIsSez')?.value || 'No';
+        let customerPaymentTerms = document.getElementById('customerPaymentTerms')?.value.trim() || '';
+        let customerAddress = document.getElementById('customerAddress').value;
 
-        let customerPhone =
-            document.getElementById(
-                'customerPhone'
-            ).value.trim();
+        let customerNameError = document.getElementById('customerNameError');
+        let customerRegionError = document.getElementById('customerRegionError');
+        let customerPhoneError = document.getElementById('customerPhoneError');
+        let customerEmailError = document.getElementById('customerEmailError');
 
-        let customerAddress =
-            document.getElementById(
-                'customerAddress'
-            ).value;
-
-        let customerRegion =
-            document.getElementById(
-                'customerRegion'
-            ).value;
-
-        let customerNameError =
-            document.getElementById(
-                'customerNameError'
-            );
-        let customerRegionError =
-            document.getElementById(
-                'customerRegionError'
-            );
-        let customerPhoneError =
-            document.getElementById(
-                'customerPhoneError'
-            );
-
-        customerNameError.style.display = 'none';
-        customerRegionError.style.display = 'none';
-        customerPhoneError.style.display = 'none';
+        if (customerNameError) customerNameError.style.display = 'none';
+        if (customerRegionError) customerRegionError.style.display = 'none';
+        if (customerPhoneError) customerPhoneError.style.display = 'none';
+        if (customerEmailError) customerEmailError.style.display = 'none';
 
         if (!customerName.trim()) {
-            customerNameError.style.display = 'block';
+            if (customerNameError) customerNameError.style.display = 'block';
             return;
         }
 
         if (!customerRegion) {
-            customerRegionError.style.display = 'block';
+            if (customerRegionError) customerRegionError.style.display = 'block';
+            return;
+        }
+
+        if (customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
+            if (customerEmailError) customerEmailError.style.display = 'block';
             return;
         }
 
         if (customerPhone && !/^\d{10}$/.test(customerPhone)) {
-            customerPhoneError.style.display = 'block';
+            if (customerPhoneError) customerPhoneError.style.display = 'block';
             return;
         }
 
         fetch('/add-customer/', {
-
             method: 'POST',
-
             headers: {
-
-                'X-CSRFToken':
-                    '{{ csrf_token }}',
-
-                'Content-Type':
-                    'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/x-www-form-urlencoded',
             },
-
             body: new URLSearchParams({
                 customer_name: customerName.trim(),
                 region: customerRegion,
+                email: customerEmail,
                 phone_number: customerPhone,
+                gstin: customerGstin,
+                state_code: customerStateCode,
+                is_sez: customerIsSez,
+                payment_terms: customerPaymentTerms,
                 address: customerAddress.trim()
             })
         })
-
         .then(response => response.json())
-
         .then(data => {
-
             if (data.status === 'success') {
-
-                let dropdown =
-                    document.getElementById(
-                        'customerDropdown'
-                    );
-
-                let option =
-                    document.createElement(
-                        'option'
-                    );
-
+                let dropdown = document.getElementById('customerDropdown');
+                let option = document.createElement('option');
                 option.value = data.id;
-
                 option.text = data.name;
-
                 option.dataset.region = data.region;
-
                 option.selected = true;
-
                 dropdown.appendChild(option);
 
                 document.getElementById('regionDropdown').value = data.region;
                 filterCustomersByRegion();
 
-                let modal =
-                    bootstrap.Modal.getInstance(
-                        document.getElementById(
-                            'customerModal'
-                        )
-                    );
+                let modal = bootstrap.Modal.getInstance(document.getElementById('customerModal'));
+                if (modal) modal.hide();
 
-                modal.hide();
+                document.getElementById('customerName').value = '';
+                document.getElementById('customerRegion').value = '';
+                if (document.getElementById('customerEmail')) document.getElementById('customerEmail').value = '';
+                document.getElementById('customerPhone').value = '';
+                if (document.getElementById('customerGstin')) document.getElementById('customerGstin').value = '';
+                if (document.getElementById('customerStateCode')) document.getElementById('customerStateCode').value = '';
+                if (document.getElementById('customerIsSez')) document.getElementById('customerIsSez').value = 'No';
+                if (document.getElementById('customerPaymentTerms')) document.getElementById('customerPaymentTerms').value = '';
+                document.getElementById('customerAddress').value = '';
 
-                document.getElementById(
-                    'customerName'
-                ).value = '';
-
-                document.getElementById(
-                    'customerPhone'
-                ).value = '';
-
-                document.getElementById(
-                    'customerAddress'
-                ).value = '';
-                document.getElementById(
-                    'customerRegion'
-                ).value = '';
-                customerPhoneError.style.display = 'none';
-                customerRegionError.style.display = 'none';
+                if (customerPhoneError) customerPhoneError.style.display = 'none';
+                if (customerRegionError) customerRegionError.style.display = 'none';
+                if (customerEmailError) customerEmailError.style.display = 'none';
             } else {
                 const errorMessage = data.message || 'Unable to save customer';
-                if (data.field === 'phone_number') {
+                if (data.field === 'phone_number' && customerPhoneError) {
                     customerPhoneError.textContent = errorMessage;
                     customerPhoneError.style.display = 'block';
-                } else if (data.field === 'region') {
+                } else if (data.field === 'email' && customerEmailError) {
+                    customerEmailError.textContent = errorMessage;
+                    customerEmailError.style.display = 'block';
+                } else if (data.field === 'region' && customerRegionError) {
                     customerRegionError.textContent = errorMessage;
                     customerRegionError.style.display = 'block';
-                } else {
+                } else if (customerNameError) {
                     customerNameError.textContent = errorMessage;
                     customerNameError.style.display = 'block';
                 }
@@ -1234,136 +1338,284 @@ document.addEventListener('DOMContentLoaded', function() {
         // Close modal
         poConfirmationModalInstance.hide();
     });
+
+    // Auto-fill from Email if add_po=1 in URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('add_po') === '1') {
+        const fromEmailId = urlParams.get('from_email_id') || '';
+        const customerId = urlParams.get('customer_id') || '';
+        const regionParam = urlParams.get('region') || '';
+        const poNumberParam = urlParams.get('po_number') || '';
+        const poDateParam = urlParams.get('po_date') || '';
+        const productName = urlParams.get('product_name') || '';
+        const productType = urlParams.get('product_type') || '';
+        const quantity = urlParams.get('quantity') || '';
+        const rate = urlParams.get('rate') || '';
+        const productRemarks = urlParams.get('product_remarks') || '';
+
+        const regionSelect = document.getElementById('regionDropdown');
+        const customerSelect = document.getElementById('customerDropdown');
+        const poNumberInput = document.getElementById('poNumberInput');
+        const poNumberField = document.getElementById('poNumberField');
+        const poDateInput = document.getElementById('poDateInput');
+        const form = document.getElementById('customerOrderForm');
+
+        if (customerSelect && customerId) {
+            const targetOpt = Array.from(customerSelect.options).find(o => String(o.value) === String(customerId));
+            if (targetOpt) {
+                targetOpt.hidden = false;
+                const custRegion = targetOpt.dataset.region;
+                if (regionSelect && custRegion) {
+                    regionSelect.value = custRegion;
+                }
+            }
+            if (typeof filterCustomersByRegion === 'function') {
+                filterCustomersByRegion();
+            }
+            customerSelect.value = customerId;
+            if (targetOpt) targetOpt.hidden = false;
+            if (typeof loadCustomerQuotations === 'function') {
+                loadCustomerQuotations();
+            }
+        } else if (regionSelect && regionParam) {
+            regionSelect.value = regionParam;
+            if (typeof filterCustomersByRegion === 'function') {
+                filterCustomersByRegion();
+            }
+        }
+
+        const quotationNoParam = urlParams.get('quotation_number') || '';
+        if (quotationNoParam) {
+            const quoteInput = document.getElementById('quotationNumberInput');
+            if (quoteInput) quoteInput.value = quotationNoParam;
+            if (typeof loadCustomerQuotations === 'function') {
+                loadCustomerQuotations();
+            }
+        }
+
+        const quotationValParam = urlParams.get('quotation_value') || '';
+        if (quotationValParam) {
+            const quotationValInput = document.querySelector('input[name="quotation_value"]');
+            if (quotationValInput) quotationValInput.value = quotationValParam;
+            const poValInput = document.getElementById('poValueInput');
+            if (poValInput && !poValInput.value) poValInput.value = quotationValParam;
+        }
+
+        if (confirmationTypeSelect) {
+            confirmationTypeSelect.value = 'Customer PO';
+            if (poNumberField) poNumberField.style.display = 'block';
+        }
+
+        if (poNumberInput && poNumberParam) {
+            poNumberInput.value = poNumberParam;
+        }
+
+        if (poDateInput && poDateParam) {
+            poDateInput.value = poDateParam;
+        }
+
+        function groupProductsByNameAndType(prods) {
+            if (!Array.isArray(prods) || prods.length === 0) return [];
+            const map = {};
+            const result = [];
+
+            prods.forEach(p => {
+                let name = (p.product_name || '').trim();
+                let type = (p.product_type || 'APG').trim();
+                let rateVal = String(p.rate || p.mes_rate_per_unit || p.rate_per_unit || '').trim();
+                let remarksVal = (p.remarks || p.product_remarks || '').trim();
+
+                const nameLower = name.toLowerCase();
+                const typeLower = type.toLowerCase();
+                if (nameLower.includes('air ring') || ['arg', 'sarg'].includes(typeLower)) {
+                    name = 'Air Ring Gauge';
+                    type = 'ARG';
+                } else if (nameLower.includes('air plug') || ['apg', 'sapg'].includes(typeLower)) {
+                    name = 'Air Plug Gauge';
+                    type = 'APG';
+                } else if (nameLower.includes('thread ring') || ['trg', 'strg'].includes(typeLower)) {
+                    name = 'Thread Ring Gauge';
+                    type = 'TRG';
+                } else if (nameLower.includes('thread plug') || ['tpg', 'stpg'].includes(typeLower)) {
+                    name = 'Thread Plug Gauge';
+                    type = 'TPG';
+                } else if (nameLower.includes('plain ring') || ['prg', 'sprg'].includes(typeLower)) {
+                    name = 'Plain Ring Gauge';
+                    type = 'PRG';
+                } else if (nameLower.includes('plain plug') || ['ppg', 'sppg'].includes(typeLower)) {
+                    name = 'Plain Plug Gauge';
+                    type = 'PPG';
+                }
+
+                const key = `${name.toLowerCase()}|||${type.toLowerCase()}|||${rateVal}`;
+
+                let qty = parseInt(p.quantity, 10);
+                if (isNaN(qty) || qty < 1) qty = 1;
+
+                if (map[key]) {
+                    map[key].quantity += qty;
+                    if (remarksVal && !map[key]._remSet.has(remarksVal.toLowerCase())) {
+                        map[key]._remSet.add(remarksVal.toLowerCase());
+                        if (map[key].remarks) {
+                            map[key].remarks += `; ${remarksVal}`;
+                        } else {
+                            map[key].remarks = remarksVal;
+                        }
+                    }
+                } else {
+                    const newItem = {
+                        product_name: name,
+                        product_type: type,
+                        quantity: qty,
+                        rate: rateVal,
+                        remarks: remarksVal,
+                        _remSet: new Set(remarksVal ? [remarksVal.toLowerCase()] : [])
+                    };
+                    map[key] = newItem;
+                    result.push(newItem);
+                }
+            });
+
+            result.forEach(item => delete item._remSet);
+            return result;
+        }
+
+        const sessionProductsJson = `{{ email_products_json|default:''|escapejs }}`;
+        const productsJsonStr = sessionProductsJson || urlParams.get('products_json') || '';
+        let multiProducts = [];
+        if (productsJsonStr) {
+            try {
+                multiProducts = JSON.parse(productsJsonStr);
+            } catch(e) { console.error('Error parsing products_json:', e); }
+        }
+
+        multiProducts = groupProductsByNameAndType(multiProducts);
+
+        const tbody = document.querySelector('#productTable tbody');
+        if (multiProducts && multiProducts.length > 0 && tbody) {
+            tbody.innerHTML = '';
+            multiProducts.forEach((prod, idx) => {
+                const rowData = {
+                    product_name: prod.product_name || '',
+                    product_type: prod.product_type || '',
+                    quantity: prod.quantity || 1,
+                    mes_rate_per_unit: prod.rate || rate || '',
+                    remarks: prod.remarks || prod.product_remarks || ''
+                };
+                tbody.insertAdjacentHTML('beforeend', generateProductRow(idx, rowData));
+            });
+            renumberProductRows();
+            calculateTotals();
+        } else if (tbody) {
+            const firstRow = tbody.querySelector('tr:first-child');
+            if (firstRow) {
+                const nameInput = firstRow.querySelector('input[name="product_name[]"]');
+                const typeSelect = firstRow.querySelector('select[name="product_type[]"]');
+                const qtyInput = firstRow.querySelector('input[name="quantity[]"]');
+                const rateInput = firstRow.querySelector('input[name="mes_rate_per_unit[]"]');
+                const remarksInput = firstRow.querySelector('input[name="remarks[]"]');
+
+                if (nameInput && productName) nameInput.value = productName;
+                if (typeSelect && productType) typeSelect.value = productType;
+                if (qtyInput && quantity) qtyInput.value = quantity;
+                if (rateInput && rate) rateInput.value = rate;
+                if (remarksInput && productRemarks) remarksInput.value = productRemarks;
+            }
+        }
+
+        if (form && fromEmailId) {
+            let hiddenInput = form.querySelector('input[name="from_email_id"]');
+            if (!hiddenInput) {
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="from_email_id" value="${fromEmailId}">`);
+            }
+        }
+
+        loadCustomerQuotations();
+    }
+
+    document.querySelector('#productTable tbody').addEventListener('input', (e) => {
+        if (e.target && e.target.name === 'product_name[]') {
+            loadCustomerQuotations();
+        }
+    });
 });
 </script>
 
 <!-- CUSTOMER MODAL -->
-
-<div class="modal fade"
-     id="customerModal"
-     tabindex="-1">
-
-    <div class="modal-dialog">
-
+<div class="modal fade" id="customerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-
-            <div class="modal-header bg-primary text-white">
-
-                <h5 class="modal-title">
-
-                    Add Customer
-
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title fs-6 fw-semibold">
+                    <i class="bi bi-person-plus-fill me-2"></i>Add Customer
                 </h5>
-
-                <button type="button"
-                        class="btn-close btn-close-white"
-                        data-bs-dismiss="modal">
-
-                </button>
-
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-
-            <div class="modal-body">
-
-                <div class="mb-3">
-
-    <label>
-        Customer Name *
-    </label>
-
-    <input type="text"
-           id="customerName"
-           class="form-control">
-
-    <div id="customerNameError"
-         class="text-danger mt-1"
-         style="display:none;">
-
-        Customer Name is required
-
-    </div>
-
-</div>
-
-                <div class="mb-3">
-
-                    <label>
-                        Region *
-                    </label>
-
-                    <select id="customerRegion"
-                            class="form-control">
-                        <option value="">Select Region</option>
-                        <option value="Chennai">Chennai</option>
-                        <option value="Hosur">Hosur</option>
-                    </select>
-
-                    <div id="customerRegionError"
-                         class="text-danger mt-1"
-                         style="display:none;">
-                        Region is required.
+            <div class="modal-body p-3">
+                <div class="row g-3">
+                    <!-- Customer Name & Region -->
+                    <div class="col-md-8">
+                        <label class="form-label small fw-semibold">Customer Name <span class="text-danger">*</span></label>
+                        <input type="text" id="customerName" class="form-control form-control-sm" placeholder="e.g. Rajaguru. N">
+                        <div id="customerNameError" class="text-danger small mt-1" style="display:none;">Customer Name is required</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Region <span class="text-danger">*</span></label>
+                        <select id="customerRegion" class="form-select form-select-sm">
+                            <option value="">Select Region</option>
+                            <option value="Chennai">Chennai</option>
+                            <option value="Hosur">Hosur</option>
+                        </select>
+                        <div id="customerRegionError" class="text-danger small mt-1" style="display:none;">Region is required.</div>
                     </div>
 
-                </div>
-
-                <div class="mb-3">
-
-                    <label>
-                        Phone Number
-                    </label>
-
-                    <input type="text"
-                           id="customerPhone"
-                           class="form-control"
-                           maxlength="10"
-                           inputmode="numeric"
-                           autocomplete="tel"
-                           placeholder="10 digit mobile number">
-
-                    <div id="customerPhoneError"
-                         class="text-danger mt-1"
-                         style="display:none;">
-                        Enter a valid 10-digit mobile number.
+                    <!-- Email & Phone Number -->
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Email Address</label>
+                        <input type="email" id="customerEmail" class="form-control form-control-sm" placeholder="customer@company.com">
+                        <div id="customerEmailError" class="text-danger small mt-1" style="display:none;">Enter a valid customer email address.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Phone Number</label>
+                        <input type="text" id="customerPhone" class="form-control form-control-sm" maxlength="10" inputmode="numeric" placeholder="10 digit mobile number">
+                        <div id="customerPhoneError" class="text-danger small mt-1" style="display:none;">Enter a valid 10-digit mobile number.</div>
                     </div>
 
+                    <!-- GSTIN, State Code, SEZ, Payment Terms -->
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">GSTIN</label>
+                        <input type="text" id="customerGstin" class="form-control form-control-sm" maxlength="15" placeholder="e.g. 33AAAAA0000A1Z5" style="text-transform:uppercase;">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">State Code</label>
+                        <input type="text" id="customerStateCode" class="form-control form-control-sm" maxlength="20" placeholder="e.g. 33">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold">SEZ</label>
+                        <select id="customerIsSez" class="form-select form-select-sm">
+                            <option value="No" selected>No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Payment Terms</label>
+                        <input type="text" id="customerPaymentTerms" class="form-control form-control-sm" placeholder="e.g. 30 Days">
+                    </div>
+
+                    <!-- Address -->
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Address</label>
+                        <textarea id="customerAddress" class="form-control form-control-sm" rows="2" placeholder="Full address details..."></textarea>
+                    </div>
                 </div>
-
-                <div class="mb-3">
-
-                    <label>
-                        Address
-                    </label>
-
-                    <textarea id="customerAddress"
-                              class="form-control"></textarea>
-
-                </div>
-
             </div>
-
-            <div class="modal-footer">
-
-                <button type="button"
-                        class="btn btn-secondary"
-                        data-bs-dismiss="modal">
-
-                    Close
-
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success btn-sm" id="saveCustomerBtn">
+                    <i class="bi bi-check-circle me-1"></i>Save Customer
                 </button>
-
-                <button type="button"
-                        class="btn btn-success"
-                        id="saveCustomerBtn">
-
-                    Save Customer
-
-                </button>
-
             </div>
-
         </div>
-
     </div>
-
 </div>
 {% endblock %}

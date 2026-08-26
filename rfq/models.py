@@ -71,6 +71,7 @@ class RFQProduct(models.Model):
         related_name='rfq_multi_price_requests'
     )
     quantity = models.IntegerField(default=0)
+    unit = models.CharField(max_length=20, default="No's", blank=True, null=True)
     rate_per_unit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     value = models.DecimalField(max_digits=12, decimal_places=2)
     quotation_email_sent = models.BooleanField(
@@ -82,7 +83,24 @@ class RFQProduct(models.Model):
         help_text="Indicates if quotation has been prepared for this product"
     )
     remarks = models.TextField(blank=True, null=True)
+    product_specifications = models.JSONField(blank=True, null=True, default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def get_formatted_specifications(self):
+        if not self.product_specifications or not isinstance(self.product_specifications, dict):
+            return ""
+        items = []
+        for k, v in self.product_specifications.items():
+            if v and str(v).strip():
+                items.append(f"{k}: {v}")
+        return " | ".join(items)
+
+    @property
+    def display_name(self):
+        specs = self.get_formatted_specifications()
+        if specs:
+            return f"{self.product_name} ({specs})"
+        return self.product_name
 
     def __str__(self):
         return f"{self.rfq.rfq_no} - {self.product_name}"
@@ -122,10 +140,39 @@ class RFQQuotation(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        unique_together = ('rfq', 'revision_number')
+        unique_together = ('rfq', 'quotation_number')
 
     def __str__(self):
         return self.quotation_number
+
+
+class RFQEmailMessage(models.Model):
+    DIRECTION_CHOICES = (
+        ('OUT', 'Outgoing'),
+        ('IN', 'Incoming'),
+    )
+
+    rfq = models.ForeignKey(RFQ, on_delete=models.CASCADE, related_name='email_messages')
+    message_id = models.CharField(max_length=255, unique=True)
+    in_reply_to = models.CharField(max_length=255, blank=True, null=True)
+    references = models.TextField(blank=True, null=True)
+    sender = models.CharField(max_length=255)
+    recipients = models.TextField()
+    cc_recipients = models.TextField(blank=True, null=True)
+    subject = models.CharField(max_length=500)
+    body = models.TextField(blank=True, null=True)
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default='OUT')
+    sent_at = models.DateTimeField()
+    has_attachments = models.BooleanField(default=False)
+    attachment_names = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['sent_at', 'created_at']
+
+    def __str__(self):
+        return f"{self.direction} - {self.rfq.rfq_no} - {self.subject}"
+
 
 
 

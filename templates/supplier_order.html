@@ -32,11 +32,9 @@
               <th>Rate Per Unit</th>
               <th>Quantity</th>
               <th>PO Value</th>
-              <th>PO Number</th>
-              <th>PO Date</th>
               <th>Validity</th>
-              <th>PO Attachment</th>
               <th>Action</th>
+              <th class="text-center supplier-email-th">Supplier PO Email</th>
             </tr>
           </thead>
           <tbody>
@@ -46,6 +44,11 @@
                 <td>{{ forloop.counter }}</td>
                 <td>
                   <input type="hidden" name="supplier_product_id[]" value="{{ sp.id }}">
+                  {% if sp.po_email_sent %}
+                  <div class="mb-1">
+                    <span class="badge bg-success">Supplier PO Sent</span>
+                  </div>
+                  {% endif %}
                   <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
                     <option value="">Select</option>
                     {% for p in products %}
@@ -75,29 +78,25 @@
                   </div>
                 </td>
                 <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" value="{{ sp.po_value }}" readonly required></td>
-                <td><input type="text" name="po_number[]" class="form-control" value="{{ sp.po_number }}" required></td>
-                <td><input type="date" name="po_date[]" class="form-control" value="{{ sp.po_date|date:'Y-m-d' }}" required></td>
-                <td><input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" required></td>
                 <td>
-                  <input type="file" name="po_attachment_{{ forloop.counter0 }}" class="form-control" style="min-width: 200px;">
-                  {% if sp.po_attachment %}
-                  <small class="text-muted d-block mt-1">Current: {{ sp.po_attachment.name }}</small>
-                  {% endif %}
+                  <input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" min="{{ today_str }}" required>
+                  <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
                 </td>
-                <td>
-                  <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+                <td class="text-center" style="width: 50px;">
+                  <button type="button" class="btn btn-danger btn-sm removeRow" title="Remove row">X</button>
                 </td>
               </tr>
               {% endfor %}
             {% else %}
+              {% for p in products %}
               <tr>
-                <td>1</td>
+                <td>{{ forloop.counter }}</td>
                 <td>
                   <input type="hidden" name="supplier_product_id[]" value="">
                   <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
                     <option value="">Select</option>
-                    {% for p in products %}
-                    <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" data-rate="{{ p.rate_per_unit }}">{{ p.product_name }}</option>
+                    {% for prod in products %}
+                    <option value="{{ prod.id }}" data-max-qty="{{ prod.quantity_ordered }}" data-rate="{{ prod.rate_per_unit }}" {% if prod.id == p.id %}selected{% endif %}>{{ prod.product_name }}</option>
                     {% endfor %}
                   </select>
                 </td>
@@ -118,19 +117,49 @@
                 <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" required></td>
                 <td>
                   <div class="d-flex align-items-center">
+                    <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" value="{{ p.quantity_ordered }}" required>
+                    <span class="ms-2 quantity-max-label">/({{ p.quantity_ordered }})</span>
+                  </div>
+                </td>
+                <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
+                <td>
+                  <input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ default_supplier_validity|date:'Y-m-d' }}" min="{{ today_str }}" required>
+                  <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
+                </td>
+                <td>
+                  <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td>1</td>
+                <td>
+                  <input type="hidden" name="supplier_product_id[]" value="">
+                  <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
+                    <option value="">Select</option>
+                  </select>
+                </td>
+                <td>
+                  <div class="d-flex">
+                    <select name="supplier[]" class="form-select supplier-dropdown" style="min-width: 250px;" required>
+                      <option value="">Select</option>
+                    </select>
+                  </div>
+                </td>
+                <td><input type="number" step="0.01" name="rate_per_unit[]" class="form-control rate-input" style="min-width: 180px;" required></td>
+                <td>
+                  <div class="d-flex align-items-center">
                     <input type="number" min="1" name="quantity[]" class="form-control quantity-input" style="min-width: 130px;" required>
                     <span class="ms-2 quantity-max-label">/(0)</span>
                   </div>
                 </td>
                 <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
-                <td><input type="text" name="po_number[]" class="form-control" required></td>
-                <td><input type="date" name="po_date[]" class="form-control" required></td>
                 <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
-                <td><input type="file" name="po_attachment_0" class="form-control" style="min-width: 200px;" required></td>
                 <td>
                   <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
                 </td>
               </tr>
+              {% endfor %}
             {% endif %}
           </tbody>
         </table>
@@ -141,35 +170,109 @@
           <span id="totalSupplierQty">{{ total_supplier_quantity|default:0 }}</span>/{{ total_customer_quantity }}
         </strong>
       </div>
-      {% if not is_fully_allocated %}
-      <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow">Add Row</button>
-      {% endif %}
+      <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow" {% if total_supplier_quantity >= total_customer_quantity and total_customer_quantity > 0 %}disabled{% endif %}>Add Row</button>
       <div>
-        <button type="submit" class="btn btn-success">{% if is_edit %}Update{% else %}Submit{% endif %}</button>
-        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary">Cancel</a>
-        <a id="generatePoBtn"
-           href="{% if supplier_orders %}{% url 'generate_supplier_po' dpr.id %}{% else %}javascript:void(0){% endif %}"
-           target="_blank"
-           class="btn btn-primary ms-2 {% if not supplier_orders %}disabled{% endif %}"
-           {% if not supplier_orders %}style="pointer-events: none; opacity: 0.65;"{% endif %}
-           title="Download Purchase Order PDF">
-          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
-        </a>
-        <a id="sendMailBtn"
-           href="javascript:void(0)"
-           class="btn btn-info ms-2 disabled"
-           style="pointer-events: none; opacity: 0.65;"
-           title="Send Purchase Order PDF by email to supplier">
-          <i class="bi bi-envelope me-1"></i> Send Mail
-        </a>
+        <button type="button"
+                class="btn btn-primary"
+                id="generatePoBtn"
+                title="Update supplier order and generate Purchase Order PDF">
+          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO & Update
+        </button>
+        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary ms-1">Close</a>
+        {% if po_prepared and supplier_orders|length == 1 %}
+        <button type="button"
+                id="sendMailBtn"
+                class="btn btn-outline-primary btn-sm ms-1"
+                {% if not has_supplier_emails %}disabled{% endif %}
+                title="Compose New Email to supplier">
+          <i class="bi bi-envelope-plus me-1"></i> New Email
+        </button>
+        <button type="button"
+                id="replyMailBtn"
+                class="btn btn-outline-dark btn-sm ms-1"
+                {% if not has_supplier_emails %}disabled{% endif %}
+                title="Reply Email to supplier">
+          <i class="bi bi-reply me-1"></i> Reply Email
+        </button>
+        {% endif %}
         {% if supplier_orders and missing_email_suppliers %}
         <div class="text-danger small mt-2">
-          * Send Mail is disabled because the following suppliers do not have an Email ID configured: <strong>{{ missing_email_suppliers|join:", " }}</strong>. 
+          * Send Email is disabled for suppliers without an Email ID: <strong>{{ missing_email_suppliers|join:", " }}</strong>.
           Please add their email address in <a href="{% url 'supplier_details' %}">Masters -> Suppliers</a>.
         </div>
         {% endif %}
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Delivery Address Selection Modal -->
+<div class="modal fade" id="deliveryAddressModal" tabindex="-1" aria-labelledby="deliveryAddressModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content shadow border-0">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-bold" id="deliveryAddressModalLabel">
+          <i class="bi bi-geo-alt me-2"></i>Select Delivery Address for Purchase Order
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <p class="text-secondary mb-3">
+          Please select the <strong>DELIVERY ADDRESS</strong> to generate on the Purchase Order PDF. <span class="text-muted">(Invoice Address remains fixed).</span>
+        </p>
+
+        <div class="row g-3">
+          <!-- Option 1: Hosur Address -->
+          <div class="col-md-6">
+            <div class="card h-100 border-2 delivery-address-card active-delivery-card" id="cardHosurAddr" style="cursor: pointer; border-color: #0d6efd; background-color: #f8f9fa;">
+              <div class="card-body">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="modalDeliveryAddressChoice" id="radioHosurAddr" value="hosur" checked>
+                  <label class="form-check-label fw-bold text-primary fs-6" for="radioHosurAddr">
+                    Option 1: Hosur Address
+                  </label>
+                </div>
+                <hr class="my-2">
+                <div class="small text-dark lh-sm">
+                  <strong>METROLOGY ENGINEERING SOLUTIONS</strong><br>
+                  NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br>
+                  2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri,<br>
+                  Tamilnadu-635109.<br>
+                  Phone : +91-965-577-8807
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Option 2: Chennai Address -->
+          <div class="col-md-6">
+            <div class="card h-100 border-2 delivery-address-card" id="cardChennaiAddr" style="cursor: pointer; border-color: #dee2e6; background-color: #ffffff;">
+              <div class="card-body">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="modalDeliveryAddressChoice" id="radioChennaiAddr" value="chennai">
+                  <label class="form-check-label fw-bold text-primary fs-6" for="radioChennaiAddr">
+                    Option 2: Chennai Address
+                  </label>
+                </div>
+                <hr class="my-2">
+                <div class="small text-dark lh-sm">
+                  <strong>METROLOGY ENGINEERING SOLUTIONS</strong><br>
+                  14/65, 6th Street, Kamaraj Nagar, Korratur,<br>
+                  Chennai, Tamil Nadu, India-600 080<br>
+                  Phone : +91-965-577-8807
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary px-4 fw-bold" id="modalConfirmGeneratePoBtn">
+          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -180,15 +283,297 @@
 const rfqRateMap = JSON.parse(document.getElementById('rfq-rate-map').textContent);
 const productDefaultRateMap = JSON.parse(document.getElementById('product-default-rate-map').textContent);
 const poEmailData = JSON.parse(document.getElementById('po-email-data').textContent || '[]');
+const targetCustomerDateStr = '{{ target_customer_date|date:"Y-m-d" }}';
+const targetCustomerDateDisplay = '{{ target_customer_date|date:"d-m-Y" }}';
+const defaultSupplierValidityDate = '{{ default_supplier_validity|date:"Y-m-d" }}';
+const todayDateStr = '{{ today_str }}';
+const todayDisplay = '{{ today|date:"d-m-Y" }}';
+
+function validateValidityDateInput(input) {
+  if (!input) return true;
+  let msgEl = input.parentElement.querySelector('.validity-warning-msg');
+  if (!msgEl) {
+    msgEl = document.createElement('div');
+    msgEl.className = 'validity-warning-msg small mt-1';
+    msgEl.style.fontSize = '0.72rem';
+    msgEl.style.lineHeight = '1.2';
+    input.parentElement.appendChild(msgEl);
+  }
+
+  if (!input.value) {
+    msgEl.style.display = 'none';
+    input.classList.remove('is-invalid', 'border-warning');
+    return true;
+  }
+
+  const inputDate = new Date(input.value + 'T00:00:00');
+
+  // Check 1: Cannot be in the past
+  if (todayDateStr) {
+    const todayDate = new Date(todayDateStr + 'T00:00:00');
+    if (inputDate < todayDate) {
+      input.classList.add('is-invalid');
+      input.classList.remove('border-warning');
+      msgEl.style.display = 'block';
+      msgEl.className = 'validity-warning-msg text-danger small mt-1 fw-bold';
+      msgEl.innerHTML = `<i class="bi bi-x-circle-fill me-1"></i>Validity date cannot be in the past (Today is ${todayDisplay}).`;
+      return false;
+    }
+  }
+
+  // Check 2: Must be earlier than Customer PO Date and warning if closer than 1 week
+  if (targetCustomerDateStr) {
+    const customerDate = new Date(targetCustomerDateStr + 'T00:00:00');
+    const diffTime = customerDate - inputDate;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 0) {
+      input.classList.add('is-invalid');
+      input.classList.remove('border-warning');
+      msgEl.style.display = 'block';
+      msgEl.className = 'validity-warning-msg text-danger small mt-1 fw-bold';
+      msgEl.innerHTML = `<i class="bi bi-x-circle-fill me-1"></i>Must be earlier than Customer PO Date (${targetCustomerDateDisplay}).`;
+      return false;
+    } else if (diffDays < 7) {
+      input.classList.remove('is-invalid');
+      input.classList.add('border-warning');
+      msgEl.style.display = 'block';
+      msgEl.className = 'validity-warning-msg text-warning small mt-1 fw-semibold';
+      msgEl.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>Warning: Closer to Customer PO date (${diffDays} day${diffDays === 1 ? '' : 's'} before). Recommended: 1 week before (${targetCustomerDateDisplay}).`;
+      return true;
+    }
+  }
+
+  input.classList.remove('is-invalid', 'border-warning');
+  msgEl.style.display = 'none';
+  return true;
+}
+
+function validateAllValidityDates() {
+  let allValid = true;
+  document.querySelectorAll('.po-validity-input').forEach(input => {
+    const valid = validateValidityDateInput(input);
+    if (!valid) allValid = false;
+  });
+  return allValid;
+}
+
+document.addEventListener('input', function(e) {
+  if (e.target.classList.contains('po-validity-input')) {
+    validateValidityDateInput(e.target);
+  }
+});
+
+document.addEventListener('change', function(e) {
+  if (e.target.classList.contains('po-validity-input')) {
+    validateValidityDateInput(e.target);
+  }
+});
 
 function getNextRowIndex() {
   return document.querySelectorAll('#supplierTable tbody tr').length;
 }
 
+function handleProductChange(row) {
+  const productSelect = row.querySelector('.product-select');
+  if (!productSelect) return;
+  const selectedOption = productSelect.options[productSelect.selectedIndex];
+  const productId = selectedOption ? String(selectedOption.value || '') : '';
+  const supplierDropdown = row.querySelector('.supplier-dropdown');
+  const rateInput = row.querySelector('.rate-input');
+  const quantityInput = row.querySelector('.quantity-input');
+
+  if (!productId) {
+    if (supplierDropdown) supplierDropdown.value = '';
+    if (rateInput) rateInput.value = '';
+    if (quantityInput) quantityInput.value = '';
+    const poVal = row.querySelector('.po-value-input');
+    if (poVal) poVal.value = '';
+    const label = row.querySelector('.quantity-max-label');
+    if (label) label.textContent = '/(0)';
+    updateQuantityLimits();
+    updateSupplierRowValues();
+    updateOverallSupplierQty();
+    return;
+  }
+
+  // 1. Auto-select linked supplier for this product from rfqRateMap
+  const productRates = rfqRateMap[productId] || {};
+  const linkedSupplierIds = Object.keys(productRates);
+  if (supplierDropdown) {
+    if (linkedSupplierIds.length > 0) {
+      supplierDropdown.value = linkedSupplierIds[0];
+    } else {
+      supplierDropdown.value = '';
+    }
+  }
+
+  // 2. Auto-fill Rate Per Unit strictly for this product & supplier from RFQ
+  if (rateInput) {
+    const currentSupplierId = supplierDropdown ? String(supplierDropdown.value) : '';
+    if (currentSupplierId && productRates[currentSupplierId] !== undefined) {
+      rateInput.value = Number(productRates[currentSupplierId]).toFixed(2);
+    } else {
+      rateInput.value = '';
+    }
+  }
+
+  // 3. Auto-fill Quantity to remaining quantity
+  const maxQty = selectedOption
+      ? parseInt(selectedOption.dataset.maxQty || selectedOption.getAttribute('data-max-qty') || '0', 10)
+      : 0;
+  
+  let otherRowsQty = 0;
+  document.querySelectorAll('#supplierTable tbody tr').forEach(r => {
+    if (r !== row) {
+      const pSel = r.querySelector('.product-select');
+      const qIn = r.querySelector('.quantity-input');
+      if (pSel && String(pSel.value) === productId && qIn) {
+        const qVal = parseInt(qIn.value || '0', 10);
+        if (!isNaN(qVal) && qVal > 0) {
+          otherRowsQty += qVal;
+        }
+      }
+    }
+  });
+
+  const remaining = Math.max(0, maxQty - otherRowsQty);
+  if (quantityInput) {
+    quantityInput.value = remaining > 0 ? remaining : '';
+  }
+
+  updateQuantityLimits();
+  updateSupplierRowValues();
+  updateOverallSupplierQty();
+  updateSupplierEmailButtons();
+}
+
+function handleSupplierChange(row) {
+  const productSelect = row.querySelector('.product-select');
+  const supplierDropdown = row.querySelector('.supplier-dropdown');
+  const rateInput = row.querySelector('.rate-input');
+  if (!productSelect || !supplierDropdown || !rateInput) return;
+
+  const productId = String(productSelect.value || '');
+  const supplierId = String(supplierDropdown.value || '');
+  if (!productId || !supplierId) {
+    rateInput.value = '';
+    updateSupplierRowValues();
+    updateSupplierEmailButtons();
+    return;
+  }
+
+  const productRates = rfqRateMap[productId] || {};
+  if (productRates[supplierId] !== undefined) {
+    rateInput.value = Number(productRates[supplierId]).toFixed(2);
+  } else {
+    rateInput.value = '';
+  }
+
+  updateSupplierRowValues();
+  updateSupplierEmailButtons();
+}
+
+function updateSupplierEmailButtons() {
+  const rows = Array.from(document.querySelectorAll('#supplierTable tbody tr'));
+  const theadRow = document.querySelector('#supplierTable thead tr');
+  const bottomSendMailBtn = document.getElementById('sendMailBtn');
+  const bottomReplyMailBtn = document.getElementById('replyMailBtn');
+
+  if (rows.length === 0) return;
+
+  // Remove existing dynamic email cells
+  rows.forEach(r => {
+    r.querySelectorAll('.supplier-email-cell').forEach(td => td.remove());
+  });
+
+  // Ensure header has the Supplier PO Email column
+  let emailTh = document.querySelector('#supplierTable thead .supplier-email-th');
+  if (!emailTh && theadRow) {
+    emailTh = document.createElement('th');
+    emailTh.className = 'text-center supplier-email-th';
+    emailTh.textContent = 'Supplier PO Email';
+    theadRow.appendChild(emailTh);
+  }
+
+  // Group consecutive rows with the same selected supplier
+  let i = 0;
+  while (i < rows.length) {
+    const sSelect = rows[i].querySelector('.supplier-dropdown');
+    const sId = sSelect ? String(sSelect.value || '') : '';
+    const sOption = sSelect && sSelect.selectedIndex >= 0 ? sSelect.options[sSelect.selectedIndex] : null;
+    const sName = sOption && sOption.value ? sOption.textContent.trim() : 'Supplier';
+
+    let groupCount = 1;
+    while (i + groupCount < rows.length) {
+      const nextSelect = rows[i + groupCount].querySelector('.supplier-dropdown');
+      const nextId = nextSelect ? String(nextSelect.value || '') : '';
+      if (nextId === sId && sId !== '') {
+        groupCount++;
+      } else {
+        break;
+      }
+    }
+
+    const foundPo = poEmailData.find(po => String(po.supplier_id) === sId);
+    const matchingPo = foundPo || {
+      supplier_id: sId,
+      po_number: `SPO-{{ dpr.id|stringformat:"04d" }}-${sId}`,
+      supplier_name: sName,
+      supplier_email: '',
+      combined_supplier: true,
+      default_subject: `Purchase Order for {{ dpr.serial_number }} - Metrology Engineering Solutions`,
+      default_body: `Dear Sir/Madam,\n\nGreetings from Metrology Engineering Solutions.\n\nPlease find attached the Purchase Order for {{ dpr.serial_number }}.\n\nThank you,\nMetrology Engineering Solutions`
+    };
+
+    const emailTd = document.createElement('td');
+    emailTd.rowSpan = groupCount;
+    emailTd.className = 'text-center bg-white supplier-email-cell';
+    emailTd.style.verticalAlign = 'middle';
+    emailTd.style.minWidth = '170px';
+
+    if (sId) {
+      const btnGroup = document.createElement('div');
+      btnGroup.className = 'd-inline-flex gap-1 flex-wrap justify-content-center';
+
+      const newMailBtn = document.createElement('button');
+      newMailBtn.type = 'button';
+      newMailBtn.className = 'btn btn-outline-primary btn-sm shadow-sm';
+      newMailBtn.innerHTML = '<i class="bi bi-envelope-plus me-1"></i>New Email';
+      newMailBtn.title = 'Compose New Email to Supplier';
+      newMailBtn.addEventListener('click', function() {
+        openSupplierPoEmailModal(matchingPo, false);
+      });
+
+      const replyMailBtn = document.createElement('button');
+      replyMailBtn.type = 'button';
+      replyMailBtn.className = 'btn btn-outline-dark btn-sm shadow-sm';
+      replyMailBtn.innerHTML = '<i class="bi bi-reply me-1"></i>Reply Email';
+      replyMailBtn.title = 'Reply Email to Supplier';
+      replyMailBtn.addEventListener('click', function() {
+        openSupplierEmailChainModal(matchingPo);
+      });
+
+      btnGroup.appendChild(newMailBtn);
+      btnGroup.appendChild(replyMailBtn);
+      emailTd.appendChild(btnGroup);
+    } else {
+      emailTd.innerHTML = '<span class="text-muted small">Select supplier</span>';
+    }
+    
+    rows[i].appendChild(emailTd);
+    i += groupCount;
+  }
+}
+
 document.getElementById('addSupplierRow')?.addEventListener('click', function () {
+  const totalCustomer = parseInt('{{ total_customer_quantity }}', 10) || 0;
+  const totalSupplier = parseInt(document.getElementById('totalSupplierQty').textContent || '0', 10);
+  if (totalCustomer > 0 && totalSupplier >= totalCustomer) {
+    return;
+  }
   const tbody = document.querySelector('#supplierTable tbody');
   const rowCount = tbody.rows.length + 1;
-  const rowIndex = getNextRowIndex();
   const row = document.createElement('tr');
   row.innerHTML = `
     <td>${rowCount}</td>
@@ -223,17 +608,20 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
       </div>
     </td>
     <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
-    <td><input type="text" name="po_number[]" class="form-control" required></td>
-    <td><input type="date" name="po_date[]" class="form-control" required></td>
-    <td><input type="date" name="po_validity[]" class="form-control po-validity-input" required></td>
-    <td><input type="file" name="po_attachment_${rowIndex}" class="form-control" style="min-width: 200px;" required></td>
     <td>
-      <button type="button" class="btn btn-danger btn-sm removeRow">X</button>
+      <input type="date" name="po_validity[]" class="form-control po-validity-input" value="${defaultSupplierValidityDate}" min="${todayDateStr}" required>
+      <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
+    </td>
+    <td class="text-center" style="width: 50px;">
+      <button type="button" class="btn btn-danger btn-sm removeRow" title="Remove row">X</button>
     </td>
   `;
   tbody.appendChild(row);
   updateQuantityLimits();
   updateSupplierRowValues();
+  updateOverallSupplierQty();
+  updateSupplierEmailButtons();
+  validateAllValidityDates();
 });
 
 let activeSupplierRow = null;
@@ -242,8 +630,10 @@ document.addEventListener('click', function (e) {
   if (e.target.classList.contains('removeRow')) {
     e.target.closest('tr').remove();
     renumberSupplierRows();
+    updateQuantityLimits();
     updateSupplierRowValues();
     updateOverallSupplierQty();
+    updateSupplierEmailButtons();
   }
   if (e.target.classList.contains('addSupplierBtn')) {
     activeSupplierRow = e.target.closest('tr');
@@ -342,6 +732,13 @@ if (supplierPhoneInput) {
 }
 
 document.addEventListener('change', function (e) {
+  if (e.target.classList.contains('rate-input') || e.target.classList.contains('quantity-input')) {
+    updateSupplierRowValues();
+    updateQuantityLimits();
+    updateOverallSupplierQty();
+    return;
+  }
+
   const productSelect = e.target.closest('.product-select');
   const supplierSelect = e.target.closest('.supplier-dropdown');
   if (!productSelect && !supplierSelect) {
@@ -349,65 +746,10 @@ document.addEventListener('change', function (e) {
   }
 
   const row = e.target.closest('tr');
-  
   if (productSelect) {
-    const selectedOption = productSelect.options[productSelect.selectedIndex];
-    if (selectedOption && selectedOption.value) {
-      // 1. Autofill Quantity (remaining / max qty)
-      const maxQty = parseInt(selectedOption.dataset.maxQty || '0', 10);
-      
-      const usedByProduct = {};
-      document.querySelectorAll('#supplierTable tbody tr').forEach(r => {
-        const pSel = r.querySelector('.product-select');
-        const qIn = r.querySelector('.quantity-input');
-        if (pSel && pSel.value && qIn && r !== row) {
-          const qty = parseInt(qIn.value || '0', 10);
-          usedByProduct[pSel.value] = (usedByProduct[pSel.value] || 0) + qty;
-        }
-      });
-      const remaining = Math.max(0, maxQty - (usedByProduct[productSelect.value] || 0));
-      
-      const quantityInput = row.querySelector('.quantity-input');
-      if (quantityInput && !quantityInput.value) {
-        quantityInput.value = remaining;
-      }
-
-      // 2. Autofill Rate (first try RFQ, fallback to default rate)
-      updateRateFromRfq(row);
-      const rateInput = row.querySelector('.rate-input');
-      if (rateInput && (!rateInput.value || rateInput.value === '0.00' || rateInput.value === '0' || rateInput.value === '')) {
-        const defaultRate = selectedOption.dataset.rate || '0.00';
-        rateInput.value = Number(defaultRate).toFixed(2);
-      }
-
-      // 3. Autofill PO Number
-      const poNumInput = row.querySelector('input[name="po_number[]"]');
-      if (poNumInput && !poNumInput.value) {
-        poNumInput.value = '{{ dpr.po_number|default:"" }}';
-      }
-
-      // 4. Autofill PO Date
-      const poDateInput = row.querySelector('input[name="po_date[]"]');
-      if (poDateInput && !poDateInput.value) {
-        poDateInput.value = '{{ dpr.po_date|date:"Y-m-d" }}';
-      }
-
-      // 5. Autofill Validity (1 day before customer PO validity if exists)
-      const poValInput = row.querySelector('.po-validity-input');
-      if (poValInput && !poValInput.value) {
-        const customerPoValidity = '{{ dpr.po_validity|date:"Y-m-d" }}';
-        if (customerPoValidity) {
-          const date = new Date(customerPoValidity);
-          date.setDate(date.getDate() - 1);
-          const yyyy = date.getFullYear();
-          const mm = String(date.getMonth() + 1).padStart(2, '0');
-          const dd = String(date.getDate()).padStart(2, '0');
-          poValInput.value = `${yyyy}-${mm}-${dd}`;
-        }
-      }
-    }
-  } else {
-    updateRateFromRfq(row);
+    handleProductChange(row);
+  } else if (supplierSelect) {
+    handleSupplierChange(row);
   }
 
   updateQuantityLimits();
@@ -421,42 +763,13 @@ document.addEventListener('input', function (e) {
     || e.target.classList.contains('rate-input')
   ) {
     updateSupplierRowValues();
-  }
-
-  if (e.target.classList.contains('quantity-input')) {
     updateQuantityLimits();
     updateOverallSupplierQty();
   }
 });
 
 function updateRateFromRfq(row) {
-  if (!row) return;
-
-  const productSelect = row.querySelector('.product-select');
-  const supplierSelect = row.querySelector('.supplier-dropdown');
-  const rateInput = row.querySelector('.rate-input');
-  if (!productSelect || !supplierSelect || !rateInput) return;
-
-  const productId = String(productSelect.value);
-  if (!productId) return;
-
-  const supplierId = String(supplierSelect.value);
-
-  // First try: supplier-specific rate from RFQ supplier prices
-  if (supplierId) {
-    const productRates = rfqRateMap[productId] || {};
-    const rfqRate = productRates[supplierId];
-    if (rfqRate !== undefined && rfqRate !== null && rfqRate !== '') {
-      rateInput.value = Number(rfqRate).toFixed(2);
-      return;
-    }
-  }
-
-  // Second try: default rate from RFQ product
-  const defaultRate = productDefaultRateMap[productId];
-  if (defaultRate !== undefined && defaultRate !== null && defaultRate !== '') {
-    rateInput.value = Number(defaultRate).toFixed(2);
-  }
+  handleSupplierChange(row);
 }
 
 function updateSupplierRowValues() {
@@ -470,8 +783,16 @@ function updateSupplierRowValues() {
       return;
     }
 
-    const quantity = Number(qtyInput.value) || 0;
     const rate = Number(rateInput.value) || 0;
+    let quantity = Number(qtyInput.value);
+
+    if (rate > 0 && (!qtyInput.value || quantity <= 0)) {
+      quantity = 1;
+      qtyInput.value = quantity;
+    } else if (!qtyInput.value || isNaN(quantity)) {
+      quantity = 0;
+    }
+
     valueInput.value = (quantity * rate).toFixed(2);
   });
 }
@@ -485,7 +806,8 @@ function updateQuantityLimits() {
     const quantityInput = row.querySelector('.quantity-input');
     if (!productSelect || !productSelect.value) return;
     const qty = parseInt(quantityInput.value || '0', 10);
-    usedByProduct[productSelect.value] = (usedByProduct[productSelect.value] || 0) + qty;
+    const pid = String(productSelect.value);
+    usedByProduct[pid] = (usedByProduct[pid] || 0) + (isNaN(qty) ? 0 : qty);
   });
 
   rows.forEach(row => {
@@ -499,8 +821,9 @@ function updateQuantityLimits() {
         ? parseInt(selectedOption.dataset.maxQty || selectedOption.getAttribute('data-max-qty') || '0', 10)
         : 0;
     const currentQty = parseInt(quantityInput.value || '0', 10);
-    const totalUsed = productSelect.value ? usedByProduct[productSelect.value] || 0 : 0;
-    const remaining = Math.max(0, maxQty - (totalUsed - currentQty));
+    const pid = String(productSelect.value || '');
+    const totalUsed = pid ? usedByProduct[pid] || 0 : 0;
+    const remaining = Math.max(0, maxQty - (totalUsed - (isNaN(currentQty) ? 0 : currentQty)));
 
     quantityInput.max = remaining;
     quantityInput.placeholder = remaining ? `Max ${remaining}` : '';
@@ -516,12 +839,25 @@ function updateOverallSupplierQty() {
     const productSelect = row.querySelector('.product-select');
     const qtyInput = row.querySelector('.quantity-input');
     const qty = parseInt(qtyInput.value || '0', 10);
-    if (productSelect.value && qty > 0) {
+    if (productSelect && productSelect.value && !isNaN(qty) && qty > 0) {
       totalSupplierQty += qty;
     }
   });
 
-  document.getElementById('totalSupplierQty').textContent = totalSupplierQty;
+  const totalSupplierQtyEl = document.getElementById('totalSupplierQty');
+  if (totalSupplierQtyEl) {
+    totalSupplierQtyEl.textContent = totalSupplierQty;
+  }
+
+  const addRowBtn = document.getElementById('addSupplierRow');
+  if (addRowBtn) {
+    const totalCustomer = parseInt('{{ total_customer_quantity }}', 10) || 0;
+    if (totalCustomer > 0 && totalSupplierQty >= totalCustomer) {
+      addRowBtn.disabled = true;
+    } else {
+      addRowBtn.disabled = false;
+    }
+  }
 }
 
 document.getElementById('supplierOrderForm').addEventListener('submit', function (e) {
@@ -567,48 +903,177 @@ document.getElementById('supplierOrderForm').addEventListener('submit', function
   }
 });
 
-document.querySelectorAll('#supplierTable tbody tr').forEach(updateRateFromRfq);
+document.querySelectorAll('#supplierTable tbody tr').forEach(row => {
+  const pSelect = row.querySelector('.product-select');
+  const supplierSelect = row.querySelector('.supplier-dropdown');
+  const rateInput = row.querySelector('.rate-input');
+  if (pSelect && pSelect.value && (!supplierSelect?.value || !rateInput?.value)) {
+    handleProductChange(row);
+  }
+});
 updateQuantityLimits();
 updateSupplierRowValues();
 updateOverallSupplierQty();
 
-// Enable Send Mail button only after Generate PO has been clicked
-const generatePoBtn = document.getElementById('generatePoBtn');
-const sendMailBtn = document.getElementById('sendMailBtn');
-if (generatePoBtn && sendMailBtn) {
-  const hasOrders = {% if supplier_orders %}true{% else %}false{% endif %};
-  const hasEmails = {% if has_supplier_emails %}true{% else %}false{% endif %};
-  
-  function enableSendMailBtn() {
-    sendMailBtn.classList.remove('disabled');
-    sendMailBtn.style.pointerEvents = 'auto';
-    sendMailBtn.style.opacity = '1';
-  }
+// Delivery Address Modal Logic for Generate PO
+document.addEventListener('DOMContentLoaded', function() {
+  const generatePoBtn = document.getElementById('generatePoBtn');
+  const deliveryAddressModal = document.getElementById('deliveryAddressModal');
+  const modalConfirmGeneratePoBtn = document.getElementById('modalConfirmGeneratePoBtn');
+  const cardHosurAddr = document.getElementById('cardHosurAddr');
+  const cardChennaiAddr = document.getElementById('cardChennaiAddr');
+  const radioHosurAddr = document.getElementById('radioHosurAddr');
+  const radioChennaiAddr = document.getElementById('radioChennaiAddr');
 
-  // Also handle visual states on page load if emails are missing
-  if (hasOrders && hasEmails) {
-    generatePoBtn.addEventListener('click', function() {
-      enableSendMailBtn();
+  if (generatePoBtn) {
+    generatePoBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      const form = document.getElementById('supplierOrderForm');
+      if (form && !form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
+      const rows = document.querySelectorAll('#supplierTable tbody tr');
+      let validRows = 0;
+      for (const row of rows) {
+        const pSelect = row.querySelector('.product-select');
+        const sSelect = row.querySelector('.supplier-dropdown');
+        const qInput = row.querySelector('.quantity-input');
+        const rInput = row.querySelector('.rate-input');
+        if (pSelect && pSelect.value && sSelect && sSelect.value && qInput && parseInt(qInput.value || '0', 10) > 0 && rInput && parseFloat(rInput.value || '0') > 0) {
+          validRows++;
+        }
+      }
+      if (validRows === 0) {
+        alert('Please select products, suppliers, rates, and quantities before generating PO.');
+        return;
+      }
+
+      if (!validateAllValidityDates()) {
+        alert(`Please ensure all Supplier PO Validity dates are earlier than Customer PO Date (${targetCustomerDateDisplay}).`);
+        return;
+      }
+
+      const modal = bootstrap.Modal.getOrCreateInstance(deliveryAddressModal);
+      modal.show();
     });
   }
 
-  sendMailBtn.addEventListener('click', function(e) {
-    e.preventDefault();
-    if (sendMailBtn.classList.contains('disabled')) return;
-    openSupplierPoEmailModal();
-  });
-}
+  function updateCardSelection(selected) {
+    if (selected === 'hosur') {
+      radioHosurAddr.checked = true;
+      cardHosurAddr.style.borderColor = '#0d6efd';
+      cardHosurAddr.style.backgroundColor = '#f8f9fa';
+      cardChennaiAddr.style.borderColor = '#dee2e6';
+      cardChennaiAddr.style.backgroundColor = '#ffffff';
+    } else {
+      radioChennaiAddr.checked = true;
+      cardChennaiAddr.style.borderColor = '#0d6efd';
+      cardChennaiAddr.style.backgroundColor = '#f8f9fa';
+      cardHosurAddr.style.borderColor = '#dee2e6';
+      cardHosurAddr.style.backgroundColor = '#ffffff';
+    }
+  }
 
-function openSupplierPoEmailModal() {
-  if (!poEmailData || poEmailData.length === 0) return;
+  if (cardHosurAddr) cardHosurAddr.addEventListener('click', () => updateCardSelection('hosur'));
+  if (cardChennaiAddr) cardChennaiAddr.addEventListener('click', () => updateCardSelection('chennai'));
+  if (radioHosurAddr) radioHosurAddr.addEventListener('change', () => updateCardSelection('hosur'));
+  if (radioChennaiAddr) radioChennaiAddr.addEventListener('change', () => updateCardSelection('chennai'));
+
+  if (modalConfirmGeneratePoBtn) {
+    modalConfirmGeneratePoBtn.addEventListener('click', function() {
+      const selectedAddress = document.querySelector('input[name="modalDeliveryAddressChoice"]:checked')?.value || 'hosur';
+      const form = document.getElementById('supplierOrderForm');
+      if (!form) return;
+
+      const modal = bootstrap.Modal.getInstance(deliveryAddressModal);
+      if (modal) modal.hide();
+
+      let actionInput = form.querySelector('input[name="action"]');
+      if (!actionInput) {
+        actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        form.appendChild(actionInput);
+      }
+      actionInput.value = 'generate_po';
+
+      let addrInput = form.querySelector('input[name="delivery_address"]');
+      if (!addrInput) {
+        addrInput = document.createElement('input');
+        addrInput.type = 'hidden';
+        addrInput.name = 'delivery_address';
+        form.appendChild(addrInput);
+      }
+      addrInput.value = selectedAddress;
+
+      form.target = '_blank';
+      form.submit();
+
+      setTimeout(function() {
+        form.target = '';
+        if (actionInput) actionInput.value = '';
+        window.location.reload();
+      }, 1000);
+    });
+  }
+
+  updateSupplierEmailButtons();
+  validateAllValidityDates();
+});
+
+updateSupplierEmailButtons();
+validateAllValidityDates();
+
+document.getElementById('supplierOrderForm')?.addEventListener('submit', function(e) {
+  if (!validateAllValidityDates()) {
+    e.preventDefault();
+    alert(`Please ensure all Supplier PO Validity dates are earlier than Customer PO Date (${targetCustomerDateDisplay}).`);
+    return false;
+  }
+});
+
+const sendMailBtn = document.getElementById('sendMailBtn');
+const replyMailBtn = document.getElementById('replyMailBtn');
+
+sendMailBtn?.addEventListener('click', function() {
+  if (sendMailBtn.disabled) return;
+  if (poEmailData.length > 0) {
+    openSupplierPoEmailModal({ ...poEmailData[0], combined_supplier: true }, false);
+  }
+});
+
+replyMailBtn?.addEventListener('click', function() {
+  if (replyMailBtn.disabled) return;
+  if (poEmailData.length > 0) {
+    openSupplierEmailChainModal({ ...poEmailData[0], combined_supplier: true });
+  }
+});
+
+function openSupplierPoEmailModal(selectedPo = null, isReply = false) {
+  const availableData = selectedPo ? [selectedPo] : poEmailData;
+  if (!availableData || availableData.length === 0) return;
 
   const selectContainer = document.getElementById('poSelectGroupContainer');
   const selectElement = document.getElementById('supplierPoSelect');
-  
-  if (poEmailData.length > 1) {
+  const modalTitle = document.getElementById('supplierPoEmailModalLabel');
+  const submitBtn = document.getElementById('supplierEmailSubmitBtn');
+
+  if (modalTitle) {
+    modalTitle.innerHTML = isReply ? '<i class="bi bi-reply me-2"></i>Reply Supplier Email' : '<i class="bi bi-envelope-plus me-2"></i>Send Supplier Email';
+  }
+  if (submitBtn) {
+    submitBtn.innerHTML = isReply ? '<i class="bi bi-reply me-1"></i>Reply Email' : '<i class="bi bi-send me-1"></i>Send Email';
+  }
+
+  if (selectedPo) {
+    selectContainer.style.display = 'none';
+    populateEmailModalFields(selectedPo, isReply);
+  } else if (availableData.length > 1) {
     selectContainer.style.display = 'block';
     selectElement.innerHTML = '';
-    poEmailData.forEach((po, idx) => {
+    availableData.forEach((po, idx) => {
       const opt = document.createElement('option');
       opt.value = idx;
       opt.textContent = `${po.supplier_name} (${po.po_number})`;
@@ -616,36 +1081,59 @@ function openSupplierPoEmailModal() {
     });
 
     selectElement.onchange = function() {
-      populateEmailModalFields(poEmailData[selectElement.value]);
+      populateEmailModalFields(availableData[selectElement.value], isReply);
     };
     
-    populateEmailModalFields(poEmailData[0]);
-  } else {
+    populateEmailModalFields(availableData[0], isReply);
+  } else if (!selectedPo) {
     selectContainer.style.display = 'none';
-    populateEmailModalFields(poEmailData[0]);
+    populateEmailModalFields(availableData[0], isReply);
   }
 
   bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierPoEmailModal')).show();
 }
 
-function populateEmailModalFields(po) {
+function populateEmailModalFields(po, isReply = false) {
   document.getElementById('emailSupplierId').value = po.supplier_id;
   document.getElementById('emailPoNumber').value = po.po_number;
+  document.getElementById('emailSupplierProductId').value = po.supplier_product_id || '';
+  document.getElementById('emailCombinedSupplier').value = po.combined_supplier ? '1' : '';
   document.getElementById('supplierEmailField').value = po.supplier_email || '';
-  document.getElementById('supplierEmailSubject').value = po.default_subject || '';
-  document.getElementById('supplierEmailBody').value = po.default_body || '';
+  
+  let subject = po.default_subject || '';
+  if (isReply && subject && !subject.toLowerCase().startsWith('re:')) {
+    subject = `Re: ${subject}`;
+  }
+  document.getElementById('supplierEmailSubject').value = subject;
+
+  let body = po.default_body || '';
+  if (isReply) {
+    body = `Dear ${po.supplier_name || 'Sir/Madam'},\n\nWith reference to Purchase Order ${po.po_number} for {{ dpr.serial_number }},\n\nKindly acknowledge and confirm the delivery timeline.\n\nThanks & Regards,\nMetrology Engineering Solutions`;
+  }
+  document.getElementById('supplierEmailBody').value = body;
   
   const note = document.getElementById('supplierAutoAttachmentNote');
-  note.textContent = `PO PDF for ${po.supplier_name} (${po.po_number}) will be attached automatically.`;
+  const productLabel = po.product_name ? ` for ${po.product_name}` : '';
+  note.textContent = `PO PDF${productLabel} for ${po.supplier_name} (${po.po_number}) will be attached automatically.`;
 }
 
-document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click', function() {
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#previewSupplierAttachmentBtn')) return;
   const supplierId = document.getElementById('emailSupplierId').value;
   const poNumber = document.getElementById('emailPoNumber').value;
+  const supplierProductId = document.getElementById('emailSupplierProductId').value;
+  const combinedSupplier = document.getElementById('emailCombinedSupplier').value;
   if (!supplierId || !poNumber) return;
 
   const dprId = "{{ dpr.id }}";
-  window.open(`/dpr/${dprId}/generate-po/?supplier_id=${supplierId}&po_number=${poNumber}`, '_blank');
+  const params = new URLSearchParams({ supplier_id: supplierId, po_number: poNumber });
+  if (supplierProductId) {
+    params.set('supplier_product_id', supplierProductId);
+  }
+  if (combinedSupplier) {
+    params.set('combined_supplier', '1');
+  }
+  window.open(`/dpr/${dprId}/generate-po/?${params.toString()}`, '_blank');
 });
 </script>
 
@@ -708,6 +1196,8 @@ document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click
             
             <input type="hidden" name="supplier_id" id="emailSupplierId">
             <input type="hidden" name="po_number" id="emailPoNumber">
+            <input type="hidden" name="supplier_product_id" id="emailSupplierProductId">
+            <input type="hidden" name="combined_supplier" id="emailCombinedSupplier">
             
             <div class="col-md-6">
               <label class="form-label fw-bold">Supplier Email(s) *</label>
@@ -737,7 +1227,7 @@ document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click
           <button type="button" class="btn btn-outline-primary" id="previewSupplierAttachmentBtn">
             <i class="bi bi-eye me-1"></i>Preview Attachment
           </button>
-          <button type="submit" class="btn btn-primary">
+          <button type="submit" class="btn btn-primary" id="supplierEmailSubmitBtn">
             <i class="bi bi-send me-1"></i>Send Email
           </button>
         </div>
@@ -746,4 +1236,467 @@ document.getElementById('previewSupplierAttachmentBtn')?.addEventListener('click
   </div>
 </div>
 
+<!-- SUPPLIER EMAIL CHAIN / THREAD MODAL (RFQ STYLE) -->
+<style>
+#supplierEmailChainModal .modal-content { border: none; border-radius: 12px; overflow: hidden; }
+#supplierEmailChainModal .modal-body { padding: 0; background: #f1f3f6; }
+#supplierEmailChainModal .ec-layout { display: flex; height: 620px; overflow: hidden; }
+#supplierEmailChainModal .ec-list-panel { width: 320px; min-width: 320px; border-right: 1px solid #e2e8f0; background: #fff; display: flex; flex-direction: column; }
+#supplierEmailChainModal .ec-list-header { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+#supplierEmailChainModal .ec-list-header h6 { margin: 0; font-size: 0.85rem; font-weight: 700; color: #1e293b; }
+#supplierEmailChainModal .ec-email-list { flex: 1; overflow-y: auto; }
+#supplierEmailChainModal .ec-email-row { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.15s; }
+#supplierEmailChainModal .ec-email-row:hover { background: #f8fafc; }
+#supplierEmailChainModal .ec-email-row.active { background: #eff6ff; border-left: 3px solid #2563eb; }
+#supplierEmailChainModal .ec-row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+#supplierEmailChainModal .ec-from { font-weight: 600; font-size: 0.82rem; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+#supplierEmailChainModal .ec-date { font-size: 0.72rem; color: #64748b; }
+#supplierEmailChainModal .ec-subject { font-size: 0.78rem; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#supplierEmailChainModal .ec-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+#supplierEmailChainModal .ec-badge-in { background: #e0f2fe; color: #0369a1; }
+#supplierEmailChainModal .ec-badge-out { background: #dcfce7; color: #16a34a; }
+#supplierEmailChainModal .ec-detail-panel { flex: 1; display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+#supplierEmailChainModal .ec-detail-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; }
+#supplierEmailChainModal .ec-detail-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#supplierEmailChainModal .ec-detail-header { padding: 14px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+#supplierEmailChainModal .ec-detail-subject { font-weight: 700; font-size: 1.05rem; color: #0f172a; margin: 0 0 6px 0; }
+#supplierEmailChainModal .ec-detail-meta { font-size: 0.78rem; color: #475569; display: flex; flex-wrap: wrap; gap: 12px; }
+#supplierEmailChainModal .ec-detail-body { flex: 1; padding: 20px; overflow-y: auto; background: #fff; }
+#supplierEmailChainModal .ec-body-pre { font-family: inherit; font-size: 0.88rem; color: #1e293b; white-space: pre-wrap; word-break: break-word; margin: 0; line-height: 1.6; }
+#supplierEmailChainModal .ec-detail-footer { padding: 10px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; }
+#supplierEmailChainModal .ec-att-info { font-size: 0.78rem; color: #475569; }
+#supplierEmailChainModal .ec-reply-composer { padding: 16px 20px; background: #fff; border-top: 2px solid #2563eb; display: flex; flex-direction: column; flex: 1; overflow-y: auto; }
+#supplierEmailChainModal .composer-title { font-weight: 700; font-size: 0.9rem; color: #1e293b; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+
+#supplierEmailChainModal.ec-maximized .modal-dialog { max-width: 98vw !important; margin: 1vh auto; }
+#supplierEmailChainModal.ec-maximized .modal-content { height: 98vh; }
+#supplierEmailChainModal.ec-maximized .ec-layout { height: calc(98vh - 60px); }
+</style>
+
+<div class="modal fade" id="supplierEmailChainModal" tabindex="-1" aria-labelledby="supplierEmailChainModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width: 960px;">
+        <div class="modal-content">
+            <!-- Modal Header -->
+            <div class="modal-header" style="background: linear-gradient(135deg,#1a1d2e 0%,#2d3155 100%); color:#fff; padding: 12px 20px;">
+                <div class="d-flex align-items-center gap-2">
+                    <div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;">
+                        <i class="bi bi-envelope-open-text" style="font-size:15px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;font-size:0.95rem;">Reply Email</div>
+                        <div style="font-size:0.75rem;opacity:0.7;" id="supplierEmailChainTitle"></div>
+                    </div>
+                </div>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span id="supplierEcMessageCount" class="badge" style="background:rgba(255,255,255,0.15);font-size:0.75rem;"></span>
+                    <button type="button" id="supplierSyncInboxBtn" class="btn btn-sm" style="background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.25);font-size:0.8rem;" title="Sync Inbox">
+                        <i class="bi bi-arrow-repeat me-1" id="supplierSyncSpinner"></i>Sync Inbox
+                    </button>
+                    <button type="button" id="maximizeSupplierEmailChainBtn" class="btn btn-sm" style="background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.25);font-size:0.8rem;" title="Maximize Window">
+                        <i class="bi bi-arrows-fullscreen" id="supplierMaximizeIcon"></i>
+                    </button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" title="Close"></button>
+                </div>
+            </div>
+
+            <!-- Hidden Inputs -->
+            <input type="hidden" id="supplierEmailChainDprId" value="{{ dpr.id }}">
+            <input type="hidden" id="supplierEmailChainSupplierId" value="">
+            <input type="hidden" id="supplierEmailChainPoNumber" value="">
+
+            <!-- Modal Body -->
+            <div class="modal-body p-0">
+                <div class="ec-layout">
+                    <!-- LEFT: Email list panel -->
+                    <div class="ec-list-panel">
+                        <div class="ec-list-header d-flex justify-content-between align-items-center">
+                            <h6><i class="bi bi-list-ul me-1"></i>Messages</h6>
+                            <div class="form-check form-switch mb-0" style="font-size:0.75rem;">
+                                <input class="form-check-input" type="checkbox" id="toggleSupplierSmartFilterCheck" style="cursor:pointer;" checked>
+                                <label class="form-check-label text-muted ms-1" for="toggleSupplierSmartFilterCheck" id="supplierFilterToggleLabel" style="cursor:pointer;font-weight:600;font-size:0.72rem;">Supplier Only</label>
+                            </div>
+                        </div>
+                        <div class="ec-email-list" id="supplierEcEmailList">
+                            <div class="text-center py-5 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                <div class="mt-2" style="font-size:0.8rem;">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: Detail panel -->
+                    <div class="ec-detail-panel" id="supplierEcDetailPanel">
+                        <div class="ec-detail-placeholder" id="supplierEcDetailPlaceholder">
+                            <i class="bi bi-envelope" style="font-size:3rem;margin-bottom:12px;"></i>
+                            <div style="font-size:0.9rem;font-weight:600;">Select an email to read</div>
+                            <div style="font-size:0.78rem;margin-top:4px;">Click any message from the list on the left</div>
+                        </div>
+                        <div class="ec-detail-content" id="supplierEcDetailContent" style="display:none;">
+                            <div id="supplierEcDetailView" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+                                <div class="ec-detail-header" id="supplierEcDetailHeader"></div>
+                                <div class="ec-detail-body" id="supplierEcDetailBody"></div>
+                                <div class="ec-detail-footer" id="supplierEcDetailFooter"></div>
+                            </div>
+                            <!-- Reply composer -->
+                            <div class="ec-reply-composer" id="supplierEmailReplyComposer" style="display:none;">
+                                <div class="composer-title">
+                                    <span><i class="bi bi-reply-fill me-1"></i>Reply</span>
+                                    <button type="button" id="closeSupplierReplyComposerBtn" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;">✕ Cancel</button>
+                                </div>
+                                <form id="supplierEmailReplyForm" enctype="multipart/form-data" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                                    {% csrf_token %}
+                                    <input type="hidden" id="supplierReplyParentMessageId" name="parent_message_id" value="">
+                                    <input type="hidden" id="supplierReplySupplierId" name="supplier_id" value="">
+                                    <input type="hidden" id="supplierReplyPoNumber" name="po_number" value="">
+                                    <div class="row g-2" style="flex: 1; display: flex; flex-direction: column;">
+                                        <div class="col-12">
+                                            <div class="row g-2">
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-semibold" style="font-size:0.8rem;">To <span class="text-danger">*</span></label>
+                                                    <input type="text" name="to_emails" id="supplierReplyToEmails" class="form-control form-control-sm" required>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label" style="font-size:0.8rem;">CC</label>
+                                                    <input type="text" name="cc_emails" id="supplierReplyCcEmails" class="form-control form-control-sm" placeholder="Optional">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label fw-semibold" style="font-size:0.8rem;">Subject <span class="text-danger">*</span></label>
+                                            <input type="text" name="subject" id="supplierReplySubject" class="form-control form-control-sm" required>
+                                        </div>
+                                        <div class="col-12 d-flex flex-column flex-grow-1" style="min-height: 200px;">
+                                            <label class="form-label fw-semibold" style="font-size:0.8rem;">Message <span class="text-danger">*</span></label>
+                                            <textarea name="body" id="supplierReplyBody" class="form-control form-control-sm flex-grow-1" rows="10" style="min-height: 220px; font-size:0.9rem; line-height:1.5; resize: vertical;" required placeholder="Type your reply..."></textarea>
+                                        </div>
+                                        <div class="col-12 mt-2">
+                                            <div class="alert alert-info py-1 px-2 mb-1" id="supplierReplyAutoAttachmentNote" style="font-size:0.78rem;">
+                                                <i class="bi bi-info-circle me-1"></i>PO PDF for this supplier will be attached automatically to this reply.
+                                            </div>
+                                            <label class="form-label" style="font-size:0.8rem;">Additional Attachment (Optional)</label>
+                                            <input type="file" name="reply_attachment" id="supplierReplyAttachment" class="form-control form-control-sm">
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="cancelSupplierReplyBtn">Cancel</button>
+                                        <button type="submit" class="btn btn-sm btn-primary" id="sendSupplierReplySubmitBtn">
+                                            <i class="bi bi-send me-1"></i>Send Reply
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentSupplierPo = null;
+let supplierEcMessages = [];
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+}
+
+function openSupplierEmailChainModal(matchingPo) {
+  currentSupplierPo = matchingPo;
+  const dprId = "{{ dpr.id }}";
+
+  document.getElementById('supplierEmailChainSupplierId').value = matchingPo ? (matchingPo.supplier_id || '') : '';
+  document.getElementById('supplierEmailChainPoNumber').value = matchingPo ? (matchingPo.po_number || '') : '';
+  document.getElementById('supplierEmailChainTitle').textContent = matchingPo ? `${matchingPo.supplier_name || 'Supplier'} (${matchingPo.po_number || ''})` : '';
+  document.getElementById('supplierEmailReplyComposer').style.display = 'none';
+  document.getElementById('supplierEcDetailContent').style.display = 'none';
+  document.getElementById('supplierEcDetailPlaceholder').style.display = 'flex';
+  supplierEcMessages = [];
+
+  const modalEl = document.getElementById('supplierEmailChainModal');
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  loadSupplierEmailThread(dprId, matchingPo ? matchingPo.supplier_id : '');
+}
+
+function loadSupplierEmailThread(dprId, supplierId, autoSync = false) {
+  const listEl = document.getElementById('supplierEcEmailList');
+  listEl.innerHTML = `<div class="text-center py-5 text-muted">
+      <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+      <div class="mt-2" style="font-size:0.8rem;">Loading messages...</div></div>`;
+
+  const filterCheck = document.getElementById('toggleSupplierSmartFilterCheck');
+  const isFiltered = filterCheck ? filterCheck.checked : true;
+  const queryParams = [];
+  if (supplierId) queryParams.push(`supplier_id=${encodeURIComponent(supplierId)}`);
+  if (!isFiltered) queryParams.push('all=1');
+  if (autoSync) queryParams.push('sync=1');
+
+  const url = `/dpr/${dprId}/supplier-email-thread/` + (queryParams.length > 0 ? '?' + queryParams.join('&') : '');
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status !== 'success') {
+        listEl.innerHTML = `<div class="alert alert-danger m-2" style="font-size:0.8rem;">${data.message || 'Failed to load.'}</div>`;
+        return;
+      }
+      supplierEcMessages = data.messages || [];
+      const modeNote = data.show_all ? ' (All Mails)' : '';
+      document.getElementById('supplierEcMessageCount').textContent = supplierEcMessages.length + ' message' + (supplierEcMessages.length !== 1 ? 's' : '') + modeNote;
+      renderSupplierEmailList(supplierEcMessages);
+    })
+    .catch(err => {
+      listEl.innerHTML = `<div class="alert alert-danger m-2" style="font-size:0.8rem;">Error: ${err.message}</div>`;
+    });
+}
+
+function renderSupplierEmailList(messages) {
+  const listEl = document.getElementById('supplierEcEmailList');
+  if (!messages || messages.length === 0) {
+    listEl.innerHTML = `<div class="text-center py-5 text-muted px-3">
+        <i class="bi bi-inbox" style="font-size:2.5rem;opacity:0.35;"></i>
+        <div class="mt-2 fw-semibold" style="font-size:0.85rem;">No emails yet</div>
+        <div style="font-size:0.75rem;margin-top:8px;">
+            <button type="button" class="btn btn-sm btn-primary py-1 px-3" onclick="openSupplierReplyComposer(null)">
+                <i class="bi bi-reply me-1"></i>Reply to Chain
+            </button>
+        </div>
+    </div>`;
+    showSupplierEmailDetail(null);
+    return;
+  }
+
+  listEl.innerHTML = '';
+  messages.forEach((msg, idx) => {
+    const isIn = msg.direction === 'IN';
+    const row = document.createElement('div');
+    row.className = 'ec-email-row' + (idx === 0 ? ' active' : '');
+    row.dataset.idx = idx;
+
+    const senderName = msg.sender || 'Supplier';
+    const dateStr = msg.sent_at || '';
+    const subject = msg.subject || '(No Subject)';
+
+    row.innerHTML = `
+        <div class="ec-row-top">
+            <div style="display:flex;align-items:center;gap:5px;min-width:0;">
+                <span class="ec-badge ${isIn ? 'ec-badge-in' : 'ec-badge-out'}">${isIn ? '↙ In' : '↗ Out'}</span>
+                <span class="ec-from">${escapeHtml(senderName)}</span>
+            </div>
+            <span class="ec-date">${escapeHtml(dateStr.split(' ').slice(0,3).join(' '))}</span>
+        </div>
+        <div class="ec-subject">${escapeHtml(subject)}</div>
+        ${msg.has_attachments ? '<div style="font-size:0.7rem;color:#6b7280;"><i class="bi bi-paperclip"></i> ' + escapeHtml(msg.attachment_names || '') + '</div>' : ''}
+    `;
+
+    row.addEventListener('click', function() {
+      document.querySelectorAll('#supplierEcEmailList .ec-email-row').forEach(r => r.classList.remove('active'));
+      row.classList.add('active');
+      showSupplierEmailDetail(msg);
+    });
+
+    listEl.appendChild(row);
+  });
+
+  if (messages.length > 0) showSupplierEmailDetail(messages[0]);
+}
+
+function showSupplierEmailDetail(msg) {
+  document.getElementById('supplierEcDetailPlaceholder').style.display = 'none';
+  document.getElementById('supplierEcDetailContent').style.display = 'flex';
+  document.getElementById('supplierEcDetailView').style.display = 'flex';
+  document.getElementById('supplierEmailReplyComposer').style.display = 'none';
+
+  if (!msg) {
+    document.getElementById('supplierEcDetailPlaceholder').style.display = 'flex';
+    document.getElementById('supplierEcDetailContent').style.display = 'none';
+    return;
+  }
+
+  const isIn = msg.direction === 'IN';
+  const badgeHtml = isIn
+      ? '<span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:0.7rem;">↙ Incoming</span>'
+      : '<span class="badge" style="background:#dcfce7;color:#16a34a;font-size:0.7rem;">↗ Outgoing</span>';
+
+  const headerEl = document.getElementById('supplierEcDetailHeader');
+  headerEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;">
+          <p class="ec-detail-subject">${escapeHtml(msg.subject || '(No Subject)')}</p>
+          ${badgeHtml}
+      </div>
+      <div class="ec-detail-meta">
+          <span><strong>From:</strong> ${escapeHtml(msg.sender)}</span>
+          <span><strong>To:</strong> ${escapeHtml(msg.recipients)}</span>
+          ${msg.cc_recipients ? `<span><strong>CC:</strong> ${escapeHtml(msg.cc_recipients)}</span>` : ''}
+          <span style="margin-left:auto;"><i class="bi bi-clock me-1"></i>${escapeHtml(msg.sent_at)}</span>
+      </div>
+  `;
+
+  const bodyEl = document.getElementById('supplierEcDetailBody');
+  bodyEl.innerHTML = '';
+  const pre = document.createElement('pre');
+  pre.className = 'ec-body-pre';
+  pre.textContent = msg.body || '(No message body)';
+  bodyEl.appendChild(pre);
+
+  const footerEl = document.getElementById('supplierEcDetailFooter');
+  footerEl.innerHTML = '';
+  if (msg.has_attachments && msg.attachment_names) {
+      const attSpan = document.createElement('span');
+      attSpan.className = 'ec-att-info';
+      attSpan.innerHTML = `<i class="bi bi-paperclip me-1"></i><strong>Attachments:</strong> ${escapeHtml(msg.attachment_names)}`;
+      footerEl.appendChild(attSpan);
+  } else {
+      footerEl.appendChild(document.createElement('span'));
+  }
+  const replyBtn = document.createElement('button');
+  replyBtn.type = 'button';
+  replyBtn.className = 'btn btn-primary btn-sm';
+  replyBtn.innerHTML = '<i class="bi bi-reply me-1"></i>Reply to Chain';
+  replyBtn.addEventListener('click', () => openSupplierReplyComposer(msg));
+  footerEl.appendChild(replyBtn);
+}
+
+function openSupplierReplyComposer(msg) {
+  const po = currentSupplierPo || {};
+  document.getElementById('supplierEcDetailView').style.display = 'none';
+  document.getElementById('supplierEmailReplyComposer').style.display = 'flex';
+
+  let replyTo = po.supplier_email || (msg ? (msg.direction === 'OUT' ? msg.recipients : msg.sender) : '');
+  const emailMatch = replyTo ? replyTo.match(/<([^>]+)>/) : null;
+  if (emailMatch) replyTo = emailMatch[1];
+
+  let replySubj = msg ? (msg.subject || '') : (po.default_subject || `Purchase Order for {{ dpr.serial_number }}`);
+  if (!replySubj.toLowerCase().startsWith('re:')) replySubj = 'Re: ' + replySubj;
+
+  document.getElementById('supplierReplyParentMessageId').value = msg ? (msg.message_id || '') : '';
+  document.getElementById('supplierReplySupplierId').value = po.supplier_id || '';
+  document.getElementById('supplierReplyPoNumber').value = po.po_number || '';
+  document.getElementById('supplierReplyToEmails').value = replyTo;
+  document.getElementById('supplierReplyCcEmails').value = '';
+  document.getElementById('supplierReplySubject').value = replySubj;
+
+  let defaultBody = `Dear ${po.supplier_name || 'Sir/Madam'},\n\nWith reference to Purchase Order ${po.po_number || ''} for {{ dpr.serial_number }},\n\nKindly acknowledge and confirm the delivery timeline.\n\nThanks & Regards,\nMetrology Engineering Solutions`;
+
+  let historyQuote = '';
+  if (msg && msg.body) {
+      historyQuote = `\n\n----------------------------------------\nOn ${msg.sent_at || ''}, ${msg.sender || ''} wrote:\n\n${msg.body}`;
+  }
+
+  document.getElementById('supplierReplyBody').value = defaultBody + historyQuote;
+  const note = document.getElementById('supplierReplyAutoAttachmentNote');
+  note.innerHTML = `<i class="bi bi-info-circle me-1"></i>PO PDF for ${po.supplier_name || 'Supplier'} (${po.po_number || ''}) will be attached automatically to this reply.`;
+}
+
+document.getElementById('closeSupplierReplyComposerBtn')?.addEventListener('click', function() {
+  document.getElementById('supplierEmailReplyComposer').style.display = 'none';
+  document.getElementById('supplierEcDetailView').style.display = 'flex';
+});
+document.getElementById('cancelSupplierReplyBtn')?.addEventListener('click', function() {
+  document.getElementById('supplierEmailReplyComposer').style.display = 'none';
+  document.getElementById('supplierEcDetailView').style.display = 'flex';
+});
+
+document.getElementById('supplierEmailReplyForm')?.addEventListener('submit', function(e) {
+  e.preventDefault();
+  const dprId = "{{ dpr.id }}";
+  const formData = new FormData(this);
+  formData.append('supplier_id', document.getElementById('supplierReplySupplierId').value);
+  formData.append('po_number', document.getElementById('supplierReplyPoNumber').value);
+
+  const submitBtn = document.getElementById('sendSupplierReplySubmitBtn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<div class="spinner-border spinner-border-sm me-1" role="status"></div>Sending...';
+
+  fetch(`/dpr/${dprId}/send-supplier-reply/`, {
+    method: 'POST',
+    body: formData
+  })
+  .then(r => r.json())
+  .then(data => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-send me-1"></i>Send Reply';
+    if (data.status === 'success') {
+      document.getElementById('supplierEmailReplyComposer').style.display = 'none';
+      document.getElementById('supplierEcDetailView').style.display = 'flex';
+      loadSupplierEmailThread(dprId, document.getElementById('supplierReplySupplierId').value);
+    } else {
+      alert(data.message || 'Failed to send reply.');
+    }
+  })
+  .catch(err => {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-send me-1"></i>Send Reply';
+    alert('Error sending reply: ' + err.message);
+  });
+});
+
+document.getElementById('toggleSupplierSmartFilterCheck')?.addEventListener('change', function() {
+  const dprId = "{{ dpr.id }}";
+  const suppId = document.getElementById('supplierEmailChainSupplierId').value;
+  const label = document.getElementById('supplierFilterToggleLabel');
+  if (label) label.textContent = this.checked ? 'Supplier Only' : 'All Mails';
+  loadSupplierEmailThread(dprId, suppId);
+});
+
+document.getElementById('supplierSyncInboxBtn')?.addEventListener('click', function() {
+  const dprId = "{{ dpr.id }}";
+  const suppId = document.getElementById('supplierEmailChainSupplierId').value;
+  const spinner = document.getElementById('supplierSyncSpinner');
+  if (spinner) spinner.classList.add('spin');
+  loadSupplierEmailThread(dprId, suppId, true);
+  setTimeout(() => { if (spinner) spinner.classList.remove('spin'); }, 2000);
+});
+
+document.getElementById('maximizeSupplierEmailChainBtn')?.addEventListener('click', function() {
+  const modal = document.getElementById('supplierEmailChainModal');
+  const icon = document.getElementById('supplierMaximizeIcon');
+  if (!modal) return;
+
+  modal.classList.toggle('ec-maximized');
+  const isMaximized = modal.classList.contains('ec-maximized');
+  if (icon) {
+    if (isMaximized) {
+      icon.className = 'bi bi-fullscreen-exit';
+      this.title = 'Restore Window';
+    } else {
+      icon.className = 'bi bi-arrows-fullscreen';
+      this.title = 'Maximize Window';
+    }
+  }
+});
+</script>
+
 {% endblock %}
+
+<script>
+// Auto-refresh every 30 seconds, but cancel if user is actively using the form
+(function () {
+  let refreshTimer = null;
+  const REFRESH_INTERVAL = 30000; // 30 seconds
+
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(function () {
+      location.reload();
+    }, REFRESH_INTERVAL);
+  }
+
+  // Cancel refresh if user interacts with the form
+  ['change', 'input', 'click', 'keydown', 'mousedown', 'touchstart'].forEach(function (evt) {
+    document.addEventListener(evt, function () {
+      clearTimeout(refreshTimer);
+    }, { passive: true });
+  });
+
+  scheduleRefresh();
+})();
+</script>
+

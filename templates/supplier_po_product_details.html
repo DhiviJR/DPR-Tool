@@ -7,7 +7,15 @@
         <h1 class="dpr-page-title mb-1">Supplier PO Product Details</h1>
         <p class="dpr-page-subtitle mb-0">Monitor supplier orders, receipts, and validity</p>
     </div>
-    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+    <div class="d-flex gap-2">
+        <a href="{% url 'rework_tracking' %}" class="btn btn-warning text-dark fw-semibold dpr-back-btn btn-sm">
+            <i class="bi bi-arrow-repeat me-1"></i>Track Rework Product
+        </a>
+        <a href="{% url 'customer_po_product_details' %}" class="btn btn-outline-success dpr-back-btn btn-sm">
+            <i class="bi bi-boxes me-1"></i>Material Status
+        </a>
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+    </div>
 </div>
 
 <div class="dpr-card dpr-table-card">
@@ -53,7 +61,8 @@
                         <th class="sortable" data-col="8" data-sort-type="date">PO Validity <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="10" data-sort-type="date">Expected Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="11" data-sort-type="text">Inward <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="11" data-sort-type="number">Bill Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="12" data-sort-type="text">Inward <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -62,8 +71,16 @@
                         <td data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
                         <td data-sort-value="{{ row.customer_product.dpr.serial_number|default:''|lower }}">{{ row.customer_product.dpr.serial_number }}</td>
                         <td data-sort-value="{{ row.supplier.supplier_name|default:''|lower }}">{{ row.supplier.supplier_name }}</td>
-                        <td data-sort-value="{{ row.po_number|default:''|lower }}">{{ row.po_number|default:'-' }}</td>
-                        <td data-sort-value="{{ row.customer_product.product_name|default:''|lower }}">{{ row.customer_product.product_name }}</td>
+                        <td data-sort-value="{{ row.po_number|default:''|lower }}">
+                            {% if row.po_number and row.po_number != '-' %}
+                                <a href="{% url 'generate_supplier_po' row.customer_product.dpr.id %}?supplier_id={{ row.supplier.id }}&po_number={{ row.po_number|urlencode }}" target="_blank" class="text-decoration-none text-primary fw-semibold">
+                                    {{ row.po_number }}
+                                </a>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td data-sort-value="{{ row.customer_product.display_name|default:''|lower }}">{{ row.customer_product.display_name }}</td>
                         <td data-sort-value="{{ row.po_date|date:'Y-m-d'|default:'' }}">{{ row.po_date|date:'Y-m-d'|default:'-' }}</td>
                         <td data-sort-value="{{ row.quantity }}">{{ row.quantity }}</td>
                         <td class="quantity-received-cell" data-sort-value="{{ row.quantity_received }}">{{ row.quantity_received }}</td>
@@ -71,6 +88,13 @@
                         <td data-sort-value="{{ row.po_value|default:0 }}">{{ row.po_value }}</td>
                         <td data-sort-value="{{ row.expected_date|date:'Y-m-d'|default:'' }}">
                             <input type="date" class="form-control form-control-sm expected-date-input" value="{{ row.expected_date|date:'Y-m-d' }}">
+                        </td>
+                        <td class="bill-value-cell" data-sort-value="{{ row.supplier_bill_amount|default:0 }}">
+                            {% if row.supplier_bill_amount %}
+                                {{ row.supplier_bill_amount }}
+                            {% else %}
+                                -
+                            {% endif %}
                         </td>
                         <td data-sort-value="{% if row.status == 'delivered' %}closed{% elif row.status == 'partially_delivered' %}partially closed{% elif row.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
                             <div class="d-flex flex-wrap gap-2">
@@ -80,7 +104,11 @@
                                     data-received-qty="{{ row.quantity_received }}"
                                     data-ok-qty="{{ row.quantity_ok }}"
                                     data-not-ok-qty="{{ row.quantity_not_ok }}"
-                                    data-not-ok-reason="{{ row.not_ok_reason|default:'' }}">
+                                    data-not-ok-reason="{{ row.not_ok_reason|default:'' }}"
+                                    data-supplier-invoice-number="{{ row.supplier_invoice_number|default:'' }}"
+                                    data-supplier-bill-amount="{{ row.supplier_bill_amount|default:'' }}"
+                                    data-bill-attachment-url="{% if row.bill_attachment %}{{ row.bill_attachment.url }}{% endif %}"
+                                    data-bill-attachment-name="{% if row.bill_attachment %}{{ row.bill_attachment.name|slice:'15:' }}{% endif %}">
                                     {% if row.status == 'delivered' %}Closed{% elif row.status == 'cancelled' %}Cancelled{% else %}Inward{% endif %}
                                 </button>
                                 <button type="button"
@@ -93,7 +121,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="text-center">No supplier product records found.</td>
+                        <td colspan="13" class="text-center">No supplier product records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -121,20 +149,34 @@
                     <input type="number" id="supplierInwardOrderedQty" class="form-control" readonly>
                 </div>
                 <div class="mb-3">
-                    <label for="supplierInwardReceivedQty" class="form-label">Received Quantity</label>
-                    <input type="number" min="0" step="1" required id="supplierInwardReceivedQty" class="form-control">
+                    <label for="supplierInwardReceivedQty" class="form-label">Received Quantity <span class="text-danger">*</span></label>
+                    <input type="number" min="0" step="1" id="supplierInwardReceivedQty" class="form-control" tabindex="1">
                 </div>
                 <div class="mb-3">
-                    <label for="supplierInwardOkQty" class="form-label">OK Quantity</label>
-                    <input type="number" min="0" step="1" required id="supplierInwardOkQty" class="form-control">
+                    <label for="supplierInwardOkQty" class="form-label">OK Quantity <span class="text-danger">*</span></label>
+                    <input type="number" min="0" step="1" id="supplierInwardOkQty" class="form-control" tabindex="2">
                 </div>
                 <div class="mb-3">
-                    <label for="supplierInwardNotOkQty" class="form-label">NOT OK Quantity</label>
-                    <input type="number" min="0" step="1" required id="supplierInwardNotOkQty" class="form-control">
+                    <label for="supplierInwardNotOkQty" class="form-label">NOT OK Quantity <span class="text-danger">*</span></label>
+                    <input type="number" min="0" step="1" id="supplierInwardNotOkQty" class="form-control" tabindex="3">
                 </div>
                 <div class="mb-3" id="supplierInwardReasonGroup" style="display:none;">
-                    <label for="supplierInwardNotOkReason" class="form-label">Reason</label>
-                    <textarea id="supplierInwardNotOkReason" class="form-control" rows="3"></textarea>
+                    <label for="supplierInwardNotOkReason" class="form-label">Reason <span class="text-danger">*</span></label>
+                    <textarea id="supplierInwardNotOkReason" class="form-control" rows="3" tabindex="4"></textarea>
+                </div>
+                <hr>
+                <div class="mb-3">
+                    <label for="supplierInwardInvoiceNumber" class="form-label">Supplier Invoice Number <span class="text-danger">*</span></label>
+                    <input type="text" id="supplierInwardInvoiceNumber" class="form-control" placeholder="Enter invoice number" tabindex="5">
+                </div>
+                <div class="mb-3">
+                    <label for="supplierInwardBillAmount" class="form-label">Supplier Bill Amount (₹) <span class="text-danger">*</span></label>
+                    <input type="number" id="supplierInwardBillAmount" class="form-control" step="0.01" min="0.01" placeholder="0.00" tabindex="6">
+                </div>
+                <div class="mb-3">
+                    <label for="supplierInwardBillAttachment" class="form-label">Bill Attachment <span class="text-danger">*</span></label>
+                    <input type="file" id="supplierInwardBillAttachment" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" tabindex="7">
+                    <div class="form-text" id="supplierInwardBillAttachmentExisting"></div>
                 </div>
                 <div class="text-danger small mb-2" id="supplierInwardValidationError" style="display:none;"></div>
                 <div class="form-text" id="supplierInwardHint"></div>
@@ -292,6 +334,10 @@ function getSupplierInwardValues() {
     const okValue = document.getElementById('supplierInwardOkQty').value.trim();
     const notOkValue = document.getElementById('supplierInwardNotOkQty').value.trim();
     const reason = document.getElementById('supplierInwardNotOkReason').value.trim();
+    const invoiceNumber = document.getElementById('supplierInwardInvoiceNumber').value.trim();
+    const billAmountValue = document.getElementById('supplierInwardBillAmount').value.trim();
+    const billAttachmentInput = document.getElementById('supplierInwardBillAttachment');
+    const billFile = billAttachmentInput ? billAttachmentInput.files[0] : null;
 
     return {
         receivedValue: receivedValue,
@@ -300,7 +346,11 @@ function getSupplierInwardValues() {
         receivedQuantity: parseInt(receivedValue || '0', 10),
         okQuantity: parseInt(okValue || '0', 10),
         notOkQuantity: parseInt(notOkValue || '0', 10),
-        reason: reason
+        reason: reason,
+        invoiceNumber: invoiceNumber,
+        billAmountValue: billAmountValue,
+        billAmount: parseFloat(billAmountValue || '0'),
+        billFile: billFile
     };
 }
 
@@ -311,14 +361,18 @@ function validateSupplierInwardLive(isSubmit = false) {
     const okInput = document.getElementById('supplierInwardOkQty');
     const notOkInput = document.getElementById('supplierInwardNotOkQty');
     const reasonInput = document.getElementById('supplierInwardNotOkReason');
+    const invoiceInput = document.getElementById('supplierInwardInvoiceNumber');
+    const billAmountInput = document.getElementById('supplierInwardBillAmount');
+    const billAttachmentInput = document.getElementById('supplierInwardBillAttachment');
     const errorEl = document.getElementById('supplierInwardValidationError');
     const saveBtn = document.getElementById('saveSupplierInwardBtn');
     const values = getSupplierInwardValues();
 
-    [receivedInput, okInput, notOkInput, reasonInput].forEach(input => {
-        input.classList.remove('is-invalid');
-        input.setCustomValidity('');
-        input.removeAttribute('aria-invalid');
+    [receivedInput, okInput, notOkInput, reasonInput, invoiceInput, billAmountInput, billAttachmentInput].forEach(input => {
+        if (input) {
+            input.classList.remove('is-invalid');
+            input.removeAttribute('aria-invalid');
+        }
     });
 
     let message = '';
@@ -359,7 +413,13 @@ function validateSupplierInwardLive(isSubmit = false) {
         invalidInputs = [reasonInput];
     }
 
-    // 5. Check empty fields on submit
+    // 5. Check bill amount non-negative if entered live
+    if (!message && values.billAmountValue !== '' && (isNaN(values.billAmount) || values.billAmount <= 0)) {
+        message = 'Supplier Bill Amount must be greater than 0.';
+        invalidInputs = [billAmountInput];
+    }
+
+    // 6. Check empty fields on submit
     if (!message && isSubmit) {
         if (!values.receivedValue || !values.okValue || !values.notOkValue) {
             message = 'Received, OK and NOT OK quantities are required.';
@@ -368,18 +428,30 @@ function validateSupplierInwardLive(isSubmit = false) {
                 ...(!values.okValue ? [okInput] : []),
                 ...(!values.notOkValue ? [notOkInput] : [])
             ];
+        } else if (!values.invoiceNumber) {
+            message = 'Supplier Invoice Number is required.';
+            invalidInputs = [invoiceInput];
+        } else if (!values.billAmountValue || isNaN(values.billAmount) || values.billAmount <= 0) {
+            message = 'Supplier Bill Amount is required and must be greater than 0.';
+            invalidInputs = [billAmountInput];
+        } else if (!values.billFile && !pendingSupplierInward.billAttachmentName && !pendingSupplierInward.billAttachmentUrl) {
+            message = 'Bill Attachment is required.';
+            invalidInputs = [billAttachmentInput];
         }
     }
 
     if (message) {
         invalidInputs.forEach(input => {
-            input.classList.add('is-invalid');
-            input.setCustomValidity(message);
-            input.setAttribute('aria-invalid', 'true');
+            if (input) {
+                input.classList.add('is-invalid');
+                input.setAttribute('aria-invalid', 'true');
+            }
         });
         errorEl.textContent = message;
         errorEl.style.display = 'block';
-        if (saveBtn) saveBtn.disabled = true;
+        if (isSubmit && invalidInputs.length > 0 && invalidInputs[0]) {
+            invalidInputs[0].focus();
+        }
         return false;
     }
 
@@ -412,31 +484,66 @@ function refreshSupplierInwardRow(row, status, receivedQty, notOkQty, notOkReaso
         cancelButton.disabled = status === 'cancelled';
     }
 
-    const inwardCell = row.cells[11];
+    const inwardCell = row.cells[12];
     if (inwardCell) {
         inwardCell.setAttribute('data-sort-value', getSupplierInwardSortLabel(status));
     }
 }
 
-function postSupplierInwardUpdate(row, buttonElement, receivedQuantity, okQuantity, notOkQuantity, notOkReason) {
+function postSupplierInwardUpdate(row, buttonElement, receivedQuantity, okQuantity, notOkQuantity, notOkReason, fromModal) {
     const supplierProductId = row.getAttribute('data-supplier-product-id');
+
+    // Use FormData so file attachments can be uploaded
+    const formData = new FormData();
+    formData.append('quantity_received', receivedQuantity);
+    formData.append('ok_quantity', okQuantity);
+    formData.append('not_ok_quantity', notOkQuantity);
+    formData.append('not_ok_reason', notOkReason);
+
+    // Only include invoice/bill fields when submitting from the main inward modal
+    if (fromModal === 'inward') {
+        const invoiceNumber = document.getElementById('supplierInwardInvoiceNumber').value.trim();
+        const billAmount = document.getElementById('supplierInwardBillAmount').value.trim();
+        const billFile = document.getElementById('supplierInwardBillAttachment').files[0];
+        formData.append('supplier_invoice_number', invoiceNumber);
+        formData.append('supplier_bill_amount', billAmount);
+        if (billFile) {
+            formData.append('bill_attachment', billFile);
+        }
+    }
 
     fetch(`/supplier-product/${supplierProductId}/status/`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+            // Do NOT set Content-Type — browser sets it automatically with boundary for FormData
         },
-        body: new URLSearchParams({
-            quantity_received: receivedQuantity,
-            ok_quantity: okQuantity,
-            not_ok_quantity: notOkQuantity,
-            not_ok_reason: notOkReason
-        })
+        body: formData
     }).then(response => response.json()).then(data => {
         if (data.status !== 'ok') {
-            alert(data.message || 'Unable to update status');
+            const errorEl = fromModal === 'inward' 
+                ? document.getElementById('supplierInwardValidationError')
+                : (fromModal === 'rework' ? document.getElementById('reworkValidationError') : document.getElementById('remainingInwardValidationError'));
+            if (errorEl) {
+                errorEl.textContent = data.message || 'Unable to update status';
+                errorEl.style.display = 'block';
+            } else {
+                alert(data.message || 'Unable to update status');
+            }
             return;
+        }
+        // Update button dataset so reopening modal shows latest values
+        if (buttonElement) {
+            if (data.supplier_invoice_number !== undefined) {
+                buttonElement.dataset.supplierInvoiceNumber = data.supplier_invoice_number;
+            }
+            if (data.supplier_bill_amount !== undefined) {
+                buttonElement.dataset.supplierBillAmount = data.supplier_bill_amount;
+            }
+            if (data.bill_attachment_url !== undefined) {
+                buttonElement.dataset.billAttachmentUrl = data.bill_attachment_url;
+                buttonElement.dataset.billAttachmentName = data.bill_attachment_name || '';
+            }
         }
         window.location.reload();
     });
@@ -453,12 +560,34 @@ function showFirstTimeInwardModal() {
     okInput.max = orderedQty;
     notOkInput.max = orderedQty;
     
-    receivedInput.value = pendingSupplierInward.receivedQty || pendingSupplierInward.okQty || '0';
-    okInput.value = pendingSupplierInward.okQty || '0';
-    notOkInput.value = pendingSupplierInward.notOkQty || '0';
+    const initialReceived = pendingSupplierInward.receivedQty > 0
+        ? pendingSupplierInward.receivedQty
+        : '';
+    const initialOk = pendingSupplierInward.okQty > 0
+        ? pendingSupplierInward.okQty
+        : '';
+    const initialNotOk = pendingSupplierInward.notOkQty > 0
+        ? pendingSupplierInward.notOkQty
+        : '';
+
+    receivedInput.value = initialReceived;
+    okInput.value = initialOk;
+    notOkInput.value = initialNotOk;
     document.getElementById('supplierInwardNotOkReason').value = pendingSupplierInward.notOkReason || '';
     document.getElementById('supplierInwardHint').textContent =
         `Received quantity cannot exceed ${orderedQty}. OK quantity plus NOT OK quantity cannot exceed received quantity.`;
+
+    // Pre-fill invoice / bill fields
+    document.getElementById('supplierInwardInvoiceNumber').value = pendingSupplierInward.supplierInvoiceNumber || '';
+    document.getElementById('supplierInwardBillAmount').value = pendingSupplierInward.supplierBillAmount || '';
+    // Clear the file input (cannot pre-fill for security reasons), but show existing filename
+    document.getElementById('supplierInwardBillAttachment').value = '';
+    const existingEl = document.getElementById('supplierInwardBillAttachmentExisting');
+    if (pendingSupplierInward.billAttachmentName) {
+        existingEl.innerHTML = `Current file: <a href="${pendingSupplierInward.billAttachmentUrl}" target="_blank">${pendingSupplierInward.billAttachmentName}</a>`;
+    } else {
+        existingEl.textContent = '';
+    }
     
     updateInwardFieldsState();
     toggleSupplierInwardReason();
@@ -475,6 +604,10 @@ document.addEventListener('click', function (e) {
     const notOkQty = parseInt(e.target.dataset.notOkQty || '0', 10);
     const notOkReason = e.target.dataset.notOkReason || '';
     const status = row.dataset.filterState;
+    const supplierInvoiceNumber = e.target.dataset.supplierInvoiceNumber || '';
+    const supplierBillAmount = e.target.dataset.supplierBillAmount || '';
+    const billAttachmentUrl = e.target.dataset.billAttachmentUrl || '';
+    const billAttachmentName = e.target.dataset.billAttachmentName || '';
 
     pendingSupplierInward = {
         row: row,
@@ -484,7 +617,11 @@ document.addEventListener('click', function (e) {
         okQty: okQty,
         notOkQty: notOkQty,
         notOkReason: notOkReason,
-        status: status
+        status: status,
+        supplierInvoiceNumber: supplierInvoiceNumber,
+        supplierBillAmount: supplierBillAmount,
+        billAttachmentUrl: billAttachmentUrl,
+        billAttachmentName: billAttachmentName
     };
 
     if (receivedQty > 0 && status !== 'closed' && status !== 'cancelled') {
@@ -756,27 +893,45 @@ function updateReworkFieldsState() {
     'supplierInwardReceivedQty',
     'supplierInwardOkQty',
     'supplierInwardNotOkQty',
-    'supplierInwardNotOkReason'
+    'supplierInwardNotOkReason',
+    'supplierInwardInvoiceNumber',
+    'supplierInwardBillAmount',
+    'supplierInwardBillAttachment'
 ].forEach(id => {
     ['input', 'change'].forEach(eventName => {
-        document.getElementById(id).addEventListener(eventName, function () {
-            if (id === 'supplierInwardReceivedQty') {
-                updateInwardFieldsState();
-            }
-            toggleSupplierInwardReason();
-            validateSupplierInwardLive();
-        });
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener(eventName, function () {
+                if (id === 'supplierInwardReceivedQty') {
+                    updateInwardFieldsState();
+                }
+                toggleSupplierInwardReason();
+                validateSupplierInwardLive();
+            });
+        }
     });
 });
 
 function autoFillNotOkQty() {
-    const receivedVal = parseInt(document.getElementById('supplierInwardReceivedQty').value || '0', 10);
-    const okVal = parseInt(document.getElementById('supplierInwardOkQty').value || '0', 10);
+    const receivedVal = document.getElementById('supplierInwardReceivedQty').value.trim();
+    const okInput = document.getElementById('supplierInwardOkQty');
+    const okValStr = okInput.value.trim();
     const notOkInput = document.getElementById('supplierInwardNotOkQty');
     
-    if (document.getElementById('supplierInwardOkQty').value !== '') {
-        const calculatedNotOk = Math.max(0, receivedVal - okVal);
-        notOkInput.value = calculatedNotOk;
+    if (receivedVal !== '') {
+        const receivedNum = parseInt(receivedVal, 10);
+        let okNum = parseInt(okValStr, 10);
+
+        if (okValStr !== '' && !isNaN(okNum)) {
+            if (okNum > receivedNum) {
+                okNum = receivedNum;
+                okInput.value = okNum;
+            }
+            const calculatedNotOk = Math.max(0, receivedNum - okNum);
+            notOkInput.value = calculatedNotOk;
+        } else if (okValStr === '') {
+            notOkInput.value = '';
+        }
         toggleSupplierInwardReason();
         validateSupplierInwardLive();
     }
@@ -794,13 +949,25 @@ document.getElementById('supplierInwardReceivedQty').addEventListener('change', 
 });
 
 function autoFillReworkNotOkQty() {
-    const receivedVal = parseInt(document.getElementById('reworkReceivedQty').value || '0', 10);
-    const okVal = parseInt(document.getElementById('reworkOkQty').value || '0', 10);
+    const receivedVal = document.getElementById('reworkReceivedQty').value.trim();
+    const okInput = document.getElementById('reworkOkQty');
+    const okValStr = okInput.value.trim();
     const notOkInput = document.getElementById('reworkNotOkQty');
     
-    if (document.getElementById('reworkOkQty').value !== '') {
-        const calculatedNotOk = Math.max(0, receivedVal - okVal);
-        notOkInput.value = calculatedNotOk;
+    if (receivedVal !== '') {
+        const receivedNum = parseInt(receivedVal, 10);
+        let okNum = parseInt(okValStr, 10);
+
+        if (okValStr !== '' && !isNaN(okNum)) {
+            if (okNum > receivedNum) {
+                okNum = receivedNum;
+                okInput.value = okNum;
+            }
+            const calculatedNotOk = Math.max(0, receivedNum - okNum);
+            notOkInput.value = calculatedNotOk;
+        } else if (okValStr === '') {
+            notOkInput.value = '';
+        }
         validateReworkLive();
     }
 }
@@ -845,7 +1012,8 @@ document.getElementById('saveSupplierInwardBtn').addEventListener('click', funct
         values.receivedQuantity,
         values.okQuantity,
         values.notOkQuantity,
-        values.reason
+        values.reason,
+        'inward'
     );
 });
 </script>

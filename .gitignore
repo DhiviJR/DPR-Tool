@@ -5,3 +5,4 @@ __pycache__/
 *.py[cod]
 *.sqlite3
 staticfiles/
+media/supplier_po/MES_Q0004_26-27_2.pdf

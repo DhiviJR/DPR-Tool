@@ -1,5 +1,9 @@
-Django>=5.0
+Django>=5.0,<6.0
 mysqlclient
 Pillow
 pyserial
 reportlab
+python-dotenv
+ollama>=0.4
+
+
