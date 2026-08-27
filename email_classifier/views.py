@@ -175,7 +175,16 @@ def sync_inbox(request):
                     saved += 1
                 except Exception:
                     pass
-            messages.success(request, f'Inbox synced successfully. {saved} new email(s) imported from info@mesinstruments.co.in.')
+
+            # Sync RFQ & Supplier email threads across the system
+            rfq_synced = 0
+            try:
+                from accounts.email_services import sync_rfq_inbox
+                rfq_synced, rfq_err = sync_rfq_inbox(rfq=None)
+            except Exception:
+                pass
+
+            messages.success(request, f'Inbox synced successfully. {saved} email(s) classified, {rfq_synced} RFQ/Supplier messages synced.')
         except Exception as exc:
             messages.error(request, f'Inbox sync failed: {exc}')
     return redirect('email_classifier:dashboard')

@@ -1010,6 +1010,8 @@
 .ec-email-row { display: flex; flex-direction: column; padding: 12px 16px; border-bottom: 1px solid #edf0f5; cursor: pointer; transition: background 0.15s; position: relative; }
 .ec-email-row:hover { background: #f0f4ff; }
 .ec-email-row.active { background: #e8eeff; border-left: 3px solid #4361ee; padding-left: 13px; }
+.ec-email-row.ec-source-email-row { background: #fffdf0; border-left: 3px solid #f59e0b; }
+.ec-email-row.ec-source-email-row.active { background: #fef3c7; border-left: 4px solid #d97706; }
 .ec-email-row .ec-row-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 3px; }
 .ec-email-row .ec-from { font-size: 0.82rem; font-weight: 600; color: #1a1d23; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 .ec-email-row .ec-date { font-size: 0.72rem; color: #9ca3af; white-space: nowrap; flex-shrink: 0; }
@@ -2908,7 +2910,7 @@ function renderEmailList(messages) {
     messages.forEach((msg, idx) => {
         const isIn = msg.direction === 'IN';
         const row = document.createElement('div');
-        row.className = 'ec-email-row' + (idx === 0 ? ' active' : '');
+        row.className = 'ec-email-row' + (idx === 0 ? ' active' : '') + (msg.is_source ? ' ec-source-email-row' : '');
         row.dataset.idx = idx;
 
         const senderName = formatSenderName(msg.sender);
@@ -2917,8 +2919,9 @@ function renderEmailList(messages) {
 
         row.innerHTML = `
             <div class="ec-row-top">
-                <div style="display:flex;align-items:center;gap:5px;min-width:0;">
+                <div style="display:flex;align-items:center;gap:5px;min-width:0;flex-wrap:wrap;">
                     <span class="ec-badge ${isIn ? 'ec-badge-in' : 'ec-badge-out'}">${isIn ? '↙ In' : '↗ Out'}</span>
+                    ${msg.is_source ? '<span class="badge bg-warning text-dark" style="font-size:0.65rem;" title="Originating Email for this RFQ"><i class="bi bi-star-fill me-1"></i>Originating Email</span>' : ''}
                     <span class="ec-from">${escapeHtml(senderName)}</span>
                 </div>
                 <span class="ec-date">${escapeHtml(dateStr.split(' ').slice(0,3).join(' '))}</span>
@@ -2947,16 +2950,20 @@ function showEmailDetail(msg) {
     document.getElementById('emailReplyComposer').style.display = 'none';
 
     const isIn = msg.direction === 'IN';
-    const badgeHtml = isIn
+    let badgeHtml = isIn
         ? '<span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:0.7rem;">↙ Incoming</span>'
         : '<span class="badge" style="background:#dcfce7;color:#16a34a;font-size:0.7rem;">↗ Outgoing</span>';
+
+    if (msg.is_source) {
+        badgeHtml += ' <span class="badge bg-warning text-dark shadow-sm px-2 py-1" style="font-size:0.72rem;"><i class="bi bi-star-fill me-1"></i>Originating RFQ Email</span>';
+    }
 
     // Header
     const headerEl = document.getElementById('ecDetailHeader');
     headerEl.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;">
             <p class="ec-detail-subject">${escapeHtml(msg.subject || '(No Subject)')}</p>
-            ${badgeHtml}
+            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">${badgeHtml}</div>
         </div>
         <div class="ec-detail-meta">
             <span><strong>From:</strong> ${escapeHtml(msg.sender)}</span>

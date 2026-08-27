@@ -323,6 +323,53 @@ def _fast_match_rfq_in_memory(
     return None
 
 
+def check_customer_email_match(sender_str, recipient_str, customer):
+    """
+    Checks if sender_str or recipient_str matches the given customer.
+    Requirements:
+    1. Direct match with any email address or domain in customer.email
+    2. Customer name token (e.g. 'bosch' from 'Bosch Pvt Ltd') is present in the email ID address.
+    """
+    if not customer:
+        return False
+
+    text_to_check = f"{sender_str or ''} {recipient_str or ''}".lower()
+
+    # 1. Direct match on customer.email addresses or domains
+    if customer.email:
+        raw_emails = re.split(r'[;, ]+', customer.email.lower().strip())
+        for em in raw_emails:
+            em = em.strip()
+            if em and len(em) > 3:
+                if em in text_to_check:
+                    return True
+                if '@' in em:
+                    domain = em.split('@')[-1].strip()
+                    if domain and len(domain) > 3 and 'mbt-corporation' not in domain and 'hostinger' not in domain and 'mesinstruments' not in domain:
+                        if domain in text_to_check:
+                            return True
+
+    # 2. Check customer name token inside the email ID address
+    if customer.customer_name:
+        found_email_ids = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text_to_check)
+        external_email_ids = [e for e in found_email_ids if 'mesinstruments' not in e and 'mbt-corporation' not in e and 'hostinger' not in e]
+        email_id_string = " ".join(external_email_ids) if external_email_ids else text_to_check
+
+        cname = customer.customer_name.lower().strip()
+        stopwords = {
+            'pvt', 'ltd', 'private', 'limited', 'inc', 'corp', 'corporation', 'co', 'llp',
+            'company', 'industries', 'enterprises', 'solutions', 'services', 'tech',
+            'technologies', 'group', 'india', 'international', 'mfg', 'manufacturing'
+        }
+        tokens = [w for w in re.findall(r'\b[a-z0-9]+\b', cname) if len(w) >= 3 and w not in stopwords]
+
+        for token in tokens:
+            if token in email_id_string:
+                return True
+
+    return False
+
+
 def _match_email_to_rfq(subject, body, from_str, to_str, in_reply_to=None, references=None, target_rfq=None):
     """
     Intelligently matches an incoming or outgoing email to an RFQ (fallback/utility function).
@@ -360,37 +407,16 @@ def _match_email_to_rfq(subject, body, from_str, to_str, in_reply_to=None, refer
         if quotation and quotation.rfq:
             return quotation.rfq
 
-    # 4. Customer Email Match
-    from django.db.models import Q
-    for email_addr in [sender_email, recipient_email]:
-        if email_addr and 'mbt-corporation' not in email_addr and 'hostinger' not in email_addr and 'mesinstruments' not in email_addr:
-            cust_rfqs = RFQ.objects.filter(
-                Q(customer__email__icontains=email_addr) |
-                Q(enquiry_details__icontains=email_addr) |
-                Q(remarks__icontains=email_addr)
-            ).order_by('-created_at')
-            if cust_rfqs.exists():
-                if target_rfq and target_rfq in cust_rfqs:
-                    return target_rfq
-                return cust_rfqs.first()
-
-    # 5. Customer Name Match in Subject/Body
+    # 4. Customer Email Match (checking email ID)
     for rfq in RFQ.objects.select_related('customer').order_by('-created_at'):
-        if rfq.customer and rfq.customer.customer_name:
-            cname = rfq.customer.customer_name.strip()
-            if len(cname) >= 3 and cname.lower() in search_text.lower():
-                return rfq
+        if rfq.customer and check_customer_email_match(from_str, to_str, rfq.customer):
+            if target_rfq and target_rfq == rfq:
+                return target_rfq
+            return rfq
 
-    # 6. Target RFQ fallback if target_rfq is supplied
-    if target_rfq:
-        if target_rfq.customer:
-            c_email = (target_rfq.customer.email or '').lower().strip()
-            c_name = (target_rfq.customer.customer_name or '').lower().strip()
-            if c_email and (c_email in sender_email or c_email in recipient_email or c_email in search_text.lower()):
-                return target_rfq
-            if c_name and len(c_name) >= 3 and (c_name in search_text.lower() or c_name in (from_str or '').lower()):
-                return target_rfq
-        if 'rfq' in (subject or '').lower() or (target_rfq.rfq_no and target_rfq.rfq_no.lower() in search_text.lower()):
+    # 5. Target RFQ fallback if target_rfq is supplied
+    if target_rfq and target_rfq.customer:
+        if check_customer_email_match(from_str, to_str, target_rfq.customer):
             return target_rfq
 
     return None
@@ -454,8 +480,6 @@ def sync_rfq_inbox(rfq=None, mail=None):
 
         # 1. Preload lookup caches in memory (1 query each instead of querying in a loop)
         all_rfqs = list(RFQ.objects.select_related('customer').all())
-        if not all_rfqs:
-            return 0, None
 
         rfq_by_no = {}
         rfq_by_cust_email = {}
@@ -482,7 +506,23 @@ def sync_rfq_inbox(rfq=None, mail=None):
         )
         rfq_map_by_id = {r.id: r for r in all_rfqs}
 
-        # 2. Parse batch headers in memory and identify matching RFQ candidates
+        # Preload Supplier and Customer email lists for thread matching
+        from suppliers.models import Supplier
+        supplier_emails = set()
+        for sup_email in Supplier.objects.exclude(email=None).exclude(email='').values_list('email', flat=True):
+            for em in re.split(r'[;, ]+', sup_email.lower().strip()):
+                em = em.strip()
+                if em and len(em) > 3 and 'mesinstruments' not in em and 'mbt-corporation' not in em:
+                    supplier_emails.add(em)
+
+        customer_emails = set(rfq_by_cust_email.keys())
+        for cust_email in Customer.objects.exclude(email=None).exclude(email='').values_list('email', flat=True):
+            for em in re.split(r'[;, ]+', cust_email.lower().strip()):
+                em = em.strip()
+                if em and len(em) > 3 and 'mesinstruments' not in em and 'mbt-corporation' not in em:
+                    customer_emails.add(em)
+
+        # 2. Parse batch headers in memory and identify matching RFQ / Supplier candidates
         parsed_candidates = []
         all_candidate_msg_ids = []
 
@@ -539,8 +579,18 @@ def sync_rfq_inbox(rfq=None, mail=None):
                 rfq_map_by_id=rfq_map_by_id
             )
 
-            # If this email does not relate to any RFQ, skip it without downloading body!
-            if not matched_rfq:
+            # Check if email is relevant to Supplier, Customer, or RFQ
+            sender_em = parseaddr(from_str or '')[1].lower().strip()
+            recip_em = parseaddr(to_str or '')[1].lower().strip()
+            is_supplier_or_customer = (
+                matched_rfq is not None or
+                any(se in sender_em or se in recip_em for se in supplier_emails) or
+                any(ce in sender_em or ce in recip_em for ce in customer_emails) or
+                'rfq' in (subject or '').lower() or
+                'dpr' in (subject or '').lower()
+            )
+
+            if not is_supplier_or_customer:
                 continue
 
             parsed_candidates.append({
@@ -572,7 +622,7 @@ def sync_rfq_inbox(rfq=None, mail=None):
 
             if msg_id in existing_msgs:
                 existing_msg = existing_msgs[msg_id]
-                if existing_msg.rfq_id != matched_rfq.id:
+                if matched_rfq and existing_msg.rfq_id != matched_rfq.id:
                     existing_msg.rfq = matched_rfq
                     existing_msg.save(update_fields=['rfq'])
                     synced_count += 1

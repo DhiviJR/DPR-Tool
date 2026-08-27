@@ -14,7 +14,7 @@ from suppliers.models import Supplier
 from dpr.models import DPR
 from products.models import CustomerProduct, SupplierProduct
 from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation, RFQEmailMessage
-from .email_services import send_threaded_rfq_email, sync_rfq_inbox
+from .email_services import send_threaded_rfq_email, sync_rfq_inbox, check_customer_email_match
 from django.http import HttpResponse, JsonResponse, Http404
 from django.db import transaction
 from django.db.models import Sum, Case, When, Value, IntegerField, Q
@@ -3967,17 +3967,39 @@ def rfq_details(request):
 
         if action == 'add':
             from_email_id = request.POST.get('from_email_id', '').strip()
+            source_email_obj = None
+            if from_email_id and from_email_id.isdigit():
+                from email_classifier.models import EmailRecord
+                source_email_obj = EmailRecord.objects.filter(pk=int(from_email_id)).first()
+
             with transaction.atomic():
                 rfq = RFQ.objects.create(
                     mail_date=mail_date,
                     customer=customer,
                     enquiry_details=enquiry_details,
                     remarks=remarks or None,
-                    attachment=attachment
+                    attachment=attachment,
+                    source_email=source_email_obj
                 )
-                if from_email_id and from_email_id.isdigit():
-                    from email_classifier.models import EmailRecord
-                    EmailRecord.objects.filter(pk=int(from_email_id)).update(is_added_to_rfq=True)
+                if source_email_obj:
+                    source_email_obj.is_added_to_rfq = True
+                    source_email_obj.save(update_fields=['is_added_to_rfq'])
+
+                    # Convert / Link this EmailRecord into RFQEmailMessage for this RFQ
+                    msg_id = source_email_obj.imap_uid or f"<er-{source_email_obj.id}@inbox>"
+                    if not msg_id.startswith('<'):
+                        msg_id = f"<{msg_id}>"
+                    if not RFQEmailMessage.objects.filter(message_id=msg_id).exists():
+                        RFQEmailMessage.objects.create(
+                            rfq=rfq,
+                            message_id=msg_id,
+                            sender=source_email_obj.sender or (rfq.customer.email if rfq.customer else 'Unknown'),
+                            recipients=getattr(settings, 'EMAIL_HOST_USER', 'info@mesinstruments.co.in'),
+                            subject=source_email_obj.subject or f"Enquiry - {rfq.rfq_no}",
+                            body=source_email_obj.body or rfq.enquiry_details,
+                            direction='IN',
+                            sent_at=source_email_obj.received_at or rfq.created_at
+                        )
                 for product_row in product_rows:
                     selected_suppliers = product_row.pop('suppliers', [])
                     supplier_prices = product_row.pop('supplier_prices', [])
@@ -6707,6 +6729,10 @@ def get_rfq_email_thread(request, rfq_id):
             logger.warning(f"Error syncing inbox for RFQ {rfq_id}: {e}")
 
     show_all = request.GET.get('all') == '1'
+    data = []
+    seen_keys = set()
+    customer = rfq.customer
+
     if show_all:
         email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:500]
     else:
@@ -6719,20 +6745,65 @@ def get_rfq_email_thread(request, rfq_id):
             if quote.quotation_number:
                 query_conds |= Q(subject__icontains=quote.quotation_number) | Q(body__icontains=quote.quotation_number)
 
-        if rfq.customer and rfq.customer.email:
-            c_email = rfq.customer.email.strip()
-            if c_email and 'mbt-corporation' not in c_email and 'hostinger' not in c_email:
-                query_conds |= Q(sender__icontains=c_email) | Q(recipients__icontains=c_email)
+        if customer:
+            if customer.email:
+                raw_emails = re.split(r'[;, ]+', customer.email.lower().strip())
+                for em in raw_emails:
+                    em = em.strip()
+                    if em and len(em) > 3 and 'mbt-corporation' not in em and 'hostinger' not in em and 'mesinstruments' not in em:
+                        query_conds |= Q(sender__icontains=em) | Q(recipients__icontains=em)
 
-        matched_msgs = RFQEmailMessage.objects.filter(query_conds).distinct()
-        unlinked = matched_msgs.filter(rfq__isnull=True)
-        if unlinked.exists():
-            unlinked.update(rfq=rfq)
+            if customer.customer_name:
+                cname = customer.clean_customer_name.lower().strip() if hasattr(customer, 'clean_customer_name') else customer.customer_name.lower().strip()
+                stopwords = {
+                    'pvt', 'ltd', 'private', 'limited', 'inc', 'corp', 'corporation', 'co', 'llp',
+                    'company', 'industries', 'enterprises', 'solutions', 'services', 'tech',
+                    'technologies', 'group', 'india', 'international', 'mfg', 'manufacturing'
+                }
+                tokens = [w for w in re.findall(r'\b[a-z0-9]+\b', cname) if len(w) >= 3 and w not in stopwords]
+                for token in tokens:
+                    query_conds |= Q(sender__icontains=token) | Q(recipients__icontains=token)
 
-        email_messages = matched_msgs.order_by('sent_at')
+        candidate_msgs = RFQEmailMessage.objects.filter(query_conds).distinct()
 
-    data = []
-    seen_keys = set()
+        # Exclude unlinked messages mentioning OTHER RFQ numbers
+        other_rfq_nos = list(RFQ.objects.exclude(id=rfq.id).exclude(rfq_no=None).values_list('rfq_no', flat=True))
+        if other_rfq_nos:
+            other_q = Q()
+            for o_no in other_rfq_nos:
+                if o_no:
+                    other_q |= Q(subject__icontains=o_no)
+            candidate_msgs = candidate_msgs.exclude(Q(rfq__isnull=True) & other_q)
+
+        # Strictly verify customer email match
+        # Identify originating source message ID if RFQ was created from an email
+        source_msg_id = None
+        if hasattr(rfq, 'source_email') and rfq.source_email:
+            source_msg_id = (rfq.source_email.imap_uid or f"er-{rfq.source_email.id}@inbox").strip('<>')
+
+        filtered_msgs = []
+        for msg in candidate_msgs.order_by('-sent_at'):
+            is_rfq_ref = (rfq.rfq_no and rfq.rfq_no.lower() in (msg.subject or '').lower()) or \
+                         any(q.quotation_number and q.quotation_number.lower() in (msg.subject or '').lower() for q in rfq.quotations.all()) or \
+                         (msg.rfq_id == rfq.id)
+
+            cust_match = check_customer_email_match(msg.sender, msg.recipients, customer)
+
+            if is_rfq_ref or cust_match:
+                if msg.rfq_id is None and cust_match:
+                    msg.rfq = rfq
+                    msg.save(update_fields=['rfq'])
+                filtered_msgs.append(msg)
+
+        email_messages = filtered_msgs
+
+    # Determine earliest incoming message if source_email is not set
+    earliest_in_msg_id = None
+    if not (hasattr(rfq, 'source_email') and rfq.source_email):
+        earliest_in = RFQEmailMessage.objects.filter(rfq=rfq, direction='IN').order_by('sent_at').first()
+        if earliest_in:
+            earliest_in_msg_id = earliest_in.id
+
     for msg in email_messages:
         key = (
             (msg.subject or '').strip().lower(),
@@ -6740,6 +6811,13 @@ def get_rfq_email_thread(request, rfq_id):
             msg.sent_at.strftime('%Y-%m-%d %H:%M') if msg.sent_at else ''
         )
         seen_keys.add(key)
+        
+        is_src = False
+        if source_msg_id and source_msg_id in (msg.message_id or '').strip('<>'):
+            is_src = True
+        elif earliest_in_msg_id and msg.id == earliest_in_msg_id:
+            is_src = True
+
         data.append({
             'id': msg.id,
             'message_id': msg.message_id,
@@ -6753,38 +6831,83 @@ def get_rfq_email_thread(request, rfq_id):
             'sent_at': timezone.localtime(msg.sent_at).strftime('%b %d, %Y %I:%M %p') if msg.sent_at else '',
             'has_attachments': msg.has_attachments,
             'attachment_names': msg.attachment_names or '',
+            'is_source': is_src,
             '_sort_date': msg.sent_at or timezone.now()
         })
 
-    if show_all:
-        try:
-            from email_classifier.models import EmailRecord
-            for er in EmailRecord.objects.all().order_by('-received_at')[:500]:
-                er_key = (
-                    (er.subject or '').strip().lower(),
-                    (er.sender or '').strip().lower(),
-                    er.received_at.strftime('%Y-%m-%d %H:%M') if er.received_at else ''
-                )
-                if er_key not in seen_keys:
-                    seen_keys.add(er_key)
-                    data.append({
-                        'id': f"er_{er.id}",
-                        'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
-                        'in_reply_to': '',
-                        'sender': er.sender or '',
-                        'recipients': 'info@mesinstruments.co.in',
-                        'cc_recipients': '',
-                        'subject': er.subject or '(No Subject)',
-                        'body': er.body or '',
-                        'direction': 'IN',
-                        'sent_at': timezone.localtime(er.received_at).strftime('%b %d, %Y %I:%M %p') if er.received_at else '',
-                        'has_attachments': False,
-                        'attachment_names': '',
-                        '_sort_date': er.received_at or timezone.now()
-                    })
-            data.sort(key=lambda x: x.get('_sort_date') or timezone.now(), reverse=True)
-        except Exception as e:
-            logger.warning(f"Could not merge EmailRecord into RFQ all mails: {e}")
+    # Merge EmailRecord (from Email Classifier page)
+    try:
+        from email_classifier.models import EmailRecord
+        if show_all:
+            er_qs = EmailRecord.objects.all().order_by('-received_at')[:500]
+        else:
+            er_conds = Q()
+            if hasattr(rfq, 'source_email') and rfq.source_email:
+                er_conds |= Q(pk=rfq.source_email.pk)
+
+            if customer:
+                if customer.email:
+                    raw_emails = re.split(r'[;, ]+', customer.email.lower().strip())
+                    for em in raw_emails:
+                        em = em.strip()
+                        if em and len(em) > 3 and 'mbt-corporation' not in em and 'hostinger' not in em and 'mesinstruments' not in em:
+                            er_conds |= Q(sender__icontains=em)
+
+                if customer.customer_name:
+                    cname = customer.clean_customer_name.lower().strip() if hasattr(customer, 'clean_customer_name') else customer.customer_name.lower().strip()
+                    stopwords = {
+                        'pvt', 'ltd', 'private', 'limited', 'inc', 'corp', 'corporation', 'co', 'llp',
+                        'company', 'industries', 'enterprises', 'solutions', 'services', 'tech',
+                        'technologies', 'group', 'india', 'international', 'mfg', 'manufacturing'
+                    }
+                    tokens = [w for w in re.findall(r'\b[a-z0-9]+\b', cname) if len(w) >= 3 and w not in stopwords]
+                    for token in tokens:
+                        er_conds |= Q(sender__icontains=token)
+
+            if er_conds:
+                er_qs = EmailRecord.objects.filter(er_conds).order_by('-received_at')[:100]
+            else:
+                er_qs = EmailRecord.objects.none()
+
+            er_filtered = []
+            for er in er_qs:
+                if hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk:
+                    er_filtered.append(er)
+                elif check_customer_email_match(er.sender, 'info@mesinstruments.co.in', customer):
+                    er_filtered.append(er)
+
+            er_qs = er_filtered
+
+        for er in er_qs:
+            er_key = (
+                (er.subject or '').strip().lower(),
+                (er.sender or '').strip().lower(),
+                er.received_at.strftime('%Y-%m-%d %H:%M') if er.received_at else ''
+            )
+            if er_key not in seen_keys:
+                seen_keys.add(er_key)
+                is_src = bool(hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk)
+                data.append({
+                    'id': f"er_{er.id}",
+                    'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
+                    'in_reply_to': '',
+                    'sender': er.sender or (rfq.customer.email if rfq.customer else ''),
+                    'recipients': getattr(settings, 'EMAIL_HOST_USER', 'info@mesinstruments.co.in'),
+                    'cc_recipients': '',
+                    'subject': er.subject or f"Enquiry - {rfq.rfq_no}",
+                    'body': er.body or '',
+                    'direction': 'IN',
+                    'sent_at': timezone.localtime(er.received_at).strftime('%b %d, %Y %I:%M %p') if er.received_at else '',
+                    'has_attachments': False,
+                    'attachment_names': '',
+                    'is_source': is_src,
+                    '_sort_date': er.received_at or timezone.now()
+                })
+    except Exception as e:
+        logger.warning(f"Could not merge EmailRecord into RFQ email thread: {e}")
+
+    # Sort thread: Originating RFQ email FIRST (is_source=True), followed by newest emails first
+    data.sort(key=lambda x: (1 if x.get('is_source') else 0, x.get('_sort_date') or timezone.now()), reverse=True)
 
     for item in data:
         item.pop('_sort_date', None)
@@ -7095,7 +7218,7 @@ def get_supplier_email_thread(request, dpr_id):
     if show_all:
         email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:500]
     else:
-        email_messages = messages_query.order_by('sent_at')
+        email_messages = messages_query.order_by('-sent_at')
 
     data = []
     seen_keys = set()
@@ -7148,9 +7271,10 @@ def get_supplier_email_thread(request, dpr_id):
                         'attachment_names': '',
                         '_sort_date': er.received_at or timezone.now()
                     })
-            data.sort(key=lambda x: x.get('_sort_date') or timezone.now(), reverse=True)
         except Exception as e:
             logger.warning(f"Could not merge EmailRecord into Supplier all mails: {e}")
+
+    data.sort(key=lambda x: x.get('_sort_date') or timezone.now(), reverse=True)
 
     for item in data:
         item.pop('_sort_date', None)
