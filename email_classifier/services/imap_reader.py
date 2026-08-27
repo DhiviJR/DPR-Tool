@@ -48,7 +48,24 @@ def _body(message):
 from email_classifier.models import EmailRecord
 
 
-def fetch_all_messages(offset=0, limit=25):
+def _extract_attachments(message):
+    has_att = False
+    att_names = []
+    if message.is_multipart():
+        for part in message.walk():
+            fn = part.get_filename()
+            disp = str(part.get('Content-Disposition') or '')
+            if fn:
+                decoded_fn = ' '.join(_decode(fn).split())
+                if decoded_fn and decoded_fn not in att_names:
+                    att_names.append(decoded_fn)
+                    has_att = True
+            elif 'attachment' in disp.lower():
+                has_att = True
+    return has_att, att_names
+
+
+def fetch_all_messages(offset=0, limit=25, mail_client=None):
     """Return one small, read-only batch of Inbox messages.
 
     Uses a fast header-first check to skip downloading full bodies for
@@ -58,9 +75,14 @@ def fetch_all_messages(offset=0, limit=25):
     if not all(required):
         raise ValueError('Set EMAIL_IMAP_HOST, EMAIL_IMAP_USERNAME, and EMAIL_IMAP_PASSWORD in .env.')
 
-    client = imaplib.IMAP4_SSL(settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_PORT)
-    try:
+    close_at_end = False
+    client = mail_client
+    if client is None:
+        client = imaplib.IMAP4_SSL(settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_PORT, timeout=10)
         client.login(settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
+        close_at_end = True
+
+    try:
         status, _ = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
         if status != 'OK':
             raise RuntimeError(f'Cannot open mailbox {settings.EMAIL_IMAP_MAILBOX}.')
@@ -75,10 +97,10 @@ def fetch_all_messages(offset=0, limit=25):
         if not batch:
             return [], len(message_numbers)
 
-        # 1. Fast Header-Only fetch for batch
+        # 1. Fast Header-Only fetch for batch in single request
         headers_info = []
         try:
-            status, data = client.fetch(b','.join(batch), '(BODY.PEEK[HEADER])')
+            status, data = client.fetch(b','.join(batch), '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
             if status == 'OK' and data:
                 for item in data:
                     if isinstance(item, tuple) and len(item) == 2 and item[1]:
@@ -106,49 +128,36 @@ def fetch_all_messages(offset=0, limit=25):
                 # All emails in batch already imported! Fast return!
                 return [], len(message_numbers)
 
-            # 3. Fetch body ONLY for brand new emails
+            # 3. Fetch body & attachments ONLY for brand new emails
             messages = []
             for h in new_headers:
                 try:
                     b_text = ''
+                    has_att = False
+                    att_names = []
                     if h['num']:
                         st, d = client.fetch(h['num'], '(BODY.PEEK[])')
                         if st == 'OK' and d and d[0] and isinstance(d[0], tuple) and len(d[0]) > 1:
                             m = email.message_from_bytes(d[0][1])
                             b_text = _body(m)
+                            has_att, att_names = _extract_attachments(m)
                     messages.append({
                         'uid': h['uid'],
                         'sender': h['sender'],
                         'subject': h['subject'],
                         'body': b_text,
                         'date': h['date'],
+                        'has_attachments': has_att,
+                        'attachment_names': '|||'.join(att_names),
                     })
                 except Exception:
                     pass
             return messages, len(message_numbers)
 
-        # Fallback to full fetch if header fetch was empty
-        messages = []
-        for message_number in batch:
-            status, data = client.fetch(message_number, '(BODY.PEEK[])')
-            if status != 'OK' or not data or not data[0]:
-                continue
-            raw_message = data[0][1]
-            message = email.message_from_bytes(raw_message)
-            message_id = _decode(message.get('Message-ID'))
-            uid_val = (message_id or hashlib.sha256(raw_message).hexdigest())[:255]
-            date_raw = _decode(message.get('Date'))
-            parsed_dt = _parse_date(date_raw)
-            messages.append({
-                'uid': uid_val,
-                'sender': _decode(message.get('From')),
-                'subject': _decode(message.get('Subject')) or '(No subject)',
-                'body': _body(message),
-                'date': parsed_dt,
-            })
-        return messages, len(message_numbers)
+        return [], len(message_numbers)
     finally:
-        try:
-            client.logout()
-        except Exception:
-            pass
+        if close_at_end and client:
+            try:
+                client.logout()
+            except Exception:
+                pass

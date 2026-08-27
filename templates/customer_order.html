@@ -8,7 +8,9 @@
 
         <h4 class="mb-0">Customer Order Details</h4>
 
-        <a href="{% url 'dashboard' %}" class="btn btn-outline-light btn-sm">Back to Dashboard</a>
+        <a href="javascript:history.back()" class="btn btn-outline-light btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
 
     </div>
 
@@ -45,7 +47,8 @@
 
                     <input type="text"
                         class="form-control"
-                        value="{% if dpr %}{{ dpr.serial_number }}{% else %}Auto Generated{% endif %}"
+                        id="dprNoDisplay"
+                        value="{% if dpr %}{{ dpr.serial_number }}{% else %}{{ next_dpr_no|default:'Auto Generated' }}{% endif %}"
                         readonly>
 
                 </div>
@@ -113,35 +116,9 @@
                                 class="btn btn-success ms-2"
                                 data-bs-toggle="modal"
                                 data-bs-target="#customerModal">
-
                             +
-
                         </button>
-
-                </div>
-
-</div>
-
-                <!-- Enquiry Attachment -->
-
-                <div class="col-md-4 mb-3">
-
-                    <label class="form-label">
-                        Enquiry Attachment
-                    </label>
-
-                    <input type="file"
-                           class="form-control"
-                           name="enquiry_attachment">
-                    <input type="hidden"
-                           name="existing_enquiry_attachment"
-                           value="{% if dpr and dpr.enquiry_attachment %}{{ dpr.enquiry_attachment.name }}{% endif %}">
-                    {% if dpr and dpr.enquiry_attachment %}
-                    <small class="text-muted d-block mt-1">
-                        Current: <a href="{{ dpr.enquiry_attachment.url }}" target="_blank">{{ dpr.enquiry_attachment.name|slice:'-40:' }}</a>
-                    </small>
-                    {% endif %}
-
+                    </div>
                 </div>
 
                 <!-- Quotation -->
@@ -152,22 +129,27 @@
                         Quotation *
                     </label>
 
-                    <div class="dropdown" id="quotationDropdownContainer">
-                        <button class="form-control text-start dropdown-toggle d-flex justify-content-between align-items-center"
-                                type="button"
-                                id="quotationDropdownBtn"
-                                data-bs-toggle="dropdown"
-                                data-bs-auto-close="outside"
-                                aria-expanded="false"
-                                style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            Select Quotation
-                        </button>
-                        <div class="dropdown-menu w-100 p-2" 
-                             id="quotationDropdownMenu" 
-                             aria-labelledby="quotationDropdownBtn" 
-                             style="max-height: 250px; overflow-y: auto;">
-                            <!-- Checkboxes will be populated here -->
+                    <div class="d-flex">
+                        <div class="dropdown flex-grow-1" id="quotationDropdownContainer">
+                            <button class="form-control text-start dropdown-toggle d-flex justify-content-between align-items-center"
+                                    type="button"
+                                    id="quotationDropdownBtn"
+                                    data-bs-toggle="dropdown"
+                                    data-bs-auto-close="outside"
+                                    aria-expanded="false"
+                                    style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                Select Quotation
+                            </button>
+                            <div class="dropdown-menu w-100 p-2" 
+                                 id="quotationDropdownMenu" 
+                                 aria-labelledby="quotationDropdownBtn" 
+                                 style="max-height: 250px; overflow-y: auto;">
+                                <!-- Checkboxes will be populated here -->
+                            </div>
                         </div>
+                        <button type="button" class="btn btn-success ms-2" id="addQuotationBtn" title="Add Quotation">
+                            +
+                        </button>
                     </div>
 
                     <div id="quotationPreviewContainer" class="mt-1.5 d-flex flex-wrap gap-1.5">
@@ -371,6 +353,9 @@
                                        class="form-control"
                                        name="product_name[]"
                                        value="{{ p.product_name }}">
+                                <input type="hidden"
+                                       name="product_specifications[]"
+                                       value="{% if p.product_specifications %}{{ p.product_specifications|safe }}{% else %}{}{% endif %}">
                             </td>
                             <td>
                                 <select class="form-control" name="product_type[]">
@@ -450,6 +435,9 @@
                                 <input type="text"
                                        class="form-control"
                                        name="product_name[]">
+                                <input type="hidden"
+                                       name="product_specifications[]"
+                                       value="{}">
                             </td>
                             <td>
                                 <select class="form-control" name="product_type[]">
@@ -604,62 +592,14 @@ function updatePoNumberVisibility() {
 document.getElementById('confirmationType').addEventListener('change', updatePoNumberVisibility);
 updatePoNumberVisibility();
 
-let isPoNumberDuplicate = false;
-let poCheckSequence = 0;
-
-async function checkPoNumberUniqueness() {
-    const confirmation = document.getElementById('confirmationType')?.value;
-    const poInput = document.getElementById('poNumberInput');
-    const errorDiv = document.getElementById('poNumberExistsError');
-    if (!poInput) return false;
-
-    const poVal = poInput.value.trim();
-    if (confirmation === 'Customer PO' && poVal !== '') {
-        const currentSeq = ++poCheckSequence;
-        const dprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
-        try {
-            const resp = await fetch(`/check-customer-po-number/?po_number=${encodeURIComponent(poVal)}&dpr_id=${dprId}`);
-            const data = await resp.json();
-            if (currentSeq !== poCheckSequence) return isPoNumberDuplicate;
-            if (data.exists) {
-                isPoNumberDuplicate = true;
-                poInput.classList.add('is-invalid');
-                if (errorDiv) {
-                    errorDiv.textContent = data.message || 'This customer po number was already exist';
-                    errorDiv.classList.remove('d-none');
-                }
-                return true;
-            } else {
-                isPoNumberDuplicate = false;
-                poInput.classList.remove('is-invalid');
-                if (errorDiv) {
-                    errorDiv.classList.add('d-none');
-                }
-                return false;
-            }
-        } catch (err) {
-            console.error('Error checking PO number uniqueness:', err);
-            return false;
-        }
-    } else {
-        isPoNumberDuplicate = false;
-        poInput.classList.remove('is-invalid');
-        if (errorDiv) {
-            errorDiv.classList.add('d-none');
-        }
-        return false;
-    }
-}
-
 const poInputEl = document.getElementById('poNumberInput');
 if (poInputEl) {
-    poInputEl.addEventListener('input', checkPoNumberUniqueness);
-    poInputEl.addEventListener('blur', checkPoNumberUniqueness);
-    poInputEl.addEventListener('change', checkPoNumberUniqueness);
+    poInputEl.addEventListener('input', function() {
+        poInputEl.classList.remove('is-invalid');
+        const errorDiv = document.getElementById('poNumberExistsError');
+        if (errorDiv) errorDiv.classList.add('d-none');
+    });
 }
-document.getElementById('confirmationType')?.addEventListener('change', function() {
-    checkPoNumberUniqueness();
-});
 
 const productTypesList = [
     "APG", "ARG",
@@ -674,6 +614,10 @@ function generateProductRow(index, p = {}) {
     const mesRate = p.mes_rate_per_unit || p.rate_per_unit || '';
     const mesVal = p.mes_value || p.value || '';
     const remarks = p.remarks || '';
+    let specsVal = '{}';
+    if (p.product_specifications) {
+        specsVal = (typeof p.product_specifications === 'object') ? JSON.stringify(p.product_specifications) : String(p.product_specifications);
+    }
     
     let typeOptions = '<option value="">Select Type</option>';
     productTypesList.forEach(t => {
@@ -686,6 +630,7 @@ function generateProductRow(index, p = {}) {
             <td>${index + 1}</td>
             <td>
                 <input type="text" class="form-control" name="product_name[]" value="${name}">
+                <input type="hidden" name="product_specifications[]" value='${specsVal.replace(/'/g, "&apos;")}'>
             </td>
             <td>
                 <select class="form-control" name="product_type[]">
@@ -879,7 +824,7 @@ function loadCustomerQuotations() {
     if (urlParams.get('product_type')) prodTypes.push(urlParams.get('product_type'));
     const currentProdName = [...new Set([...prodNames, ...prodTypes])].join(' ').trim();
 
-    if (!customerId && !currentProdName) {
+    if (!customerId) {
         if (selectedQuotes.length > 0) {
             selectedQuotes.forEach(q => {
                 addCheckbox(q, q, true);
@@ -1048,24 +993,36 @@ function validatePoValueMatch(options = {}) {
 
 const orderForm = document.getElementById('customerOrderForm');
 if (orderForm) {
-    orderForm.addEventListener('submit', function (e) {
+    orderForm.addEventListener('submit', async function (e) {
         renumberProductRows();
         calculateTotals();
 
         const confirmation = document.getElementById('confirmationType')?.value;
         const poInput = document.getElementById('poNumberInput');
-        if (confirmation === 'Customer PO' && isPoNumberDuplicate) {
-            e.preventDefault();
-            alert('This customer po number was already exist');
-            if (poInput) {
-                poInput.focus();
-                poInput.classList.add('is-invalid');
+        const poVal = poInput ? poInput.value.trim() : '';
+
+        if (confirmation === 'Customer PO' && poVal) {
+            const dprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
+            try {
+                const resp = await fetch(`/check-customer-po-number/?po_number=${encodeURIComponent(poVal)}&dpr_id=${dprId}`);
+                const data = await resp.json();
+                if (data.exists) {
+                    e.preventDefault();
+                    alert('This customer po number was already exist');
+                    if (poInput) {
+                        poInput.focus();
+                        poInput.classList.add('is-invalid');
+                    }
+                    const errorDiv = document.getElementById('poNumberExistsError');
+                    if (errorDiv) {
+                        errorDiv.textContent = data.message || 'This customer po number was already exist';
+                        errorDiv.classList.remove('d-none');
+                    }
+                    return false;
+                }
+            } catch (err) {
+                console.error('Error checking customer PO number uniqueness:', err);
             }
-            const errorDiv = document.getElementById('poNumberExistsError');
-            if (errorDiv) {
-                errorDiv.classList.remove('d-none');
-            }
-            return false;
         }
 
         if (!validatePoValueMatch({ showError: true })) {
@@ -1538,6 +1495,113 @@ document.addEventListener('DOMContentLoaded', function() {
             loadCustomerQuotations();
         }
     });
+
+    // Add Quotation Modal Pre-fill & Initialization (Customer fixed to current selection)
+    const addQuotationBtn = document.getElementById('addQuotationBtn');
+    if (addQuotationBtn) {
+        addQuotationBtn.addEventListener('click', function() {
+            const custDropdown = document.getElementById('customerDropdown');
+            const currentCustId = custDropdown?.value || '';
+            const currentCustName = (custDropdown?.options[custDropdown.selectedIndex]?.text || '').trim();
+
+            if (!currentCustId) {
+                alert('Please select a Customer first before adding a Quotation.');
+                if (custDropdown) custDropdown.focus();
+                return;
+            }
+
+            document.getElementById('modalQuoteCustomerId').value = currentCustId;
+            document.getElementById('modalQuoteCustomerDisplay').value = currentCustName;
+
+            const numErr = document.getElementById('modalQuoteNumberError');
+            if (numErr) numErr.style.display = 'none';
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('quotationModal')).show();
+        });
+    }
+
+    // Save Quotation with Confirmation Prompt
+    const saveQuotationBtn = document.getElementById('saveQuotationBtn');
+    if (saveQuotationBtn) {
+        saveQuotationBtn.addEventListener('click', function() {
+            const custId = document.getElementById('modalQuoteCustomerId').value;
+            const custName = document.getElementById('modalQuoteCustomerDisplay').value.trim();
+            const quoteNumber = document.getElementById('modalQuoteNumber').value.trim();
+            const quoteAttachment = document.getElementById('modalQuoteAttachment').files[0];
+
+            let hasError = false;
+            const numErr = document.getElementById('modalQuoteNumberError');
+
+            if (!custId) {
+                alert('Customer is missing. Please select a Customer first.');
+                return;
+            }
+
+            if (!quoteNumber) {
+                if (numErr) numErr.style.display = 'block';
+                hasError = true;
+            } else if (numErr) {
+                numErr.style.display = 'none';
+            }
+
+            if (hasError) return;
+
+            // Prompt user: Ask if this quotation is for this customer
+            const isConfirmed = confirm(`Is this quotation (${quoteNumber}) for customer "${custName}"?`);
+            if (!isConfirmed) {
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('customer_id', custId);
+            formData.append('quotation_number', quoteNumber);
+            if (quoteAttachment) formData.append('quotation_attachment', quoteAttachment);
+
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+
+            saveQuotationBtn.disabled = true;
+            saveQuotationBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+            fetch('/add-quotation-ajax/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                },
+                body: formData,
+            })
+            .then(res => res.json())
+            .then(data => {
+                saveQuotationBtn.disabled = false;
+                saveQuotationBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Add Quotation';
+
+                if (data.status === 'success') {
+                    // Set quotation input
+                    const quoteInput = document.getElementById('quotationNumberInput');
+                    if (quoteInput) quoteInput.value = data.quotation_number;
+
+                    // Close modal
+                    const modalEl = document.getElementById('quotationModal');
+                    const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                    if (modalInstance) modalInstance.hide();
+
+                    // Reset modal inputs
+                    document.getElementById('modalQuoteNumber').value = '';
+                    document.getElementById('modalQuoteAttachment').value = '';
+
+                    // Reload customer quotations to show and select the newly linked quotation
+                    loadCustomerQuotations();
+                } else {
+                    alert(data.message || 'Failed to add quotation.');
+                }
+            })
+            .catch(err => {
+                saveQuotationBtn.disabled = false;
+                saveQuotationBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Add Quotation';
+                console.error('Error adding quotation:', err);
+                alert('Error adding quotation: ' + err.message);
+            });
+        });
+    }
 });
 </script>
 
@@ -1613,6 +1677,51 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-success btn-sm" id="saveCustomerBtn">
                     <i class="bi bi-check-circle me-1"></i>Save Customer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ADD QUOTATION MODAL -->
+<div class="modal fade" id="quotationModal" tabindex="-1" aria-labelledby="quotationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title fs-6 fw-semibold" id="quotationModalLabel">
+                    <i class="bi bi-file-earmark-plus me-2"></i>Add Quotation
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="row g-3">
+                    <!-- Fixed Customer Name Display -->
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Customer Name <span class="text-danger">*</span></label>
+                        <input type="hidden" id="modalQuoteCustomerId">
+                        <input type="text" id="modalQuoteCustomerDisplay" class="form-control form-control-sm bg-light fw-bold text-dark" readonly>
+                        <div class="form-text small">Quotation will be linked to this selected customer.</div>
+                    </div>
+
+                    <!-- Quotation Number -->
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Quotation Number <span class="text-danger">*</span></label>
+                        <input type="text" id="modalQuoteNumber" class="form-control form-control-sm" placeholder="e.g. MES_Q0019/26-27" required>
+                        <div id="modalQuoteNumberError" class="text-danger small mt-1" style="display:none;">Quotation Number is required.</div>
+                    </div>
+
+                    <!-- Quotation Attachment -->
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Quotation Attachment</label>
+                        <input type="file" id="modalQuoteAttachment" class="form-control form-control-sm" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg">
+                        <div class="form-text small">Attach quotation document (PDF/Doc/Image).</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success btn-sm" id="saveQuotationBtn">
+                    <i class="bi bi-check-circle me-1"></i>Add Quotation
                 </button>
             </div>
         </div>

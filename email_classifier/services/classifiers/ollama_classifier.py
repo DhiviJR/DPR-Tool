@@ -7,7 +7,7 @@ from .base import BaseEmailClassifier
 class OllamaEmailClassifier(BaseEmailClassifier):
     allowed_categories = {
         'ENQUIRY', 'CUSTOMER_ORDER', 'QUOTATION_REQUEST', 'PAYMENT_INVOICE',
-        'SUPPORT_COMPLAINT', 'OTHERS',
+        'DISPATCH', 'SUPPORT_COMPLAINT', 'OTHERS',
     }
 
     def __init__(self, model, host):

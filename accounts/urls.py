@@ -51,7 +51,10 @@ urlpatterns = [
     path('add-customer/',views.add_customer,name='add_customer'
 ),
     path('add-supplier/', views.add_supplier, name='add_supplier'),
+    path('add-quotation-ajax/', views.add_quotation_ajax, name='add_quotation_ajax'),
     path('get-customer-quotations/', views.get_customer_quotations, name='get_customer_quotations'),
     path('check-customer-po-number/', views.check_customer_po_number, name='check_customer_po_number'),
     path('send-invoice-email/', views.send_invoice_email, name='send_invoice_email'),
+    path('sync-all-mail/', views.sync_all_mail, name='sync_all_mail'),
 ]
+

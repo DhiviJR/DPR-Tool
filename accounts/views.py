@@ -28,6 +28,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from types import SimpleNamespace
 import re
 import html
+import json
 
 
 def _pct(part, whole):
@@ -269,6 +270,240 @@ def _format_mes_quote_no(rfq, revision_number=0, base_quote_no=None):
     return base_quote_no
 
 
+def _get_next_dpr_no():
+    last_dpr = DPR.objects.order_by('-id').first()
+    next_dpr_id = (last_dpr.id + 1) if last_dpr else 1
+    return f"DPR-{timezone.now().year}-{next_dpr_id:04d}"
+
+
+def _normalize_spec_key(key):
+    k = str(key or '').strip()
+    k_upper = k.upper()
+    mapping = {
+        'PRODUCT NAME': 'PRODUCT NAME',
+        'MATERIAL': 'MATERIAL',
+        'SIZE': 'SIZE',
+        'MEASURING LOAD': 'MEASURING LOAD',
+        'MEASURING LAND': 'MEASURING LAND',
+        'DEPTH COLLAR': 'DEPTH COLLAR',
+        'DEPTH COLLOR': 'DEPTH COLLOR',
+        'ENGRAVING DETAILS': 'ENGRAVING DETAILS',
+        'EXTENSION': 'EXTENSION',
+        'EXTENTION': 'EXTENTION',
+        'TYPE OF ID': 'TYPE OF ID',
+        'TYPE OF OD': 'TYPE OF OD',
+        'ROUGHNESS': 'ROUGHNESS',
+        'JET FROM FACE': 'JET FROM FACE',
+        'NO. OF JETS': 'NO. OF JETS',
+        'NO. JETS': 'NO. JETS',
+        'NO OF JETS': 'NO. OF JETS',
+        'GAUGE TYPE': 'GAUGE TYPE',
+        'GAGUE TYPE': 'GAGUE TYPE',
+        'BENCH MOUNT DETAILS': 'BENCH MOUNT DETAILS',
+        'PULL / CHOPPER': 'PULL / CHOPPER',
+        'PULL/CHOPPER': 'PULL / CHOPPER',
+        'DULL CROME': 'DULL CROME',
+        'DULL CHROME': 'DULL CROME',
+        'MODULE': 'AIR UNIT MODULE',
+        'AIR UNIT MODULE': 'AIR UNIT MODULE',
+        'PACKAGING': 'PACKAGING (MABC)',
+        'PACKAGING (MABC)': 'PACKAGING (MABC)',
+        'PACKAGING(MABC)': 'PACKAGING (MABC)',
+        'REMARKS': 'REMARKS',
+        'SPECIFICATION REMARKS': 'REMARKS',
+        'UNIT PRINCIPLE': 'UNIT PRINCIPLE',
+        'DISPLAY': 'DISPLAY',
+        'LEAST COUNT': 'LEAST COUNT',
+        'FEATURES & ACCESSORIES': 'FEATURES & ACCESSORIES',
+        'ADDITIONAL FEATURES': 'ADDITIONAL FEATURES',
+    }
+    return mapping.get(k_upper, k_upper)
+
+
+def _spec_sort_key(norm_key):
+    norm_upper = norm_key.upper()
+    order_list = [
+        'PRODUCT NAME',
+        'MATERIAL',
+        'SIZE',
+        'MEASURING LAND',
+        'MEASURING LOAD',
+        'DEPTH COLLAR',
+        'DEPTH COLLOR',
+        'ENGRAVING DETAILS',
+        'EXTENSION',
+        'EXTENTION',
+        'TYPE OF ID',
+        'TYPE OF OD',
+        'ROUGHNESS',
+        'JET FROM FACE',
+        'NO. OF JETS',
+        'NO. JETS',
+        'NO OF JETS',
+        'GAUGE TYPE',
+        'GAGUE TYPE',
+        'BENCH MOUNT DETAILS',
+        'PULL / CHOPPER',
+        'DULL CROME',
+        'AIR UNIT MODULE',
+        'MODULE',
+        'UNIT PRINCIPLE',
+        'DISPLAY',
+        'LEAST COUNT',
+        'FEATURES & ACCESSORIES',
+        'ADDITIONAL FEATURES',
+        'PACKAGING',
+        'PACKAGING (MABC)',
+        'SPECIFICATION REMARKS',
+        'REMARKS',
+    ]
+    try:
+        return order_list.index(norm_upper)
+    except ValueError:
+        return 100
+
+
+def _extract_embedded_specs_from_text(text):
+    if not text or not isinstance(text, str):
+        return None, text
+    t = text.strip()
+    match = re.search(r'(?:SPECIFICATION\s*[:\-]\s*)?(\{.*?\})', t, re.DOTALL)
+    if match:
+        json_str = match.group(1).strip()
+        try:
+            parsed = json.loads(json_str)
+            if isinstance(parsed, dict) and len(parsed) > 0:
+                rem = (t[:match.start()] + ' ' + t[match.end():]).strip()
+                rem = re.sub(r'SPECIFICATION\s*[:\-]\s*', '', rem).strip()
+                return parsed, rem
+        except Exception:
+            try:
+                parsed = json.loads(json_str.replace("'", '"'))
+                if isinstance(parsed, dict) and len(parsed) > 0:
+                    rem = (t[:match.start()] + ' ' + t[match.end():]).strip()
+                    rem = re.sub(r'SPECIFICATION\s*[:\-]\s*', '', rem).strip()
+                    return parsed, rem
+            except Exception:
+                pass
+    return None, text
+
+
+def _normalize_product_specifications(raw_specs):
+    if not raw_specs:
+        return {}
+
+    specs = raw_specs
+
+    def try_parse_json(val):
+        if not isinstance(val, str):
+            return val
+        s = html.unescape(val).strip()
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+            s = s[1:-1].strip()
+            s = html.unescape(s).strip()
+        if (s.startswith('{') and s.endswith('}')) or (s.startswith('[') and s.endswith(']')):
+            try:
+                return json.loads(s)
+            except Exception:
+                try:
+                    return json.loads(s.replace("'", '"'))
+                except Exception:
+                    pass
+        embedded, _ = _extract_embedded_specs_from_text(s)
+        if embedded:
+            return embedded
+        return s
+
+    if isinstance(specs, str):
+        parsed = try_parse_json(specs)
+        if isinstance(parsed, dict):
+            specs = parsed
+        else:
+            return {}
+
+    if not isinstance(specs, dict):
+        return {}
+
+    flat_specs = {}
+    for k, v in specs.items():
+        k_str = str(k).strip()
+        v_parsed = try_parse_json(v) if isinstance(v, str) else v
+        if isinstance(v_parsed, dict):
+            for nk, nv in v_parsed.items():
+                nv_parsed = try_parse_json(nv) if isinstance(nv, str) else nv
+                if isinstance(nv_parsed, dict):
+                    for nnk, nnv in nv_parsed.items():
+                        if nnv is not None and str(nnv).strip():
+                            flat_specs[str(nnk).strip()] = str(nnv).strip()
+                elif nv_parsed is not None and str(nv_parsed).strip():
+                    flat_specs[str(nk).strip()] = str(nv_parsed).strip()
+        elif v_parsed is not None and str(v_parsed).strip():
+            flat_specs[k_str] = str(v_parsed).strip()
+
+    if len(flat_specs) == 1 and list(flat_specs.keys())[0].lower() in ('specification', 'specifications'):
+        only_val = list(flat_specs.values())[0]
+        parsed_only = try_parse_json(only_val)
+        if isinstance(parsed_only, dict):
+            flat_specs = {str(k).strip(): str(v).strip() for k, v in parsed_only.items() if v is not None and str(v).strip()}
+
+    return flat_specs
+
+
+def _is_redundant_remarks(remarks_str, product_name, specs_dict):
+    if not remarks_str or not str(remarks_str).strip():
+        return True
+    r = str(remarks_str).strip()
+    if r.lower() in ('none', 'null', '-', 'n/a', 'na', 'nil', 'nill'):
+        return True
+    specs_rem = str(specs_dict.get('Remarks', '') or specs_dict.get('Specification Remarks', '') or specs_dict.get('REMARKS', '')).strip()
+    if specs_rem and r.lower() == specs_rem.lower():
+        return True
+    tokens = [t.strip().lower() for t in re.split(r'[;,|\/\n]+', r) if t.strip()]
+    pname_clean = str(product_name or '').strip().lower()
+    mat_clean = str(specs_dict.get('Material', '') or specs_dict.get('MATERIAL', '')).strip().lower()
+    if tokens and all(
+        t in pname_clean or (mat_clean and t in f"{mat_clean} {pname_clean}") or t in ('air plug gauge', 'air ring gauge', 'apg', 'arg', 'tpg', 'trg')
+        for t in tokens
+    ):
+        return True
+    return False
+
+
+def _format_product_description_lines(product_name, specs_dict, remarks=None):
+    """
+    Formats the product description and parameter specifications line-by-line
+    matching the quotation and purchase order specification standard.
+    """
+    pname = str(product_name or '').strip()
+    lines = [f'<b>{pname.upper()}</b>' if pname else '']
+    lines = [l for l in lines if l]
+
+    specs = _normalize_product_specifications(specs_dict)
+    clean_remarks = remarks
+    if not specs and clean_remarks:
+        emb_specs, clean_remarks = _extract_embedded_specs_from_text(clean_remarks)
+        if emb_specs:
+            specs = emb_specs
+
+    sorted_items = sorted(
+        specs.items(),
+        key=lambda item: _spec_sort_key(_normalize_spec_key(item[0]))
+    )
+
+    for k, v in sorted_items:
+        if v is not None and str(v).strip():
+            if k.lower() in ('specification', 'specifications') and len(sorted_items) == 1:
+                lines.append(f"SPECIFICATION : {str(v).strip()}")
+                continue
+            norm_k = _normalize_spec_key(k)
+            lines.append(f"{norm_k} : {str(v).strip()}")
+
+    if clean_remarks and not _is_redundant_remarks(clean_remarks, product_name, specs):
+        lines.append(str(clean_remarks).strip())
+
+    return lines
+
+
 def _serialize_quotation_products(products):
     serialized = []
     for product in products:
@@ -276,6 +511,7 @@ def _serialize_quotation_products(products):
             'product_id': product.id,
             'product_name': product.product_name,
             'product_type': product.product_type or '',
+            'product_specifications': getattr(product, 'product_specifications', {}) or {},
             'quantity': product.quantity,
             'rate_per_unit': str(product.rate_per_unit),
             'value': str(product.value),
@@ -291,10 +527,17 @@ def _serialize_quotation_products(products):
 def _deserialize_quotation_products(products_snapshot):
     deserialized = []
     for item in products_snapshot:
+        raw_specs = item.get('product_specifications')
+        if not raw_specs and item.get('product_id'):
+            rfq_p = RFQProduct.objects.filter(id=item.get('product_id')).first()
+            if rfq_p and rfq_p.product_specifications:
+                raw_specs = rfq_p.product_specifications
+
         deserialized.append(SimpleNamespace(
             id=item.get('product_id'),
             product_name=item.get('product_name'),
             product_type=item.get('product_type'),
+            product_specifications=_normalize_product_specifications(raw_specs),
             price_known=True,
             quantity=item.get('quantity'),
             rate_per_unit=Decimal(item.get('rate_per_unit', 0)),
@@ -433,6 +676,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                     id=product.id,
                     product_name=product.product_name,
                     product_type=product.product_type,
+                    product_specifications=getattr(product, 'product_specifications', {}) or {},
                     price_known=True,
                     quotation_email_sent=product.quotation_email_sent,
                     quantity=product.quantity,
@@ -456,6 +700,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                 id=product.id,
                 product_name=product.product_name,
                 product_type=product.product_type,
+                product_specifications=getattr(product, 'product_specifications', {}) or {},
                 price_known=product.price_known,
                 quotation_email_sent=product.quotation_email_sent,
                 quantity=product.quantity,
@@ -693,16 +938,32 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
     for index, product in enumerate(products, start=1):
         line_total = Decimal(product.value or 0).quantize(Decimal('0.01'))
         subtotal += line_total
-        description_lines = [f'<b>{pdf_text(product.product_name)}</b>']
-        if product.remarks:
-            description_lines.append(pdf_text(product.remarks).replace('\n', '<br/>'))
+        
+        raw_specs = getattr(product, 'product_specifications', None)
+        if not raw_specs and hasattr(product, 'id') and product.id:
+            rfq_p = RFQProduct.objects.filter(id=product.id).first()
+            if rfq_p and rfq_p.product_specifications:
+                raw_specs = rfq_p.product_specifications
+
+        desc_lines = _format_product_description_lines(
+            product.product_name,
+            raw_specs,
+            product.remarks
+        )
+        escaped_desc = []
+        for line in desc_lines:
+            if line.startswith('<b>') and line.endswith('</b>'):
+                escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+            else:
+                escaped_desc.append(pdf_text(line))
+        description_text = '<br/>'.join(escaped_desc)
             
         hsn_code = _get_hsn_code(product)
         
         table_data.append([
             Paragraph(str(index), centered),
             Paragraph(pdf_text(product.product_type or 'P0011'), centered),
-            Paragraph('<br/>'.join(description_lines), small),
+            Paragraph(description_text, small),
             Paragraph(hsn_code, centered),
             Paragraph(str(product.quantity), centered),
             Paragraph(pdf_text(getattr(product, 'unit', None) or "No's"), centered),
@@ -717,7 +978,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         style=TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#a7d3ef')),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
@@ -1397,9 +1658,70 @@ def dpr_view(request):
         )
     }
 
+    from urllib.parse import quote
+    from collections import defaultdict
+
+    # Batch load quotation URLs
+    all_quote_numbers = set()
+    for dpr in dprs:
+        if dpr.quotation_number:
+            for part in dpr.quotation_number.split(','):
+                clean = part.split('(')[0].strip()
+                if clean:
+                    all_quote_numbers.add(clean.lower())
+
+    rfq_quotes = RFQQuotation.objects.filter(quotation_number__in=all_quote_numbers).select_related('rfq')
+    quote_url_map = {}
+    for rq in rfq_quotes:
+        url = f'/rfq/{rq.rfq_id}/quotation/download/?quotation_id={rq.id}' if not (rq.rfq and rq.rfq.attachment) else rq.rfq.attachment.url
+        quote_url_map[rq.quotation_number.strip().lower()] = url
+
+    rfqs_by_no = RFQ.objects.filter(rfq_no__in=all_quote_numbers)
+    for r in rfqs_by_no:
+        if r.rfq_no.strip().lower() not in quote_url_map:
+            quote_url_map[r.rfq_no.strip().lower()] = f'/rfq/{r.id}/quotation/download/' if not r.attachment else r.attachment.url
+
+    # Batch load supplier products
+    all_sps = SupplierProduct.objects.filter(customer_product__dpr__in=dprs).select_related('supplier', 'customer_product')
+    dpr_sp_map = defaultdict(lambda: defaultdict(list))
+    for sp in all_sps:
+        dpr_id = sp.customer_product.dpr_id
+        key = sp.supplier_id or sp.po_number or sp.id
+        dpr_sp_map[dpr_id][key].append(sp)
+
     today = timezone.localdate()
     po_alert_date = today - timedelta(days=3)
     for dpr in dprs:
+        # Customer Quotation links
+        q_links = []
+        if dpr.quotation_number:
+            for part in dpr.quotation_number.split(','):
+                p = part.strip()
+                if not p:
+                    continue
+                clean = p.split('(')[0].strip().lower()
+                url = quote_url_map.get(clean) or (dpr.quotation_attachment.url if dpr.quotation_attachment else '')
+                q_links.append({'number': p, 'url': url})
+        dpr.customer_quotation_links = q_links
+
+        # Supplier PO links
+        sp_links = []
+        sup_groups = dpr_sp_map.get(dpr.id, {})
+        for key, sp_list in sup_groups.items():
+            first_sp = sp_list[0]
+            po_num = first_sp.po_number or f'SPO-{(dpr.po_date or dpr.created_at.date()):%Y%m%d}-{dpr.id:04d}-{(first_sp.supplier_id or 0):04d}'
+            if first_sp.po_attachment:
+                url = first_sp.po_attachment.url
+            elif first_sp.supplier_id:
+                url = f'/dpr/{dpr.id}/generate-po/?supplier_id={first_sp.supplier_id}&po_number={quote(po_num)}'
+            else:
+                url = f'/dpr/{dpr.id}/generate-po/?po_number={quote(po_num)}'
+            sp_links.append({
+                'number': po_num,
+                'supplier_name': first_sp.supplier.supplier_name if first_sp.supplier else '',
+                'url': url
+            })
+        dpr.supplier_po_links = sp_links
         dpr.total_quantity_ordered = customer_qty_map.get(dpr.id, 0)
         dpr.supplier_quantity_ordered = supplier_qty_map.get(dpr.id, 0)
         if dpr.supplier_qty_ordered != dpr.supplier_quantity_ordered:
@@ -2778,6 +3100,7 @@ def customer_order_edit(request, dpr_id):
                 'dpr': dpr,
                 'products': products,
                 'is_edit': True,
+                'next_dpr_no': dpr.serial_number,
             })
 
         product_names = request.POST.getlist('product_name[]')
@@ -2797,6 +3120,7 @@ def customer_order_edit(request, dpr_id):
                 'dpr': dpr,
                 'products': products,
                 'is_edit': True,
+                'next_dpr_no': dpr.serial_number,
             })
 
         dpr.confirmation_type = confirmation_type
@@ -2857,12 +3181,7 @@ def customer_order_edit(request, dpr_id):
                 attachment = existing_attachment
 
             spec_raw = specs_list[i] if i < len(specs_list) else ''
-            spec_dict = {}
-            if spec_raw:
-                try:
-                    spec_dict = json.loads(spec_raw) if isinstance(spec_raw, str) else spec_raw
-                except Exception:
-                    spec_dict = {}
+            spec_dict = _normalize_product_specifications(spec_raw)
 
             CustomerProduct.objects.create(
                 dpr=dpr,
@@ -2897,6 +3216,7 @@ def customer_order_edit(request, dpr_id):
         'dpr': dpr,
         'products': products,
         'is_edit': True,
+        'next_dpr_no': dpr.serial_number,
     }
     return render(request, 'customer_order.html', context)
 
@@ -3334,11 +3654,14 @@ def customer_details(request):
                 messages.error(request, 'State Code is required.')
                 return redirect('customer_details')
             if email:
-                try:
-                    validate_email(email)
-                except ValidationError:
-                    messages.error(request, 'Enter a valid customer email address.')
-                    return redirect('customer_details')
+                emails_list = [e.strip() for e in re.split(r'[,;\s]+', email) if e.strip()]
+                for em in emails_list:
+                    try:
+                        validate_email(em)
+                    except ValidationError:
+                        messages.error(request, f'Enter a valid customer email address ("{em}" is invalid).')
+                        return redirect('customer_details')
+                email = ', '.join(emails_list)
             phone_error = _validate_master_phone(phone_number)
             if phone_error:
                 messages.error(request, phone_error)
@@ -3364,6 +3687,7 @@ def customer_details(request):
             quantity_param = request.POST.get('quantity_param', '').strip()
             unit_param = request.POST.get('unit_param', '').strip()
             product_remarks_param = request.POST.get('product_remarks_param', '').strip()
+            product_specifications_param = request.POST.get('product_specifications_param', '').strip()
 
             if from_email_id:
                 from urllib.parse import urlencode
@@ -3380,6 +3704,7 @@ def customer_details(request):
                     'quantity': quantity_param or '1',
                     'unit': unit_param or "No's",
                     'product_remarks': product_remarks_param,
+                    'product_specifications': product_specifications_param,
                 })
                 messages.success(request, f'Customer "{new_customer.customer_name}" added. Complete the RFQ details below.')
                 return redirect(f"{url}?{params}")
@@ -3435,6 +3760,7 @@ def customer_details(request):
         'quantity_param': request.GET.get('quantity_param', '').strip(),
         'unit_param': request.GET.get('unit_param', '').strip(),
         'product_remarks_param': request.GET.get('product_remarks_param', '').strip(),
+        'product_specifications_param': request.GET.get('product_specifications_param', '').strip(),
     }
 
     return render(request, 'customer_details.html', {
@@ -3609,15 +3935,12 @@ def rfq_details(request):
                 if spec_raw:
                     clean_spec_raw = html.unescape(str(spec_raw)).strip()
                     if clean_spec_raw:
-                        try:
-                            spec_dict = json.loads(clean_spec_raw) if isinstance(clean_spec_raw, str) else clean_spec_raw
-                        except Exception:
-                            spec_dict = {"Specification": clean_spec_raw}
+                        spec_dict = _normalize_product_specifications(clean_spec_raw)
 
                 if (not spec_dict or len(spec_dict) == 0) and action == 'edit' and i < len(product_ids) and product_ids[i]:
                     existing_p = RFQProduct.objects.filter(pk=product_ids[i]).first()
                     if existing_p and existing_p.product_specifications:
-                        spec_dict = existing_p.product_specifications
+                        spec_dict = _normalize_product_specifications(existing_p.product_specifications)
 
                 if not spec_dict or not isinstance(spec_dict, dict) or len(spec_dict) == 0:
                     spec_dict = {"Specification": "As per enquiry"}
@@ -3734,6 +4057,7 @@ def rfq_details(request):
                         rfq_product = existing_products_map[prod_id]
                         rfq_product.product_name = product_row['product_name']
                         rfq_product.product_type = product_row['product_type']
+                        rfq_product.product_specifications = product_row.get('product_specifications', {})
                         rfq_product.price_known = product_row['price_known']
                         rfq_product.supplier = product_row['supplier']
                         rfq_product.quantity = product_row['quantity']
@@ -4085,6 +4409,8 @@ def rfq_details(request):
     next_rfq_id = (last_rfq.id + 1) if last_rfq else 1
     next_rfq_no = f"RFQ-{timezone.now().year}-{next_rfq_id:04d}"
 
+    email_prefill_products_json = request.session.get('email_prefill_products_json', '')
+
     return render(request, 'rfq_details.html', {
         'rfqs': rfqs_to_display,
         'customers': customers,
@@ -4096,6 +4422,7 @@ def rfq_details(request):
         'status_filter': status_filter,
         'tab_counts': tab_counts,
         'next_rfq_no': next_rfq_no,
+        'email_prefill_products_json': email_prefill_products_json,
     })
 
 
@@ -4229,6 +4556,15 @@ def supplier_details(request):
             if not supplier_name:
                 messages.error(request, 'Supplier Name is required.')
                 return redirect('supplier_details')
+            if email:
+                emails_list = [e.strip() for e in re.split(r'[,;\s]+', email) if e.strip()]
+                for em in emails_list:
+                    try:
+                        validate_email(em)
+                    except ValidationError:
+                        messages.error(request, f'Enter a valid supplier email address ("{em}" is invalid).')
+                        return redirect('supplier_details')
+                email = ', '.join(emails_list)
             phone_error = _validate_master_phone(phone_number)
             if phone_error:
                 messages.error(request, phone_error)
@@ -4306,6 +4642,7 @@ def customer_order(request):
                 'dpr': None,
                 'products': None,
                 'is_edit': False,
+                'next_dpr_no': _get_next_dpr_no(),
             })
         if customer.region != region:
             customer.region = region
@@ -4338,6 +4675,7 @@ def customer_order(request):
                 'dpr': None,
                 'products': None,
                 'is_edit': False,
+                'next_dpr_no': _get_next_dpr_no(),
             })
 
         product_names = request.POST.getlist('product_name[]')
@@ -4356,6 +4694,7 @@ def customer_order(request):
                 'dpr': None,
                 'products': None,
                 'is_edit': False,
+                'next_dpr_no': _get_next_dpr_no(),
             })
 
         po_value = request.POST.get('po_value')
@@ -4415,6 +4754,10 @@ def customer_order(request):
             'remarks[]'
         )
 
+        specs_list = request.POST.getlist(
+            'product_specifications[]'
+        )
+
         for i in range(len(product_names)):
 
             product_name = product_names[i]
@@ -4440,27 +4783,24 @@ def customer_order(request):
                 mes_rate_per_unit = Decimal('0.00')
                 mes_value = Decimal('0.00')
 
-            remarks = remarks_list[i]
+            remarks = remarks_list[i] if i < len(remarks_list) else None
+
+            spec_raw = specs_list[i] if i < len(specs_list) else ''
+            spec_dict = _normalize_product_specifications(spec_raw)
 
             attachment = request.FILES.get(f'product_attachment_{i}')
 
             CustomerProduct.objects.create(
-
                 dpr=dpr,
-
                 product_name=product_name,
                 product_type=product_types[i] if i < len(product_types) else None,
-
+                product_specifications=spec_dict,
                 quantity_ordered=quantity,
-
                 rate_per_unit=rate_per_unit,
                 mes_rate_per_unit=mes_rate_per_unit,
-
                 value=value,
                 mes_value=mes_value,
-
                 remarks=remarks,
-
                 attachment=attachment
             )
 
@@ -4498,6 +4838,7 @@ def customer_order(request):
         'products': None,
         'is_edit': False,
         'email_products_json': email_products_json,
+        'next_dpr_no': _get_next_dpr_no(),
     }
 
     return render(
@@ -4690,6 +5031,67 @@ def _get_product_category_key(pname, ptype=''):
 
 
 @role_required('ADMIN', 'SALES', 'PURCHASE')
+def add_quotation_ajax(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    customer_id = request.POST.get('customer_id')
+    quotation_number = request.POST.get('quotation_number', '').strip()
+    quotation_value = request.POST.get('quotation_value', '').strip()
+    quotation_attachment = request.FILES.get('quotation_attachment')
+
+    if not customer_id:
+        return JsonResponse({'status': 'error', 'message': 'Customer is required.'}, status=400)
+    if not quotation_number:
+        return JsonResponse({'status': 'error', 'message': 'Quotation Number is required.'}, status=400)
+
+    try:
+        customer = Customer.objects.get(pk=customer_id)
+    except Customer.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Selected customer does not exist.'}, status=400)
+
+    existing_quote = RFQQuotation.objects.filter(quotation_number__iexact=quotation_number).first()
+
+    if existing_quote:
+        rfq = existing_quote.rfq
+        if rfq.customer_id != customer.id:
+            rfq.customer = customer
+            rfq.save(update_fields=['customer'])
+        if quotation_attachment:
+            rfq.attachment = quotation_attachment
+            rfq.save(update_fields=['attachment'])
+        quote_obj = existing_quote
+    else:
+        rfq = RFQ.objects.create(
+            customer=customer,
+            mail_date=timezone.localdate(),
+            enquiry_details=f"Quotation {quotation_number} added for {customer.clean_customer_name}",
+            attachment=quotation_attachment,
+            quotation_prepared=True,
+            quotation_email_sent=True,
+        )
+        quote_obj = RFQQuotation.objects.create(
+            rfq=rfq,
+            quotation_number=quotation_number,
+            revision_number=0,
+            email_sent=True,
+            products_snapshot=[],
+        )
+
+    preview_url = f'/rfq/{rfq.id}/quotation/download/?quotation_id={quote_obj.id}' if not rfq.attachment else rfq.attachment.url
+
+    return JsonResponse({
+        'status': 'success',
+        'quotation_number': quote_obj.quotation_number,
+        'quotation_value': quotation_value,
+        'customer_id': customer.id,
+        'customer_name': customer.clean_customer_name,
+        'rfq_id': rfq.id,
+        'preview_url': preview_url,
+    })
+
+
+@role_required('ADMIN', 'SALES', 'PURCHASE')
 def get_customer_quotations(request):
     import re
     from django.db.models import Q
@@ -4699,45 +5101,38 @@ def get_customer_quotations(request):
 
     target_category = _get_product_category_key(product_name, product_name) if product_name else None
 
+    if not customer_id:
+        return JsonResponse({'status': 'success', 'quotations': []})
+
+    customer_rfqs = RFQ.objects.filter(customer_id=customer_id)
     rfqs_qs = RFQ.objects.none()
 
-    if customer_id:
-        customer_rfqs = RFQ.objects.filter(customer_id=customer_id)
-        if target_category and target_category != 'OTHER':
-            matching_ids = []
-            for rfq in customer_rfqs.prefetch_related('products'):
-                cats = [_get_product_category_key(p.product_name, p.product_type) for p in rfq.products.all()]
-                if target_category in cats:
-                    matching_ids.append(rfq.id)
-            rfqs_qs = customer_rfqs.filter(id__in=matching_ids)
-        elif product_name:
-            words = [w for w in re.split(r'[\s\-_\/]+', product_name) if len(w) >= 3 and w.lower() not in ('steel', 'carbide', 'unit', 'set', 'nos', 'gauge', 'gauges')]
-            if words:
-                q_filter = Q()
-                for w in words:
-                    q_filter |= Q(products__product_name__icontains=w) | Q(products__product_type__icontains=w)
-                rfqs_qs = customer_rfqs.filter(q_filter)
+    if target_category and target_category != 'OTHER':
+        matching_ids = []
+        for rfq in customer_rfqs.prefetch_related('products'):
+            cats = [_get_product_category_key(p.product_name, p.product_type) for p in rfq.products.all()]
+            if target_category in cats:
+                matching_ids.append(rfq.id)
+        filtered_rfqs = customer_rfqs.filter(id__in=matching_ids)
+        if filtered_rfqs.exists():
+            rfqs_qs = filtered_rfqs
+        else:
+            rfqs_qs = customer_rfqs
+    elif product_name:
+        words = [w for w in re.split(r'[\s\-_\/]+', product_name) if len(w) >= 3 and w.lower() not in ('steel', 'carbide', 'unit', 'set', 'nos', 'gauge', 'gauges')]
+        if words:
+            q_filter = Q()
+            for w in words:
+                q_filter |= Q(products__product_name__icontains=w) | Q(products__product_type__icontains=w)
+            filtered_rfqs = customer_rfqs.filter(q_filter)
+            if filtered_rfqs.exists():
+                rfqs_qs = filtered_rfqs
             else:
                 rfqs_qs = customer_rfqs
         else:
             rfqs_qs = customer_rfqs
-
-    if not rfqs_qs.exists():
-        rfqs_qs = RFQ.objects.all()
-        if target_category and target_category != 'OTHER':
-            matching_ids = []
-            for rfq in rfqs_qs.prefetch_related('products'):
-                cats = [_get_product_category_key(p.product_name, p.product_type) for p in rfq.products.all()]
-                if target_category in cats:
-                    matching_ids.append(rfq.id)
-            rfqs_qs = rfqs_qs.filter(id__in=matching_ids)
-        elif product_name:
-            words = [w for w in re.split(r'[\s\-_\/]+', product_name) if len(w) >= 3 and w.lower() not in ('steel', 'carbide', 'unit', 'set', 'nos', 'gauge', 'gauges')]
-            if words:
-                q_filter = Q()
-                for w in words:
-                    q_filter |= Q(products__product_name__icontains=w) | Q(products__product_type__icontains=w)
-                rfqs_qs = rfqs_qs.filter(q_filter)
+    else:
+        rfqs_qs = customer_rfqs
 
     rfqs = rfqs_qs.distinct().prefetch_related('products', 'quotations').order_by('-created_at')
 
@@ -4750,27 +5145,26 @@ def get_customer_quotations(request):
                 products_list = []
                 for product in quotation.products_snapshot or []:
                     product_data = dict(product)
+                    if not product_data.get('product_specifications') and product_data.get('product_id'):
+                        rfq_p_specs = RFQProduct.objects.filter(id=product_data['product_id']).values_list('product_specifications', flat=True).first()
+                        if rfq_p_specs:
+                            product_data['product_specifications'] = rfq_p_specs
                     product_data['quotation_email_sent'] = quotation.email_sent
                     product_data['quotation_prepared'] = True
                     product_data['prepared_not_emailed'] = prepared_not_emailed
                     products_list.append(product_data)
 
-                if target_category and target_category != 'OTHER':
-                    if not any(_get_product_category_key(p.get('product_name') or p.get('name'), p.get('product_type') or p.get('type')) == target_category for p in products_list):
-                        continue
-
-                if products_list:
-                    quotations.append({
-                        'rfq_id': rfq.id,
-                        'quotation_id': quotation.id,
-                        'rfq_no': rfq.rfq_no,
-                        'quotation_number': quotation.quotation_number,
-                        'revision_number': quotation.revision_number,
-                        'preview_url': f'/rfq/{rfq.id}/quotation/download/?quotation_id={quotation.id}',
-                        'status_label': 'Prepared - Email not sent' if prepared_not_emailed else 'Email sent',
-                        'prepared_not_emailed': prepared_not_emailed,
-                        'products': products_list,
-                    })
+                quotations.append({
+                    'rfq_id': rfq.id,
+                    'quotation_id': quotation.id,
+                    'rfq_no': rfq.rfq_no,
+                    'quotation_number': quotation.quotation_number,
+                    'revision_number': quotation.revision_number,
+                    'preview_url': f'/rfq/{rfq.id}/quotation/download/?quotation_id={quotation.id}' if not rfq.attachment else rfq.attachment.url,
+                    'status_label': 'Prepared - Email not sent' if prepared_not_emailed else 'Email sent',
+                    'prepared_not_emailed': prepared_not_emailed,
+                    'products': products_list,
+                })
             continue
 
         quote_no = _get_mes_quote_no(rfq)
@@ -4783,6 +5177,7 @@ def get_customer_quotations(request):
                 'product_id': p.id,
                 'product_name': p.product_name,
                 'product_type': p.product_type or '',
+                'product_specifications': p.product_specifications or {},
                 'quantity': p.quantity,
                 'rate_per_unit': str(p.rate_per_unit),
                 'value': str(p.value),
@@ -4792,22 +5187,17 @@ def get_customer_quotations(request):
                 'prepared_not_emailed': prepared_not_emailed,
             })
 
-        if target_category and target_category != 'OTHER':
-            if not any(_get_product_category_key(p['product_name'], p['product_type']) == target_category for p in products_list):
-                continue
-
-        if products_list:
-            quotations.append({
-                'rfq_id': rfq.id,
-                'quotation_id': None,
-                'rfq_no': rfq.rfq_no,
-                'quotation_number': quote_no,
-                'revision_number': 0,
-                'preview_url': f'/rfq/{rfq.id}/quotation/download/',
-                'status_label': 'Prepared - Email not sent' if has_prepared_not_emailed else 'Email sent',
-                'prepared_not_emailed': has_prepared_not_emailed,
-                'products': products_list,
-            })
+        quotations.append({
+            'rfq_id': rfq.id,
+            'quotation_id': None,
+            'rfq_no': rfq.rfq_no,
+            'quotation_number': quote_no,
+            'revision_number': 0,
+            'preview_url': f'/rfq/{rfq.id}/quotation/download/' if not rfq.attachment else rfq.attachment.url,
+            'status_label': 'Prepared - Email not sent' if has_prepared_not_emailed else 'Email sent',
+            'prepared_not_emailed': has_prepared_not_emailed,
+            'products': products_list,
+        })
 
     return JsonResponse({'status': 'success', 'quotations': quotations})
 
@@ -5079,12 +5469,36 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         line_total = sp.po_value or (qty * rate)
         basic_total += line_total
         
-        desc_lines = [f'<b>{pdf_text(sp.customer_product.product_name.upper())}</b>']
-        if sp.customer_product.remarks:
-            clean_remarks = pdf_text(sp.customer_product.remarks).replace('\n', '<br/>')
-            desc_lines.append(clean_remarks)
-            
-        desc_para = Paragraph('<br/>'.join(desc_lines), normal_style)
+        raw_specs = getattr(sp.customer_product, 'product_specifications', None)
+        if not raw_specs:
+            if dpr.quotation_number:
+                q_rec = RFQQuotation.objects.filter(quotation_number__icontains=dpr.quotation_number.strip()).first()
+                if q_rec and q_rec.products_snapshot:
+                    for snap in q_rec.products_snapshot:
+                        if (snap.get('product_name', '').strip().lower() == sp.customer_product.product_name.strip().lower()
+                                or (sp.customer_product.product_type and snap.get('product_type', '').strip().lower() == sp.customer_product.product_type.strip().lower())):
+                            raw_specs = snap.get('product_specifications')
+                            break
+            if not raw_specs and dpr.customer:
+                rfq_p = RFQProduct.objects.filter(
+                    rfq__customer=dpr.customer,
+                    product_name__icontains=sp.customer_product.product_name
+                ).order_by('-id').first()
+                if rfq_p and rfq_p.product_specifications:
+                    raw_specs = rfq_p.product_specifications
+
+        desc_lines = _format_product_description_lines(
+            sp.customer_product.product_name,
+            raw_specs,
+            sp.customer_product.remarks
+        )
+        escaped_desc = []
+        for line in desc_lines:
+            if line.startswith('<b>') and line.endswith('</b>'):
+                escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+            else:
+                escaped_desc.append(pdf_text(line))
+        desc_para = Paragraph('<br/>'.join(escaped_desc), normal_style)
         hsn = _get_hsn(sp.customer_product.product_name)
         uom = _get_uom(sp.customer_product.product_name)
         
@@ -5415,6 +5829,7 @@ def send_supplier_po_email(request, dpr_id):
         po_number = request.POST.get('po_number')
         supplier_product_id = request.POST.get('supplier_product_id')
         combined_supplier = request.POST.get('combined_supplier') == '1'
+        delivery_address = request.POST.get('delivery_address') or request.GET.get('delivery_address') or 'hosur'
         supplier_email = request.POST.get('supplier_email', '').strip()
         email_subject = request.POST.get('email_subject', '').strip()
         email_body = request.POST.get('email_body', '').strip()
@@ -5455,7 +5870,7 @@ def send_supplier_po_email(request, dpr_id):
             return redirect('dpr_supplier', dpr_id=dpr_id)
 
         try:
-            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+            pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items, delivery_address=delivery_address)
             email = EmailMessage(
                 subject=email_subject,
                 body=email_body,
@@ -5506,7 +5921,8 @@ def send_supplier_po_email(request, dpr_id):
 
     for supplier, items in groups.items():
         po_number = items[0].po_number or 'PO'
-        if not supplier.email:
+        supp_emails = [e.strip() for e in re.split(r'[,;\s]+', supplier.email or '') if e.strip()]
+        if not supp_emails:
             missing_emails.append(supplier.supplier_name)
             continue
 
@@ -5525,7 +5941,7 @@ def send_supplier_po_email(request, dpr_id):
                 subject=subject,
                 body=body,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[supplier.email],
+                to=supp_emails,
             )
             
             safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number)
@@ -5705,7 +6121,8 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         "GSTIN : 33ABKFM1033E1ZS"
     )
 
-    cust_atten = customer.email.split('@')[0] if (customer.email and '@' in customer.email) else (customer.customer_name or "Mr.Nizamuddeen S")
+    first_email = re.split(r'[,;\s]+', customer.email)[0].strip() if customer.email else ''
+    cust_atten = first_email.split('@')[0] if (first_email and '@' in first_email) else (customer.customer_name or "Mr.Nizamuddeen S")
     cust_info = (
         f"Kindly Atten : {cust_atten}<br/>"
         f"<b>M/s. {customer.customer_name}</b><br/>"
@@ -6053,7 +6470,8 @@ def print_customer_address_pdf(request, product_id):
         leading=14,
     )
 
-    cust_atten = customer.email.split('@')[0] if (customer.email and '@' in customer.email) else (customer.customer_name or "")
+    first_email = re.split(r'[,;\s]+', customer.email)[0].strip() if customer.email else ''
+    cust_atten = first_email.split('@')[0] if (first_email and '@' in first_email) else (customer.customer_name or "")
     po_no = dpr.po_number or dpr.serial_number or '-'
     po_date_str = dpr.po_date.strftime('%d/%m/%Y') if dpr.po_date else '-'
 
@@ -6480,6 +6898,156 @@ def sync_rfq_email_inbox(request, rfq_id=0):
 
 
 @login_required
+def sync_all_mail(request):
+    """
+    Unified mail synchronization from the main dashboard:
+    1. Reuses a single authenticated IMAP connection
+    2. Synchronizes RFQ inbox & reply chains across all RFQs via sync_rfq_inbox()
+    3. Synchronizes & classifies incoming emails for the EMAILS module
+    """
+    import logging
+    import imaplib
+    logger = logging.getLogger(__name__)
+
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    rfq_synced = 0
+    rfq_err = None
+    email_saved = 0
+    email_skipped = 0
+    email_err = None
+
+    imap_host = getattr(settings, 'EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
+    imap_port = int(getattr(settings, 'EMAIL_IMAP_PORT', 993))
+    imap_user = getattr(settings, 'EMAIL_HOST_USER', '')
+    imap_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+
+    mail_client = None
+    try:
+        if imap_user and imap_password:
+            mail_client = imaplib.IMAP4_SSL(imap_host, imap_port, timeout=10)
+            mail_client.login(imap_user, imap_password)
+    except Exception as e:
+        logger.warning(f"Shared IMAP connection failed, will fallback to individual connections: {e}")
+        mail_client = None
+
+    try:
+        # 1. Sync RFQ & Reply Mail
+        try:
+            from .email_services import sync_rfq_inbox
+            rfq_synced, rfq_err = sync_rfq_inbox(rfq=None, mail=mail_client)
+        except Exception as e:
+            logger.exception("RFQ sync failed during unified sync: %s", e)
+            rfq_err = str(e)
+
+        # 2. Sync EMAILS classifier inbox — newest-first; stop as soon as we're caught up
+        try:
+            from email_classifier.services.imap_reader import fetch_all_messages
+            from email_classifier.services.classifier_service import get_classifier
+            from email_classifier.models import EmailRecord
+
+            classifier = get_classifier()
+            BATCH_SIZE = 100        # emails per IMAP round-trip
+            MAX_NEW_PER_SYNC = 200  # cap per sync press to keep the button fast
+            offset = 0
+
+            while email_saved < MAX_NEW_PER_SYNC:
+                try:
+                    messages_list, inbox_total = fetch_all_messages(
+                        offset=offset, limit=BATCH_SIZE, mail_client=mail_client
+                    )
+                except Exception as fetch_err:
+                    logger.warning("fetch_all_messages failed at offset %d: %s", offset, fetch_err)
+                    break
+
+                if not messages_list:
+                    # Emails are newest-first; empty batch means this batch is all already in DB.
+                    # Since we scan newest → oldest, stop immediately — inbox is up to date.
+                    break
+
+                uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
+                existing_uids = set(
+                    EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True)
+                )
+
+                batch_had_new = False
+                for message in messages_list:
+                    if message['uid'] in existing_uids:
+                        email_skipped += 1
+                        continue
+                    if email_saved >= MAX_NEW_PER_SYNC:
+                        break
+                    try:
+                        result = classifier.classify(
+                            subject=message['subject'], body=message['body'], sender=message['sender'],
+                        )
+                        EmailRecord.objects.create(
+                            sender=message['sender'],
+                            subject=message['subject'],
+                            body=message['body'],
+                            source='imap',
+                            imap_uid=message['uid'],
+                            received_at=message.get('date') or timezone.now(),
+                            ai_category=result['category'],
+                            confidence=result['confidence'],
+                            reason=result['reason'],
+                            important_details=result.get('important_details', ''),
+                            has_attachments=message.get('has_attachments', False),
+                            attachment_names=message.get('attachment_names', ''),
+                        )
+                        email_saved += 1
+                        batch_had_new = True
+                    except Exception as e:
+                        logger.exception('Failed to classify message uid %s: %s', message.get('uid'), e)
+
+                offset += BATCH_SIZE
+                if offset >= inbox_total:
+                    break
+                # If every email in this batch was already in DB, no need to scan older emails
+                if not batch_had_new:
+                    break
+
+        except Exception as e:
+            logger.exception("Email classifier sync failed during unified sync: %s", e)
+            email_err = str(e)
+
+
+    finally:
+        if mail_client:
+            try:
+                mail_client.logout()
+            except Exception:
+                pass
+
+    total_synced = rfq_synced + email_saved
+    status_str = 'success'
+    if rfq_err or email_err:
+        status_str = 'warning' if total_synced > 0 else 'danger'
+
+    msg_parts = []
+    if total_synced > 0:
+        msg_parts.append(f"Successfully synchronized {email_saved} new email(s) and {rfq_synced} RFQ reply message(s).")
+    else:
+        msg_parts.append("Sync complete. Inboxes are up to date.")
+
+    if rfq_err:
+        msg_parts.append(f"RFQ Notice: {rfq_err}")
+    if email_err:
+        msg_parts.append(f"Emails Notice: {email_err}")
+
+    return JsonResponse({
+        'status': status_str,
+        'message': ' '.join(msg_parts),
+        'rfq_synced': rfq_synced,
+        'email_saved': email_saved,
+        'total_synced': total_synced
+    })
+
+
+
+
+@login_required
 @role_required('ADMIN', 'PURCHASE')
 def get_supplier_email_thread(request, dpr_id):
     try:
@@ -6617,6 +7185,7 @@ def send_supplier_email_reply(request, dpr_id):
     parent_message_id = request.POST.get('parent_message_id', '').strip()
     supplier_id = request.POST.get('supplier_id')
     po_number = request.POST.get('po_number')
+    delivery_address = request.POST.get('delivery_address') or 'hosur'
     reply_attachment = request.FILES.get('reply_attachment')
 
     if not to_emails_raw:
@@ -6643,7 +7212,7 @@ def send_supplier_email_reply(request, dpr_id):
                 email_items = email_items.filter(po_number=po_number)
             items = list(email_items)
             if items:
-                pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items)
+                pdf_buffer = _build_single_po_pdf_buffer(dpr, supplier, items, delivery_address=delivery_address)
                 safe_po_num = re.sub(r'[^a-zA-Z0-9_\-]', '_', po_number or f'SPO-{dpr.id}')
                 filename = f"{safe_po_num}.pdf"
                 attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))

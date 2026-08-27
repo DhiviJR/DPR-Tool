@@ -8,7 +8,9 @@
         <h1 class="dpr-page-title mb-1">Customer Details</h1>
         <p class="dpr-page-subtitle mb-0">Maintain customer master data used in DPR records</p>
     </div>
-    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+    <a href="javascript:history.back()" class="btn btn-outline-secondary dpr-back-btn btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
 </div>
 
 {% if messages %}
@@ -31,6 +33,7 @@
             <input type="hidden" name="quantity_param" value="{{ prefill_data.quantity_param }}">
             <input type="hidden" name="unit_param" value="{{ prefill_data.unit_param }}">
             <input type="hidden" name="product_remarks_param" value="{{ prefill_data.product_remarks_param }}">
+            <input type="hidden" name="product_specifications_param" value="{{ prefill_data.product_specifications_param }}">
             <div class="col-12 mb-2">
                 <div class="alert alert-info py-2 px-3 mb-0 small rounded-3 border-info-subtle">
                     <i class="bi bi-info-circle-fill me-1 text-info"></i> <strong>New Customer from Email:</strong> Complete and save customer details below to automatically proceed to Add RFQ.
@@ -52,7 +55,7 @@
             </div>
             <div class="col-lg">
                 <label class="form-label">Email</label>
-                <input type="email" name="email" class="form-control" value="{{ prefill_data.email|default:'' }}">
+                <input type="text" name="email" class="form-control" placeholder="e.g. user1@example.com, user2@example.com" value="{{ prefill_data.email|default:'' }}">
             </div>
             <div class="col-lg">
                 <label class="form-label">Phone Number</label>
@@ -147,7 +150,7 @@
                             </select>
                         </td>
                         <td>
-                            <input type="email" name="email" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.email|default:'' }}" disabled>
+                            <input type="text" name="email" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.email|default:'' }}" disabled>
                         </td>
                         <td>
                             <input type="tel" name="phone_number" form="form-{{ customer.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ customer.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
@@ -301,6 +304,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (emailInput && email) emailInput.value = email;
             if (phoneInput && phone) phoneInput.value = phone;
 
+            const productSpecs = urlParams.get('product_specifications_param') || urlParams.get('product_specifications') || '';
             let hiddenInput = form.querySelector('input[name="from_email_id"]');
             if (!hiddenInput) {
                 form.insertAdjacentHTML('beforeend', `
@@ -312,6 +316,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="hidden" name="quantity_param" value="${quantity}">
                     <input type="hidden" name="unit_param" value="${unit}">
                     <input type="hidden" name="product_remarks_param" value="${productRemarks}">
+                    <input type="hidden" name="product_specifications_param" value="${productSpecs}">
                 `);
             }
             form.scrollIntoView({ behavior: 'smooth' });

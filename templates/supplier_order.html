@@ -172,13 +172,7 @@
       </div>
       <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow" {% if total_supplier_quantity >= total_customer_quantity and total_customer_quantity > 0 %}disabled{% endif %}>Add Row</button>
       <div>
-        <button type="button"
-                class="btn btn-primary"
-                id="generatePoBtn"
-                title="Update supplier order and generate Purchase Order PDF">
-          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO & Update
-        </button>
-        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary ms-1">Close</a>
+        <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary">Close</a>
         {% if po_prepared and supplier_orders|length == 1 %}
         <button type="button"
                 id="sendMailBtn"
@@ -542,7 +536,7 @@ function updateSupplierEmailButtons() {
       newMailBtn.innerHTML = '<i class="bi bi-envelope-plus me-1"></i>New Email';
       newMailBtn.title = 'Compose New Email to Supplier';
       newMailBtn.addEventListener('click', function() {
-        openSupplierPoEmailModal(matchingPo, false);
+        triggerNewEmailWithAddressPrompt(matchingPo, false);
       });
 
       const replyMailBtn = document.createElement('button');
@@ -915,7 +909,25 @@ updateQuantityLimits();
 updateSupplierRowValues();
 updateOverallSupplierQty();
 
-// Delivery Address Modal Logic for Generate PO
+// Delivery Address Modal Logic & State for Generate PO and New Email
+let pendingAddressAction = 'generate_po';
+let pendingEmailPo = null;
+let pendingIsReply = false;
+let currentChosenDeliveryAddress = 'hosur';
+
+function triggerNewEmailWithAddressPrompt(matchingPo, isReply = false) {
+  pendingAddressAction = 'new_email';
+  pendingEmailPo = matchingPo;
+  pendingIsReply = isReply;
+  const deliveryAddressModal = document.getElementById('deliveryAddressModal');
+  if (deliveryAddressModal) {
+    const modal = bootstrap.Modal.getOrCreateInstance(deliveryAddressModal);
+    modal.show();
+  } else {
+    openSupplierPoEmailModal(matchingPo, isReply, currentChosenDeliveryAddress);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const generatePoBtn = document.getElementById('generatePoBtn');
   const deliveryAddressModal = document.getElementById('deliveryAddressModal');
@@ -955,6 +967,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
+      pendingAddressAction = 'generate_po';
       const modal = bootstrap.Modal.getOrCreateInstance(deliveryAddressModal);
       modal.show();
     });
@@ -984,11 +997,18 @@ document.addEventListener('DOMContentLoaded', function() {
   if (modalConfirmGeneratePoBtn) {
     modalConfirmGeneratePoBtn.addEventListener('click', function() {
       const selectedAddress = document.querySelector('input[name="modalDeliveryAddressChoice"]:checked')?.value || 'hosur';
-      const form = document.getElementById('supplierOrderForm');
-      if (!form) return;
+      currentChosenDeliveryAddress = selectedAddress;
 
       const modal = bootstrap.Modal.getInstance(deliveryAddressModal);
       if (modal) modal.hide();
+
+      if (pendingAddressAction === 'new_email') {
+        openSupplierPoEmailModal(pendingEmailPo, pendingIsReply, selectedAddress);
+        return;
+      }
+
+      const form = document.getElementById('supplierOrderForm');
+      if (!form) return;
 
       let actionInput = form.querySelector('input[name="action"]');
       if (!actionInput) {
@@ -1040,7 +1060,7 @@ const replyMailBtn = document.getElementById('replyMailBtn');
 sendMailBtn?.addEventListener('click', function() {
   if (sendMailBtn.disabled) return;
   if (poEmailData.length > 0) {
-    openSupplierPoEmailModal({ ...poEmailData[0], combined_supplier: true }, false);
+    triggerNewEmailWithAddressPrompt({ ...poEmailData[0], combined_supplier: true }, false);
   }
 });
 
@@ -1051,7 +1071,10 @@ replyMailBtn?.addEventListener('click', function() {
   }
 });
 
-function openSupplierPoEmailModal(selectedPo = null, isReply = false) {
+function openSupplierPoEmailModal(selectedPo = null, isReply = false, deliveryAddress = null) {
+  if (deliveryAddress) {
+    currentChosenDeliveryAddress = deliveryAddress;
+  }
   const availableData = selectedPo ? [selectedPo] : poEmailData;
   if (!availableData || availableData.length === 0) return;
 
@@ -1069,7 +1092,7 @@ function openSupplierPoEmailModal(selectedPo = null, isReply = false) {
 
   if (selectedPo) {
     selectContainer.style.display = 'none';
-    populateEmailModalFields(selectedPo, isReply);
+    populateEmailModalFields(selectedPo, isReply, currentChosenDeliveryAddress);
   } else if (availableData.length > 1) {
     selectContainer.style.display = 'block';
     selectElement.innerHTML = '';
@@ -1081,24 +1104,28 @@ function openSupplierPoEmailModal(selectedPo = null, isReply = false) {
     });
 
     selectElement.onchange = function() {
-      populateEmailModalFields(availableData[selectElement.value], isReply);
+      populateEmailModalFields(availableData[selectElement.value], isReply, currentChosenDeliveryAddress);
     };
     
-    populateEmailModalFields(availableData[0], isReply);
+    populateEmailModalFields(availableData[0], isReply, currentChosenDeliveryAddress);
   } else if (!selectedPo) {
     selectContainer.style.display = 'none';
-    populateEmailModalFields(availableData[0], isReply);
+    populateEmailModalFields(availableData[0], isReply, currentChosenDeliveryAddress);
   }
 
   bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierPoEmailModal')).show();
 }
 
-function populateEmailModalFields(po, isReply = false) {
+function populateEmailModalFields(po, isReply = false, deliveryAddress = 'hosur') {
   document.getElementById('emailSupplierId').value = po.supplier_id;
   document.getElementById('emailPoNumber').value = po.po_number;
   document.getElementById('emailSupplierProductId').value = po.supplier_product_id || '';
   document.getElementById('emailCombinedSupplier').value = po.combined_supplier ? '1' : '';
   document.getElementById('supplierEmailField').value = po.supplier_email || '';
+  const addrField = document.getElementById('emailDeliveryAddress');
+  if (addrField) {
+    addrField.value = deliveryAddress || currentChosenDeliveryAddress || 'hosur';
+  }
   
   let subject = po.default_subject || '';
   if (isReply && subject && !subject.toLowerCase().startsWith('re:')) {
@@ -1123,10 +1150,15 @@ document.addEventListener('click', function(e) {
   const poNumber = document.getElementById('emailPoNumber').value;
   const supplierProductId = document.getElementById('emailSupplierProductId').value;
   const combinedSupplier = document.getElementById('emailCombinedSupplier').value;
+  const deliveryAddress = document.getElementById('emailDeliveryAddress')?.value || currentChosenDeliveryAddress || 'hosur';
   if (!supplierId || !poNumber) return;
 
   const dprId = "{{ dpr.id }}";
-  const params = new URLSearchParams({ supplier_id: supplierId, po_number: poNumber });
+  const params = new URLSearchParams({
+    supplier_id: supplierId,
+    po_number: poNumber,
+    delivery_address: deliveryAddress
+  });
   if (supplierProductId) {
     params.set('supplier_product_id', supplierProductId);
   }
@@ -1198,6 +1230,7 @@ document.addEventListener('click', function(e) {
             <input type="hidden" name="po_number" id="emailPoNumber">
             <input type="hidden" name="supplier_product_id" id="emailSupplierProductId">
             <input type="hidden" name="combined_supplier" id="emailCombinedSupplier">
+            <input type="hidden" name="delivery_address" id="emailDeliveryAddress" value="hosur">
             
             <div class="col-md-6">
               <label class="form-label fw-bold">Supplier Email(s) *</label>

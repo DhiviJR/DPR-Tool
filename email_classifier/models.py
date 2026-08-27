@@ -8,6 +8,7 @@ class EmailRecord(models.Model):
         CUSTOMER_ORDER = 'CUSTOMER_ORDER', 'Purchase Order'
         QUOTATION_REQUEST = 'QUOTATION_REQUEST', 'Quotation Request'
         PAYMENT_INVOICE = 'PAYMENT_INVOICE', 'Payment / Invoice'
+        DISPATCH = 'DISPATCH', 'Dispatch'
         SUPPORT_COMPLAINT = 'SUPPORT_COMPLAINT', 'Support / Complaint'
         OTHERS = 'OTHERS', 'Others'
 
@@ -25,10 +26,20 @@ class EmailRecord(models.Model):
     reviewed = models.BooleanField(default=False)
     is_added_to_rfq = models.BooleanField(default=False, help_text="Indicates if enquiry email has been added to RFQ system")
     is_added_to_po = models.BooleanField(default=False, help_text="Indicates if order email has been added to PO system")
+    has_attachments = models.BooleanField(default=False, help_text="Indicates if email has file attachments")
+    attachment_names = models.TextField(blank=True, null=True, help_text="List of attached filenames")
 
     @property
     def displayed_category(self):
         return self.final_category or self.ai_category
+
+    @property
+    def attachments_list(self):
+        if not self.attachment_names:
+            return []
+        if '|||' in self.attachment_names:
+            return [name.strip() for name in self.attachment_names.split('|||') if name.strip()]
+        return [name.strip() for name in self.attachment_names.split(',') if name.strip()]
 
     def __str__(self):
         return self.subject

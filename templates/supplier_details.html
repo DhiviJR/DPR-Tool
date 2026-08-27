@@ -8,7 +8,9 @@
         <h1 class="dpr-page-title mb-1">Supplier Details</h1>
         <p class="dpr-page-subtitle mb-0">Maintain supplier master data used in supplier orders</p>
     </div>
-    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Back to Dashboard</a>
+    <a href="javascript:history.back()" class="btn btn-outline-secondary dpr-back-btn btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
 </div>
 
 {% if messages %}
@@ -28,7 +30,7 @@
             </div>
             <div class="col-lg">
                 <label class="form-label">Email</label>
-                <input type="email" name="email" class="form-control">
+                <input type="text" name="email" class="form-control" placeholder="e.g. supp1@example.com, supp2@example.com">
             </div>
             <div class="col-lg">
                 <label class="form-label">Phone Number</label>
@@ -115,7 +117,7 @@
                             <input type="text" name="supplier_name" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.supplier_name }}" required disabled>
                         </td>
                         <td>
-                            <input type="email" name="email" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.email|default:'' }}" disabled>
+                            <input type="text" name="email" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.email|default:'' }}" disabled>
                         </td>
                         <td>
                             <input type="tel" name="phone_number" form="form-{{ supplier.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ supplier.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
