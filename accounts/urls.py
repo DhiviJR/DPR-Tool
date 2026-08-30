@@ -48,6 +48,7 @@ urlpatterns = [
     path('customer-order/', views.customer_order, name='customer_order'),
     path('customer-details/', views.customer_details, name='customer_details'),
     path('supplier-details/', views.supplier_details, name='supplier_details'),
+    path('supplier-rate-cards/', views.supplier_rate_cards, name='supplier_rate_cards'),
     path('add-customer/',views.add_customer,name='add_customer'
 ),
     path('add-supplier/', views.add_supplier, name='add_supplier'),
@@ -56,5 +57,9 @@ urlpatterns = [
     path('check-customer-po-number/', views.check_customer_po_number, name='check_customer_po_number'),
     path('send-invoice-email/', views.send_invoice_email, name='send_invoice_email'),
     path('sync-all-mail/', views.sync_all_mail, name='sync_all_mail'),
+    path('rfq/suggest-price/', views.suggest_supplier_price, name='suggest_supplier_price'),
+    path('rfq/save-datasheet/', views.save_supplier_datasheet, name='save_supplier_datasheet'),
+    path('rfq/datasheet/<int:datasheet_id>/', views.get_supplier_datasheet, name='get_supplier_datasheet'),
+    path('rfq/datasheet/<int:datasheet_id>/delete/', views.delete_supplier_datasheet, name='delete_supplier_datasheet'),
 ]
 

@@ -10,6 +10,9 @@
         <p class="dpr-page-subtitle mb-0">Track RFQ mail enquiries and customer enquiry details</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'supplier_rate_cards' %}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-journal-text me-1"></i>Supplier Rate Cards
+        </a>
         <button type="button" class="btn btn-success btn-sm" id="openAddRfqModal" data-bs-toggle="modal" data-bs-target="#addRfqModal">
             <i class="bi bi-plus-lg me-1"></i>Add new RFQ
         </button>
@@ -366,6 +369,22 @@
                 <div class="alert alert-info py-2 mb-3 small d-flex align-items-center justify-content-between">
                     <span>Configuring parameters for <strong id="modalParamCategoryTitle">Gauge</strong></span>
                     <span class="badge bg-primary fs-6" id="modalParamTypeBadge">APG</span>
+                </div>
+
+                <div id="rfqPriceSuggestionBanner" class="alert alert-success border-success py-2 px-3 mb-3 d-none shadow-sm rounded-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <div class="d-flex align-items-center gap-1">
+                                <i class="bi bi-lightbulb-fill text-warning fs-5"></i>
+                                <span class="fw-semibold">Datasheet Price Suggestion:</span>
+                                <span class="fs-5 fw-bold text-success ms-1" id="suggestedPriceValue">₹0.00</span>
+                            </div>
+                            <div class="small text-muted mt-1" id="suggestedPriceBreakdown"></div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-success px-3 fw-semibold" id="applySuggestedPriceBtn">
+                            <i class="bi bi-check-lg me-1"></i>Apply Suggested Price
+                        </button>
+                    </div>
                 </div>
 
                 <form id="productParamsForm" novalidate>
@@ -867,6 +886,8 @@
         <span class="legend-item"><span class="legend-swatch bg-white border"></span>Quotation Pending</span>
     </div>
 </div>
+
+<!-- Legend -->
 
 <div class="modal fade" id="prepareQuotationModal" tabindex="-1" aria-labelledby="prepareQuotationModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -3661,6 +3682,106 @@ document.addEventListener('click', function(e) {
 // Initial update of spec previews on table load
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('#rfqProductTable tbody tr').forEach(row => updateSpecPreview(row));
+});
+
+// ============================================================
+// Supplier Datasheet Rate Cards & Price Suggestion JS Engine
+// ============================================================
+
+// Price suggestion engine for active product row
+
+let currentSuggestedPrice = null;
+
+function checkPriceSuggestionForActiveRow() {
+    if (!activeParamRow) return;
+    const banner = document.getElementById('rfqPriceSuggestionBanner');
+    if (!banner) return;
+
+    const prodTypeSelect = activeParamRow.querySelector('[name="product_type[]"]');
+    const prodType = prodTypeSelect ? prodTypeSelect.value : '';
+    
+    let suppId = null;
+    const supplierPriceSupplierInputs = activeParamRow.querySelectorAll('.rfq-supplier-price-list select[name*="supplier_price_supplier"]');
+    if (supplierPriceSupplierInputs.length > 0 && supplierPriceSupplierInputs[0].value) {
+        suppId = supplierPriceSupplierInputs[0].value;
+    } else {
+        const draftSupps = activeParamRow.querySelectorAll('input[name*="supplier_ids"]');
+        if (draftSupps.length > 0 && draftSupps[0].value) {
+            suppId = draftSupps[0].value;
+        }
+    }
+
+    const sizeVal = document.getElementById('param_size') ? document.getElementById('param_size').value.trim() : '';
+    if (!sizeVal) {
+        banner.classList.add('d-none');
+        return;
+    }
+
+    const specs = {
+        'Size': sizeVal,
+        'Material': document.getElementById('param_material') ? document.getElementById('param_material').value : '',
+        'Type of ID': document.getElementById('param_type_of_id') ? document.getElementById('param_type_of_id').value : '',
+        'Type of OD': document.getElementById('param_type_of_od') ? document.getElementById('param_type_of_od').value : '',
+        'No. of jets': document.getElementById('param_no_of_jets') ? document.getElementById('param_no_of_jets').value : '',
+        'Gauge Type': document.getElementById('param_gauge_type') ? document.getElementById('param_gauge_type').value : '',
+        'Depth collar': document.getElementById('param_depth_collar') ? document.getElementById('param_depth_collar').value : '',
+        'Extension': document.getElementById('param_extension') ? document.getElementById('param_extension').value.trim() : '',
+    };
+
+    fetch(`/rfq/suggest-price/?supplier_id=${suppId || ''}&product_type=${encodeURIComponent(prodType)}&specs=${encodeURIComponent(JSON.stringify(specs))}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.suggested_price) {
+                currentSuggestedPrice = data.suggested_price;
+                document.getElementById('suggestedPriceValue').textContent = `₹${data.suggested_price.toFixed(2)}`;
+                document.getElementById('suggestedPriceBreakdown').textContent = data.breakdown || '';
+                banner.classList.remove('d-none');
+            } else {
+                banner.classList.add('d-none');
+                currentSuggestedPrice = null;
+            }
+        })
+        .catch(err => {
+            banner.classList.add('d-none');
+            currentSuggestedPrice = null;
+        });
+}
+
+document.addEventListener('input', function(e) {
+    if (e.target.closest('#productParamsModal')) {
+        checkPriceSuggestionForActiveRow();
+    }
+});
+document.addEventListener('change', function(e) {
+    if (e.target.closest('#productParamsModal')) {
+        checkPriceSuggestionForActiveRow();
+    }
+});
+
+document.getElementById('applySuggestedPriceBtn')?.addEventListener('click', function() {
+    if (currentSuggestedPrice !== null && activeParamRow) {
+        const rateInput = activeParamRow.querySelector('.rfq-rate');
+        if (rateInput) {
+            rateInput.value = currentSuggestedPrice.toFixed(2);
+            rateInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        const priceDetailsInput = activeParamRow.querySelector('.rfq-supplier-price-list input[name*="supplier_price_"]');
+        if (priceDetailsInput) {
+            priceDetailsInput.value = currentSuggestedPrice.toFixed(2);
+            priceDetailsInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        const alertBox = document.getElementById('paramsModalAlertContainer');
+        if (alertBox) {
+            alertBox.innerHTML = `
+                <div class="alert alert-success alert-dismissible fade show py-2 small mb-3" role="alert">
+                    <i class="bi bi-check-circle-fill me-2"></i>Applied suggested unit price of <strong>₹${currentSuggestedPrice.toFixed(2)}</strong>!
+                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        }
+    }
 });
 // ============================================================
 // End Email Chain Modal

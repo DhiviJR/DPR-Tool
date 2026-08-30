@@ -1,0 +1,640 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Supplier Rate Cards | DPR System{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h1 class="dpr-page-title mb-1">Supplier Rate Cards</h1>
+        <p class="dpr-page-subtitle mb-0">Maintain nominal diameter range rate cards, spec modifiers, and accessory rates for supplier pricing</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-success btn-sm" id="openCreateDatasheetModalBtn">
+            <i class="bi bi-plus-lg me-1"></i>Create Rate Card
+        </button>
+        <a href="javascript:history.back()" class="btn btn-outline-secondary dpr-back-btn btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+{% endif %}
+
+<div class="dpr-card dpr-table-card">
+    <div class="dpr-table-toolbar p-3 border-bottom">
+        <div class="row g-2 align-items-center justify-content-between">
+            <div class="col-lg-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="search" id="rateCardSearchInput" class="form-control" placeholder="Search rate cards by supplier or product type..." autocomplete="off">
+                </div>
+            </div>
+            <div class="col-lg-7 text-lg-end">
+                <span id="rateCardRowCount" class="text-muted small">Showing {{ supplier_datasheets|length }} rate card(s)</span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="rateCardsTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>S.No</th>
+                        <th>Supplier</th>
+                        <th>Product Type</th>
+                        <th>Ranges</th>
+                        <th>Modifiers</th>
+                        <th>Accessories</th>
+                        <th>Last Updated</th>
+                        <th class="text-nowrap" style="min-width: 220px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ds in supplier_datasheets %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td class="fw-semibold">{{ ds.supplier.supplier_name }}</td>
+                        <td><span class="badge bg-secondary fs-6">{{ ds.product_type|default:'General / All' }}</span></td>
+                        <td><span class="badge bg-info text-dark">{{ ds.price_ranges.count }} ranges</span></td>
+                        <td><span class="badge bg-light text-dark border">{{ ds.modifiers.count }} modifiers</span></td>
+                        <td><span class="badge bg-light text-dark border">{{ ds.accessories.count }} accessories</span></td>
+                        <td class="small text-muted">{{ ds.updated_at|date:"d M Y, h:i A" }}</td>
+                        <td class="text-nowrap">
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-info btn-sm btn-view-datasheet" data-id="{{ ds.id }}" title="View Rate Card Details">
+                                    <i class="bi bi-eye me-1"></i>View
+                                </button>
+                                <button type="button" class="btn btn-primary btn-sm btn-edit-datasheet" data-id="{{ ds.id }}" title="Edit Rate Card">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </button>
+                                <form method="post" action="{% url 'delete_supplier_datasheet' ds.id %}" class="d-inline" onsubmit="return confirm('Delete this rate card for {{ ds.supplier.supplier_name }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete Rate Card">
+                                        <i class="bi bi-trash me-1"></i>Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-5">
+                            <i class="bi bi-journal-x fs-2 text-secondary d-block mb-2"></i>
+                            No supplier rate cards found in Masters. Click <strong>Create Rate Card</strong> to add your first rate card.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- View Supplier Rate Card Details Read-Only Modal -->
+<div class="modal fade" id="viewDatasheetModal" tabindex="-1" aria-labelledby="viewDatasheetModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="viewDatasheetModalLabel">
+                    <i class="bi bi-eye me-2"></i>View Supplier Rate Card Details
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                    <div>
+                        <h4 class="mb-0 fw-bold text-dark" id="view_ds_supplier_name">Supplier Name</h4>
+                        <span class="badge bg-secondary me-2 mt-1" id="view_ds_product_type">APG</span>
+                    </div>
+                </div>
+
+                <!-- View Ranges -->
+                <div class="card mb-4 border shadow-sm">
+                    <div class="card-header bg-light py-2">
+                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-rulers me-2 text-primary"></i>Nominal Diameter / Size Price Ranges</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0" id="viewRangesTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Above (mm)</th>
+                                        <th>Up to & Including (mm)</th>
+                                        <th>Air Plug Gauge Rate (₹)</th>
+                                        <th>Setting Ring Rate (₹)</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View Modifiers -->
+                <div class="card mb-4 border shadow-sm">
+                    <div class="card-header bg-light py-2">
+                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-sliders me-2 text-primary"></i>Specification Price Modifiers (% / ₹ Add-ons)</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0" id="viewModifiersTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Spec Parameter Key</th>
+                                        <th>Match Value</th>
+                                        <th>Adjustment</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View Accessories -->
+                <div class="card mb-3 border shadow-sm">
+                    <div class="card-header bg-light py-2">
+                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-gear me-2 text-primary"></i>Accessory Rates</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0" id="viewAccessoriesTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Size / Range Label</th>
+                                        <th>Unit Rate (₹)</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="viewModalEditBtn">
+                    <i class="bi bi-pencil me-1"></i>Edit Rate Card
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create / Edit Supplier Datasheet Rate Card Form Modal -->
+<div class="modal fade" id="datasheetFormModal" tabindex="-1" aria-labelledby="datasheetFormModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="datasheetFormModalLabel">
+                    <i class="bi bi-journal-text me-2"></i>Supplier Rate Card Entry Form
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="datasheetFormAlert"></div>
+                <form id="supplierDatasheetForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="datasheet_id" id="ds_datasheet_id" value="">
+                    
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Supplier <span class="text-danger">*</span></label>
+                            <select name="supplier_id" id="ds_supplier_id" class="form-select" required>
+                                <option value="">Select Supplier</option>
+                                {% for supplier in suppliers %}
+                                <option value="{{ supplier.id }}">{{ supplier.supplier_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Product Type</label>
+                            <select name="product_type" id="ds_product_type" class="form-select">
+                                <option value="">Select Product Type (Optional)</option>
+                                {% for value, label in product_type_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Section 1: Nominal Diameter Price Ranges -->
+                    <div class="card mb-4 border shadow-sm">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                            <h6 class="mb-0 fw-bold"><i class="bi bi-rulers me-2 text-primary"></i>Nominal Diameter / Size Price Ranges</h6>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="addDsRangeRowBtn">
+                                <i class="bi bi-plus-lg me-1"></i>Add Range Row
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0" id="dsRangesTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Above (mm)</th>
+                                            <th>Up to & Including (mm)</th>
+                                            <th>Air Plug Gauge Rate (₹)</th>
+                                            <th>Setting Ring Rate (₹)</th>
+                                            <th style="width: 60px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Dynamic Range Rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Spec Modifiers -->
+                    <div class="card mb-4 border shadow-sm">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                            <h6 class="mb-0 fw-bold"><i class="bi bi-sliders me-2 text-primary"></i>Specification Price Modifiers (Add-ons / % Rules)</h6>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="addDsModifierRowBtn">
+                                <i class="bi bi-plus-lg me-1"></i>Add Modifier Row
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0" id="dsModifiersTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Spec Parameter Key</th>
+                                            <th>Match Value</th>
+                                            <th style="width: 150px;">Adjustment Type</th>
+                                            <th style="width: 150px;">Adjustment Value</th>
+                                            <th style="width: 60px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Dynamic Modifier Rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 3: Accessories -->
+                    <div class="card mb-3 border shadow-sm">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                            <h6 class="mb-0 fw-bold"><i class="bi bi-gear me-2 text-primary"></i>Accessory Rates</h6>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="addDsAccessoryRowBtn">
+                                <i class="bi bi-plus-lg me-1"></i>Add Accessory Row
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0" id="dsAccessoriesTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Size / Range Label</th>
+                                            <th style="width: 150px;">Unit Rate (₹)</th>
+                                            <th style="width: 60px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Dynamic Accessory Rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success px-4" id="saveDatasheetBtn">
+                    <i class="bi bi-check2-circle me-1"></i>Save Rate Card
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentViewingDatasheetId = null;
+
+function addDsRangeRow(data = {}) {
+    const tbody = document.querySelector('#dsRangesTable tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="number" step="0.01" name="range_min_diameter[]" class="form-control form-control-sm" value="${data.min_diameter !== undefined ? data.min_diameter : '0.00'}" placeholder="Above mm"></td>
+        <td><input type="number" step="0.01" name="range_max_diameter[]" class="form-control form-control-sm" value="${data.max_diameter !== undefined ? data.max_diameter : ''}" placeholder="Up to mm (blank for above)"></td>
+        <td><input type="number" step="0.01" name="range_price[]" class="form-control form-control-sm" value="${data.price !== undefined ? data.price : '0.00'}" placeholder="APG Rate ₹"></td>
+        <td><input type="number" step="0.01" name="range_sr_price[]" class="form-control form-control-sm" value="${data.setting_ring_price !== undefined ? data.setting_ring_price : '0.00'}" placeholder="SR Rate ₹"></td>
+        <td>
+            <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="this.closest('tr').remove()">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function addDsModifierRow(data = {}) {
+    const tbody = document.querySelector('#dsModifiersTable tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" name="modifier_spec_key[]" class="form-control form-control-sm" value="${data.spec_key || 'No. of jets'}" placeholder="e.g. No. of jets"></td>
+        <td><input type="text" name="modifier_spec_val[]" class="form-control form-control-sm" value="${data.spec_value_match || ''}" placeholder="e.g. 3"></td>
+        <td>
+            <select name="modifier_adj_type[]" class="form-select form-select-sm">
+                <option value="PERCENTAGE" ${data.adjustment_type !== 'FIXED' ? 'selected' : ''}>% Add-on</option>
+                <option value="FIXED" ${data.adjustment_type === 'FIXED' ? 'selected' : ''}>₹ Fixed</option>
+            </select>
+        </td>
+        <td><input type="number" step="0.01" name="modifier_adj_val[]" class="form-control form-control-sm" value="${data.adjustment_value !== undefined ? data.adjustment_value : '0.00'}" placeholder="Value"></td>
+        <td>
+            <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="this.closest('tr').remove()">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function addDsAccessoryRow(data = {}) {
+    const tbody = document.querySelector('#dsAccessoriesTable tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" name="accessory_size_label[]" class="form-control form-control-sm" value="${data.size_range_label || data.item_name || ''}" placeholder="e.g. Bench Mount / 2.0mm to 50.0mm"></td>
+        <td><input type="number" step="0.01" name="accessory_rate[]" class="form-control form-control-sm" value="${data.unit_rate !== undefined ? data.unit_rate : '0.00'}" placeholder="Rate ₹"></td>
+        <td>
+            <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="this.closest('tr').remove()">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function resetDatasheetForm() {
+    document.getElementById('supplierDatasheetForm').reset();
+    document.getElementById('ds_datasheet_id').value = '';
+    document.querySelector('#dsRangesTable tbody').innerHTML = '';
+    document.querySelector('#dsModifiersTable tbody').innerHTML = '';
+    document.querySelector('#dsAccessoriesTable tbody').innerHTML = '';
+    document.getElementById('datasheetFormAlert').innerHTML = '';
+
+    addDsRangeRow();
+    addDsModifierRow();
+    addDsAccessoryRow();
+}
+
+function openEditModalForId(dsId) {
+    fetch(`/rfq/datasheet/${dsId}/`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok' && data.datasheet) {
+                const ds = data.datasheet;
+                document.getElementById('ds_datasheet_id').value = ds.id;
+                document.getElementById('ds_supplier_id').value = ds.supplier_id;
+                document.getElementById('ds_product_type').value = ds.product_type || '';
+
+                const rangesTbody = document.querySelector('#dsRangesTable tbody');
+                rangesTbody.innerHTML = '';
+                (ds.price_ranges || []).forEach(r => addDsRangeRow(r));
+                if (!ds.price_ranges || ds.price_ranges.length === 0) addDsRangeRow();
+
+                const modsTbody = document.querySelector('#dsModifiersTable tbody');
+                modsTbody.innerHTML = '';
+                (ds.modifiers || []).forEach(m => addDsModifierRow(m));
+                if (!ds.modifiers || ds.modifiers.length === 0) addDsModifierRow();
+
+                const accsTbody = document.querySelector('#dsAccessoriesTable tbody');
+                accsTbody.innerHTML = '';
+                (ds.accessories || []).forEach(a => addDsAccessoryRow(a));
+                if (!ds.accessories || ds.accessories.length === 0) addDsAccessoryRow();
+
+                const modal = new bootstrap.Modal(document.getElementById('datasheetFormModal'));
+                modal.show();
+            }
+        })
+        .catch(err => console.error('Error fetching datasheet:', err));
+}
+
+document.addEventListener('click', function(e) {
+    if (e.target.closest('#openCreateDatasheetModalBtn')) {
+        resetDatasheetForm();
+        const modal = new bootstrap.Modal(document.getElementById('datasheetFormModal'));
+        modal.show();
+    }
+
+    if (e.target.closest('#addDsRangeRowBtn')) addDsRangeRow();
+    if (e.target.closest('#addDsModifierRowBtn')) addDsModifierRow();
+    if (e.target.closest('#addDsAccessoryRowBtn')) addDsAccessoryRow();
+
+    // View Datasheet
+    const viewBtn = e.target.closest('.btn-view-datasheet');
+    if (viewBtn) {
+        const dsId = viewBtn.dataset.id;
+        currentViewingDatasheetId = dsId;
+        fetch(`/rfq/datasheet/${dsId}/`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok' && data.datasheet) {
+                    const ds = data.datasheet;
+                    const suppSelect = document.getElementById('ds_supplier_id');
+                    const suppOption = Array.from(suppSelect.options).find(opt => String(opt.value) === String(ds.supplier_id));
+                    document.getElementById('view_ds_supplier_name').textContent = suppOption ? suppOption.text : 'Supplier';
+                    document.getElementById('view_ds_product_type').textContent = ds.product_type || 'General / All';
+
+                    // Populate View Ranges
+                    const viewRangesTbody = document.querySelector('#viewRangesTable tbody');
+                    viewRangesTbody.innerHTML = '';
+                    if (ds.price_ranges && ds.price_ranges.length > 0) {
+                        ds.price_ranges.forEach(r => {
+                            const tr = document.createElement('tr');
+                            const maxStr = r.max_diameter ? `${r.max_diameter} mm` : 'and above';
+                            const srRateStr = r.setting_ring_price && parseFloat(r.setting_ring_price) > 0 ? `₹${parseFloat(r.setting_ring_price).toFixed(2)}` : '-';
+                            tr.innerHTML = `<td>${r.min_diameter} mm</td><td>${maxStr}</td><td class="fw-bold text-success">₹${parseFloat(r.price).toFixed(2)}</td><td class="fw-bold text-primary">${srRateStr}</td>`;
+                            viewRangesTbody.appendChild(tr);
+                        });
+                    } else {
+                        viewRangesTbody.innerHTML = `<tr><td colspan="4" class="text-muted text-center py-2">No size ranges defined</td></tr>`;
+                    }
+
+                    // Populate View Modifiers
+                    const viewModsTbody = document.querySelector('#viewModifiersTable tbody');
+                    viewModsTbody.innerHTML = '';
+                    if (ds.modifiers && ds.modifiers.length > 0) {
+                        ds.modifiers.forEach(m => {
+                            const tr = document.createElement('tr');
+                            const adjStr = m.adjustment_type === 'PERCENTAGE' ? `+${m.adjustment_value}%` : `+₹${parseFloat(m.adjustment_value).toFixed(2)}`;
+                            tr.innerHTML = `<td>${m.spec_key}</td><td><code>${m.spec_value_match}</code></td><td><span class="badge bg-primary">${adjStr}</span></td>`;
+                            viewModsTbody.appendChild(tr);
+                        });
+                    } else {
+                        viewModsTbody.innerHTML = `<tr><td colspan="3" class="text-muted text-center py-2">No specification modifiers defined</td></tr>`;
+                    }
+
+                    // Populate View Accessories
+                    const viewAccsTbody = document.querySelector('#viewAccessoriesTable tbody');
+                    viewAccsTbody.innerHTML = '';
+                    if (ds.accessories && ds.accessories.length > 0) {
+                        ds.accessories.forEach(a => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `<td>${a.size_range_label || a.item_name || '-'}</td><td class="fw-semibold">₹${parseFloat(a.unit_rate).toFixed(2)}</td>`;
+                            viewAccsTbody.appendChild(tr);
+                        });
+                    } else {
+                        viewAccsTbody.innerHTML = `<tr><td colspan="2" class="text-muted text-center py-2">No accessory rates defined</td></tr>`;
+                    }
+
+                    const modal = new bootstrap.Modal(document.getElementById('viewDatasheetModal'));
+                    modal.show();
+                }
+            })
+            .catch(err => console.error('Error fetching datasheet view:', err));
+    }
+
+    // Edit Datasheet
+    const editBtn = e.target.closest('.btn-edit-datasheet');
+    if (editBtn) {
+        const dsId = editBtn.dataset.id;
+        openEditModalForId(dsId);
+    }
+});
+
+// Edit from View Modal
+document.getElementById('viewModalEditBtn')?.addEventListener('click', function() {
+    if (currentViewingDatasheetId) {
+        const viewModalEl = document.getElementById('viewDatasheetModal');
+        const viewModal = bootstrap.Modal.getInstance(viewModalEl);
+        if (viewModal) viewModal.hide();
+        openEditModalForId(currentViewingDatasheetId);
+    }
+});
+
+// Save Rate Card Form Submission with Validation
+document.getElementById('saveDatasheetBtn')?.addEventListener('click', function() {
+    const form = document.getElementById('supplierDatasheetForm');
+    const alertBox = document.getElementById('datasheetFormAlert');
+    alertBox.innerHTML = '';
+
+    // Clear previous invalid highlights
+    form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+
+    const suppId = document.getElementById('ds_supplier_id').value;
+    if (!suppId) {
+        document.getElementById('ds_supplier_id').classList.add('is-invalid');
+        alertBox.innerHTML = `<div class="alert alert-danger">Please select a supplier.</div>`;
+        return;
+    }
+
+    // Client-side range validation
+    const rangeRows = Array.from(document.querySelectorAll('#dsRangesTable tbody tr'));
+    const parsedRanges = [];
+
+    for (let i = 0; i < rangeRows.length; i++) {
+        const minInput = rangeRows[i].querySelector('input[name="range_min_diameter[]"]');
+        const maxInput = rangeRows[i].querySelector('input[name="range_max_diameter[]"]');
+        if (!minInput || !maxInput) continue;
+        
+        const minVal = parseFloat(minInput.value);
+        const maxVal = maxInput.value.trim() !== '' ? parseFloat(maxInput.value) : null;
+
+        if (isNaN(minVal) || minVal < 0) {
+            minInput.classList.add('is-invalid');
+            alertBox.innerHTML = `<div class="alert alert-danger">Row #${i+1}: Please enter a valid 'Above (mm)' size (≥ 0).</div>`;
+            return;
+        }
+
+        if (maxVal !== null && maxVal <= minVal) {
+            maxInput.classList.add('is-invalid');
+            alertBox.innerHTML = `<div class="alert alert-danger">Row #${i+1}: 'Up to & Including' size (${maxVal} mm) must be greater than 'Above' size (${minVal} mm).</div>`;
+            return;
+        }
+
+        parsedRanges.push({ index: i + 1, min: minVal, max: maxVal, minEl: minInput, maxEl: maxInput });
+    }
+
+    // Sort by min ascending
+    parsedRanges.sort((a, b) => a.min - b.min || ((a.max ?? 999999) - (b.max ?? 999999)));
+
+    for (let i = 0; i < parsedRanges.length - 1; i++) {
+        const curr = parsedRanges[i];
+        const next = parsedRanges[i + 1];
+
+        if (curr.min === next.min) {
+            next.minEl.classList.add('is-invalid');
+            curr.minEl.classList.add('is-invalid');
+            alertBox.innerHTML = `<div class="alert alert-danger">Duplicate starting bound (${curr.min} mm) found. Ranges must be sequential and non-overlapping.</div>`;
+            return;
+        }
+
+        if (curr.max === null) {
+            curr.minEl.classList.add('is-invalid');
+            alertBox.innerHTML = `<div class="alert alert-danger">Range starting at ${curr.min} mm is open-ended (no 'Up to' limit). Set an 'Up to' limit for ${curr.min} mm or remove subsequent ranges.</div>`;
+            return;
+        }
+
+        if (next.min < curr.max) {
+            next.minEl.classList.add('is-invalid');
+            curr.maxEl.classList.add('is-invalid');
+            const currMaxStr = curr.max !== null ? curr.max + ' mm' : 'above';
+            const nextMaxStr = next.max !== null ? next.max + ' mm' : 'above';
+            alertBox.innerHTML = `<div class="alert alert-danger">Overlapping size ranges detected: [${curr.min} to ${currMaxStr}] and [${next.min} to ${nextMaxStr}]. Next range must start at or above ${curr.max} mm (e.g. 6 to 8 mm).</div>`;
+            return;
+        }
+    }
+
+    const formData = new FormData(form);
+
+    fetch('/rfq/save-datasheet/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            alertBox.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+            setTimeout(() => {
+                location.reload();
+            }, 800);
+        } else {
+            alertBox.innerHTML = `<div class="alert alert-danger">${data.message || 'Failed to save rate card.'}</div>`;
+        }
+    })
+    .catch(err => {
+        alertBox.innerHTML = `<div class="alert alert-danger">Error saving rate card.</div>`;
+    });
+});
+
+// Search filter for Rate Cards Table
+document.getElementById('rateCardSearchInput')?.addEventListener('input', function() {
+    const query = this.value.toLowerCase().trim();
+    const rows = document.querySelectorAll('#rateCardsTable tbody tr');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        if (text.includes(query)) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    const countEl = document.getElementById('rateCardRowCount');
+    if (countEl) countEl.textContent = `Showing ${visibleCount} rate card(s)`;
+});
+</script>
+{% endblock %}

@@ -13,7 +13,10 @@ from customers.models import Customer
 from suppliers.models import Supplier
 from dpr.models import DPR
 from products.models import CustomerProduct, SupplierProduct
-from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation, RFQEmailMessage
+from rfq.models import (
+    RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation, RFQEmailMessage,
+    SupplierDatasheet, DatasheetPriceRange, DatasheetModifier, DatasheetAccessoryRate
+)
 from .email_services import send_threaded_rfq_email, sync_rfq_inbox, check_customer_email_match
 from django.http import HttpResponse, JsonResponse, Http404
 from django.db import transaction
@@ -4432,11 +4435,13 @@ def rfq_details(request):
     next_rfq_no = f"RFQ-{timezone.now().year}-{next_rfq_id:04d}"
 
     email_prefill_products_json = request.session.get('email_prefill_products_json', '')
+    supplier_datasheets = SupplierDatasheet.objects.select_related('supplier').prefetch_related('price_ranges', 'modifiers', 'accessories').filter(is_active=True)
 
     return render(request, 'rfq_details.html', {
         'rfqs': rfqs_to_display,
         'customers': customers,
         'suppliers': suppliers,
+        'supplier_datasheets': supplier_datasheets,
         'product_type_choices': CustomerProduct.PRODUCT_TYPE_CHOICES,
         'rfq_payloads': rfq_payloads,
         'default_supplier_email_subject': _get_default_supplier_email_subject(),
@@ -7828,5 +7833,343 @@ def send_supplier_invoice_email(request):
         'message': " ".join(msg_parts),
         'sent_count': len(sent_details),
     })
+
+
+import json
+
+def parse_numeric_size(size_str):
+    if not size_str:
+        return None
+    match = re.search(r'(\d+(?:\.\d+)?)', str(size_str))
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def calculate_suggested_price(supplier_id, product_type, specs_dict):
+    if not supplier_id or not isinstance(specs_dict, dict):
+        return {'success': False, 'message': 'Invalid parameters provided.'}
+
+    # Find active datasheet matching supplier and product_type
+    datasheet = SupplierDatasheet.objects.filter(
+        supplier_id=supplier_id,
+        product_type=product_type,
+        is_active=True
+    ).first()
+
+    if not datasheet:
+        datasheet = SupplierDatasheet.objects.filter(
+            supplier_id=supplier_id,
+            is_active=True
+        ).first()
+
+    if not datasheet:
+        return {'success': False, 'message': 'No active datasheet rate card found for this supplier.'}
+
+    size_val = parse_numeric_size(specs_dict.get('Size') or specs_dict.get('Nominal Diameter'))
+    if size_val is None:
+        return {'success': False, 'message': 'No valid numeric dimension/size found in parameters.'}
+
+    # Match price range
+    matching_ranges = []
+    for pr in datasheet.price_ranges.all():
+        min_d = float(pr.min_diameter)
+        max_d = float(pr.max_diameter) if pr.max_diameter is not None else None
+        if size_val >= min_d and (max_d is None or size_val <= max_d):
+            matching_ranges.append(pr)
+
+    if not matching_ranges:
+        return {'success': False, 'message': f'No price range matching dimension {size_val}mm in datasheet.'}
+
+    # If multiple category ranges match, attempt category match
+    matched_range = matching_ranges[0]
+    category_spec = (specs_dict.get('Category') or specs_dict.get('Product Name') or '').lower()
+    for pr in matching_ranges:
+        if pr.category_name and (pr.category_name.lower() in category_spec or category_spec in pr.category_name.lower()):
+            matched_range = pr
+            break
+
+    base_price = Decimal(str(matched_range.price))
+    total_price = base_price
+    range_lbl = f"{matched_range.min_diameter}-{matched_range.max_diameter or 'above'}mm"
+    breakdown_parts = [f"Base Rate ({range_lbl}): ₹{base_price:.2f}"]
+
+    # Evaluate modifiers
+    for mod in datasheet.modifiers.all():
+        spec_val = str(specs_dict.get(mod.spec_key) or '').strip().lower()
+        match_val = str(mod.spec_value_match).strip().lower()
+        if match_val and (match_val == spec_val or match_val in spec_val):
+            mod_label = mod.modifier_name or f"{mod.spec_key}: {mod.spec_value_match}"
+            if mod.adjustment_type == 'PERCENTAGE':
+                adj = (base_price * Decimal(str(mod.adjustment_value)) / Decimal('100.00')).quantize(Decimal('0.01'))
+                total_price += adj
+                breakdown_parts.append(f"{mod_label} (+{mod.adjustment_value}%): ₹{adj:.2f}")
+            else:
+                adj = Decimal(str(mod.adjustment_value))
+                total_price += adj
+                breakdown_parts.append(f"{mod_label} (+₹{adj:.2f}): ₹{adj:.2f}")
+
+    # Evaluate accessories
+    for acc in datasheet.accessories.all():
+        acc_lbl = (acc.size_range_label or acc.item_name or '').lower()
+        for k, v in specs_dict.items():
+            if v and (str(v).lower() in ('yes', 'true', 'included') or (acc.product_code and acc.product_code.lower() in str(v).lower())):
+                if k.lower() in acc_lbl or acc_lbl in k.lower():
+                    acc_rate = Decimal(str(acc.unit_rate))
+                    total_price += acc_rate
+                    breakdown_parts.append(f"{acc.size_range_label or acc.item_name}: ₹{acc_rate:.2f}")
+                    break
+
+    return {
+        'success': True,
+        'suggested_price': float(total_price),
+        'base_price': float(base_price),
+        'datasheet_title': datasheet.title or f"{datasheet.supplier.supplier_name} - {datasheet.product_type or 'Rate Card'}",
+        'breakdown': " | ".join(breakdown_parts)
+    }
+
+
+@role_required('ADMIN', 'SALES')
+def suggest_supplier_price(request):
+    supplier_id = request.GET.get('supplier_id')
+    product_type = request.GET.get('product_type', '').strip()
+    specs_json = request.GET.get('specs', '{}')
+
+    try:
+        specs_dict = json.loads(specs_json) if isinstance(specs_json, str) else specs_json
+    except Exception:
+        specs_dict = {}
+
+    result = calculate_suggested_price(supplier_id, product_type, specs_dict)
+    return JsonResponse(result)
+
+
+def validate_price_ranges(ranges_data):
+    """
+    ranges_data is a list of tuples: (min_d, max_d, price, sr_price)
+    Returns (is_valid, error_message)
+    """
+    if not ranges_data:
+        return True, ""
+
+    for i, (min_d, max_d, price, sr_price) in enumerate(ranges_data, start=1):
+        if min_d < Decimal('0'):
+            return False, f"Row #{i}: Above size ({min_d} mm) cannot be negative."
+        if max_d is not None and max_d <= min_d:
+            return False, f"Row #{i}: Up to size ({max_d} mm) must be greater than Above size ({min_d} mm)."
+
+    sorted_ranges = sorted(ranges_data, key=lambda r: (r[0], r[1] if r[1] is not None else Decimal('999999999')))
+
+    for i in range(len(sorted_ranges) - 1):
+        curr_min, curr_max, _, _ = sorted_ranges[i]
+        next_min, next_max, _, _ = sorted_ranges[i + 1]
+
+        if curr_min == next_min:
+            return False, f"Duplicate starting bound ({curr_min} mm) found. Duplicate or overlapping ranges are not allowed."
+
+        if curr_max is None:
+            return False, f"Range starting at {curr_min} mm is open-ended (no 'Up to' size). Remove subsequent range or set an 'Up to' limit for {curr_min} mm."
+        elif next_min < curr_max:
+            curr_max_str = f"{curr_max}" if curr_max is not None else "above"
+            next_max_str = f"{next_max}" if next_max is not None else "above"
+            return False, f"Overlapping ranges detected: [{curr_min} to {curr_max_str} mm] and [{next_min} to {next_max_str} mm]. Next range must start at or above {curr_max} mm."
+
+    return True, ""
+
+
+@role_required('ADMIN', 'SALES')
+def save_supplier_datasheet(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    datasheet_id = request.POST.get('datasheet_id')
+    supplier_id = request.POST.get('supplier_id')
+    product_type = request.POST.get('product_type', '').strip()
+    title = request.POST.get('title', '').strip()
+    description = request.POST.get('description', '').strip()
+
+    if not supplier_id:
+        return JsonResponse({'status': 'error', 'message': 'Supplier is required.'}, status=400)
+
+    try:
+        supplier = Supplier.objects.get(pk=supplier_id)
+    except Supplier.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Supplier not found.'}, status=404)
+
+    # Parse and validate range arrays first
+    min_diams = request.POST.getlist('range_min_diameter[]')
+    max_diams = request.POST.getlist('range_max_diameter[]')
+    prices = request.POST.getlist('range_price[]')
+    sr_prices = request.POST.getlist('range_sr_price[]')
+    categories = request.POST.getlist('range_category[]')
+
+    parsed_ranges = []
+    for i in range(max(len(min_diams), len(prices))):
+        min_d_raw = min_diams[i] if i < len(min_diams) else '0'
+        max_d_raw = max_diams[i] if i < len(max_diams) else ''
+        price_raw = prices[i] if i < len(prices) else '0'
+        sr_price_raw = sr_prices[i] if i < len(sr_prices) else '0'
+
+        min_d = Decimal(min_d_raw) if min_d_raw.strip() else Decimal('0.00')
+        max_d = Decimal(max_d_raw) if max_d_raw.strip() else None
+        price = Decimal(price_raw) if price_raw.strip() else Decimal('0.00')
+        sr_price = Decimal(sr_price_raw) if sr_price_raw.strip() else Decimal('0.00')
+        parsed_ranges.append((min_d, max_d, price, sr_price))
+
+    is_valid, err_msg = validate_price_ranges(parsed_ranges)
+    if not is_valid:
+        return JsonResponse({'status': 'error', 'message': err_msg}, status=400)
+
+    if not title:
+        title = f"{supplier.supplier_name} - {product_type or 'General'} Rate Card"
+
+    with transaction.atomic():
+        if datasheet_id and datasheet_id.isdigit():
+            datasheet = SupplierDatasheet.objects.get(pk=int(datasheet_id))
+            datasheet.supplier = supplier
+            datasheet.product_type = product_type or None
+            datasheet.title = title
+            datasheet.description = description or None
+            datasheet.save()
+            datasheet.price_ranges.all().delete()
+            datasheet.modifiers.all().delete()
+            datasheet.accessories.all().delete()
+        else:
+            datasheet = SupplierDatasheet.objects.create(
+                supplier=supplier,
+                product_type=product_type or None,
+                title=title,
+                description=description or None
+            )
+
+        for i, (min_d, max_d, price, sr_price) in enumerate(parsed_ranges):
+            cat_name = categories[i].strip() if i < len(categories) and categories[i].strip() else "Base Rate"
+            DatasheetPriceRange.objects.create(
+                datasheet=datasheet,
+                category_name=cat_name,
+                min_diameter=min_d,
+                max_diameter=max_d,
+                price=price,
+                setting_ring_price=sr_price
+            )
+
+        # Parse modifier arrays (spec_key, spec_val, adj_type, adj_val)
+        mod_keys = request.POST.getlist('modifier_spec_key[]')
+        mod_vals = request.POST.getlist('modifier_spec_val[]')
+        mod_types = request.POST.getlist('modifier_adj_type[]')
+        mod_values = request.POST.getlist('modifier_adj_val[]')
+        mod_names = request.POST.getlist('modifier_name[]')
+
+        for i, s_key in enumerate(mod_keys):
+            if not s_key.strip():
+                continue
+            s_val = mod_vals[i] if i < len(mod_vals) else ''
+            a_type = mod_types[i] if i < len(mod_types) else 'PERCENTAGE'
+            a_val_raw = mod_values[i] if i < len(mod_values) else '0'
+            m_name = mod_names[i].strip() if i < len(mod_names) and mod_names[i].strip() else f"{s_key}: {s_val}"
+
+            DatasheetModifier.objects.create(
+                datasheet=datasheet,
+                modifier_name=m_name,
+                spec_key=s_key.strip(),
+                spec_value_match=s_val.strip(),
+                adjustment_type=a_type,
+                adjustment_value=Decimal(a_val_raw) if a_val_raw.strip() else Decimal('0.00')
+            )
+
+        # Parse accessory arrays (size_label, unit_rate)
+        acc_labels = request.POST.getlist('accessory_size_label[]')
+        acc_rates = request.POST.getlist('accessory_rate[]')
+
+        for i, label in enumerate(acc_labels):
+            if not label.strip():
+                continue
+            rate_raw = acc_rates[i] if i < len(acc_rates) else '0'
+
+            DatasheetAccessoryRate.objects.create(
+                datasheet=datasheet,
+                item_name=label.strip(),
+                size_range_label=label.strip(),
+                unit_rate=Decimal(rate_raw) if rate_raw.strip() else Decimal('0.00')
+            )
+
+    return JsonResponse({'status': 'ok', 'message': 'Supplier rate card saved successfully!'})
+
+
+@role_required('ADMIN', 'SALES')
+def get_supplier_datasheet(request, datasheet_id):
+    try:
+        datasheet = SupplierDatasheet.objects.prefetch_related('price_ranges', 'modifiers', 'accessories').get(pk=datasheet_id)
+    except SupplierDatasheet.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Datasheet not found.'}, status=404)
+
+    return JsonResponse({
+        'status': 'ok',
+        'datasheet': {
+            'id': datasheet.id,
+            'supplier_id': datasheet.supplier_id,
+            'product_type': datasheet.product_type or '',
+            'title': datasheet.title,
+            'description': datasheet.description or '',
+            'price_ranges': [
+                {
+                    'category_name': pr.category_name,
+                    'min_diameter': str(pr.min_diameter),
+                    'max_diameter': str(pr.max_diameter) if pr.max_diameter is not None else '',
+                    'price': str(pr.price),
+                    'setting_ring_price': str(pr.setting_ring_price or '0.00'),
+                }
+                for pr in datasheet.price_ranges.all()
+            ],
+            'modifiers': [
+                {
+                    'modifier_name': m.modifier_name,
+                    'spec_key': m.spec_key,
+                    'spec_value_match': m.spec_value_match,
+                    'adjustment_type': m.adjustment_type,
+                    'adjustment_value': str(m.adjustment_value),
+                }
+                for m in datasheet.modifiers.all()
+            ],
+            'accessories': [
+                {
+                    'product_code': a.product_code or '',
+                    'item_name': a.item_name,
+                    'size_range_label': a.size_range_label or '',
+                    'unit_rate': str(a.unit_rate),
+                }
+                for a in datasheet.accessories.all()
+            ]
+        }
+    })
+
+
+@role_required('ADMIN', 'SALES')
+def supplier_rate_cards(request):
+    supplier_datasheets = SupplierDatasheet.objects.select_related('supplier').prefetch_related('price_ranges', 'modifiers', 'accessories').filter(is_active=True)
+    suppliers = Supplier.objects.order_by('supplier_name')
+
+    return render(request, 'supplier_rate_cards.html', {
+        'supplier_datasheets': supplier_datasheets,
+        'suppliers': suppliers,
+        'product_type_choices': CustomerProduct.PRODUCT_TYPE_CHOICES,
+    })
+
+
+@role_required('ADMIN', 'SALES')
+def delete_supplier_datasheet(request, datasheet_id):
+    if request.method == 'POST':
+        try:
+            datasheet = SupplierDatasheet.objects.get(pk=datasheet_id)
+            datasheet.delete()
+            messages.success(request, 'Supplier rate card deleted successfully.')
+        except SupplierDatasheet.DoesNotExist:
+            messages.error(request, 'Rate card not found.')
+    return redirect('supplier_rate_cards')
+
+
 
 

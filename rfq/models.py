@@ -182,5 +182,99 @@ class RFQEmailMessage(models.Model):
         return f"{self.direction} - {self.rfq.rfq_no} - {self.subject}"
 
 
+class SupplierDatasheet(models.Model):
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.CASCADE,
+        related_name='datasheets'
+    )
+    product_type = models.CharField(
+        max_length=50,
+        choices=CustomerProduct.PRODUCT_TYPE_CHOICES,
+        blank=True,
+        null=True
+    )
+    title = models.CharField(max_length=255, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['supplier__supplier_name', 'product_type', '-updated_at']
+
+    def __str__(self):
+        return f"{self.supplier.supplier_name} - {self.product_type or 'General'}"
+
+
+class DatasheetPriceRange(models.Model):
+    datasheet = models.ForeignKey(
+        SupplierDatasheet,
+        on_delete=models.CASCADE,
+        related_name='price_ranges'
+    )
+    category_name = models.CharField(
+        max_length=150,
+        blank=True,
+        null=True,
+        default="Base Rate"
+    )
+    min_diameter = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    max_diameter = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Null means 'and above'")
+    price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Air Plug Gauge Rate")
+    setting_ring_price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, blank=True, null=True, help_text="Setting Ring Rate")
+
+    class Meta:
+        ordering = ['min_diameter', 'id']
+
+    def __str__(self):
+        range_str = f"{self.min_diameter} - {self.max_diameter}mm" if self.max_diameter else f"{self.min_diameter}mm & above"
+        return f"{range_str}: APG ₹{self.price} | SR ₹{self.setting_ring_price or 0}"
+
+
+class DatasheetModifier(models.Model):
+    ADJUSTMENT_TYPE_CHOICES = (
+        ('PERCENTAGE', 'Percentage (%)'),
+        ('FIXED', 'Fixed Amount (₹)'),
+    )
+
+    datasheet = models.ForeignKey(
+        SupplierDatasheet,
+        on_delete=models.CASCADE,
+        related_name='modifiers'
+    )
+    modifier_name = models.CharField(max_length=150, blank=True, null=True)
+    spec_key = models.CharField(max_length=100, help_text="Specification key name e.g. 'No. of jets', 'Type of ID', 'Gauge Type'")
+    spec_value_match = models.CharField(max_length=150, help_text="Substring or exact match value e.g. '3', 'Super blind', 'Bench mount'")
+    adjustment_type = models.CharField(max_length=20, choices=ADJUSTMENT_TYPE_CHOICES, default='PERCENTAGE')
+    adjustment_value = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        adj = f"+{self.adjustment_value}%" if self.adjustment_type == 'PERCENTAGE' else f"+₹{self.adjustment_value}"
+        return f"{self.spec_key}:{self.spec_value_match} ({adj})"
+
+
+class DatasheetAccessoryRate(models.Model):
+    datasheet = models.ForeignKey(
+        SupplierDatasheet,
+        on_delete=models.CASCADE,
+        related_name='accessories'
+    )
+    product_code = models.CharField(max_length=100, blank=True, null=True)
+    item_name = models.CharField(max_length=255, blank=True, null=True, default="")
+    size_range_label = models.CharField(max_length=150, blank=True, null=True)
+    unit_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.size_range_label or 'Accessory'}: ₹{self.unit_rate}"
+
+
+
 
 
