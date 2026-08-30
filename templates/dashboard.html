@@ -12,44 +12,8 @@
     <span class="badge rounded-pill text-bg-primary px-3 py-2">DPR Operations</span>
 </div> -->
 
-<!-- Quick actions -->
-<div class="dpr-card dpr-dashboard-menu mb-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-        <div>
-            <h6 class="mb-1">Quick Actions & Master Data</h6>
-            <div class="small text-muted">Synchronize inboxes and manage customer{% if can_view_masters %} and supplier{% endif %} details</div>
-        </div>
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <button type="button" class="btn btn-outline-primary btn-sm shadow-sm" id="dashboardSyncMailBtn" title="Sync All Emails (RFQ, Reply Mail & Classified Emails)">
-                <i class="bi bi-arrow-repeat me-1" id="dashboardSyncSpinner"></i>Sync Mail
-            </button>
-            {% if can_view_customer_details or is_admin or is_sales %}
-            <a href="{% url 'customer_details' %}" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-people me-1"></i>Customer Details
-            </a>
-            {% endif %}
-            {% if can_view_masters %}
-            <a href="{% url 'supplier_details' %}" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-building me-1"></i>Supplier Details
-            </a>
-            {% endif %}
-        </div>
-    </div>
-    <div id="dashboardSyncAlert" class="mt-3" style="display: none;"></div>
-</div>
 
 <div class="row g-3 mb-4">
-    {% if can_view_rfq %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
-            <div class="dpr-action-card dpr-action-info">
-                <i class="bi bi-envelope-paper fs-4 mb-2 d-block"></i>
-                <small>Manage RFQ</small>
-                <h6 class="mb-0">RFQ</h6>
-            </div>
-        </a>
-    </div>
-    {% endif %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'email_classifier:dashboard' %}" class="dpr-card-hover text-decoration-none">
             <div class="dpr-action-card dpr-action-info" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff;">
@@ -59,13 +23,13 @@
             </div>
         </a>
     </div>
-    {% if can_view_customer_po and not is_admin and not is_purchase %}
+    {% if can_view_rfq %}
     <div class="col-md-6 col-xl-3">
-        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
-            <div class="dpr-action-card dpr-action-success">
-                <i class="bi bi-bag-check fs-4 mb-2 d-block"></i>
-                <small>Track Products &amp; Validity</small>
-                <h6 class="mb-0">Customer PO</h6>
+        <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
+            <div class="dpr-action-card dpr-action-info">
+                <i class="bi bi-envelope-paper fs-4 mb-2 d-block"></i>
+                <small>Manage RFQ</small>
+                <h6 class="mb-0">RFQ</h6>
             </div>
         </a>
     </div>
@@ -105,6 +69,19 @@
     </div>
     {% endif %}
     {% endif %}
+
+    {% if can_view_customer_po and not is_admin and not is_purchase %}
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
+            <div class="dpr-action-card dpr-action-success">
+                <i class="bi bi-bag-check fs-4 mb-2 d-block"></i>
+                <small>Track Products &amp; Validity</small>
+                <h6 class="mb-0">Customer PO</h6>
+            </div>
+        </a>
+    </div>
+    {% endif %}
+
     {% if can_view_accounts %}
     <div class="col-md-6 col-xl-3">
         <a href="javascript:void(0)" class="dpr-card-hover text-decoration-none" data-bs-toggle="modal" data-bs-target="#accountsSelectionModal">
@@ -1026,65 +1003,6 @@ if (supplierChartCtx) {
     });
 }
 
-// Dashboard Unified Sync Mail Handler
-document.getElementById('dashboardSyncMailBtn')?.addEventListener('click', function() {
-    const btn = this;
-    const spinner = document.getElementById('dashboardSyncSpinner');
-    const alertDiv = document.getElementById('dashboardSyncAlert');
-
-    if (spinner) spinner.classList.add('dash-spinning');
-    btn.disabled = true;
-    if (alertDiv) {
-        alertDiv.style.display = 'block';
-        alertDiv.innerHTML = '<div class="alert alert-info py-2 px-3 mb-0 small rounded-3 border-info-subtle d-flex align-items-center shadow-sm"><div class="spinner-border spinner-border-sm me-2"></div>Syncing all inboxes (RFQ, RFQ Reply Mail & Classified Emails)...</div>';
-    }
-
-    fetch('{% url "sync_all_mail" %}', {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'X-Skip-Loader': '1'
-        }
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (spinner) spinner.classList.remove('dash-spinning');
-        btn.disabled = false;
-        const cls = data.status === 'success' ? 'success' : (data.status === 'warning' ? 'warning' : 'danger');
-        const icon = data.status === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill';
-        if (alertDiv) {
-            alertDiv.innerHTML = `<div class="alert alert-${cls} py-2 px-3 mb-0 small rounded-3 d-flex align-items-center justify-content-between shadow-sm"><div><i class="bi bi-${icon} me-2"></i>${escapeHtml(data.message || '')}</div><button type="button" class="btn-close btn-sm" onclick="this.closest('.alert').parentElement.style.display='none'"></button></div>`;
-        }
-    })
-    .catch(err => {
-        if (spinner) spinner.classList.remove('dash-spinning');
-        btn.disabled = false;
-        if (alertDiv) {
-            alertDiv.innerHTML = `<div class="alert alert-danger py-2 px-3 mb-0 small rounded-3 d-flex align-items-center justify-content-between shadow-sm"><div><i class="bi bi-x-circle-fill me-2"></i>Sync error: ${escapeHtml(err.message)}</div><button type="button" class="btn-close btn-sm" onclick="this.closest('.alert').parentElement.style.display='none'"></button></div>`;
-        }
-    });
-});
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
 </script>
-
-<style>
-@keyframes dashSpinAnim {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-.dash-spinning {
-    display: inline-block;
-    animation: dashSpinAnim 1s linear infinite;
-}
-</style>
 {% endblock %}
 
