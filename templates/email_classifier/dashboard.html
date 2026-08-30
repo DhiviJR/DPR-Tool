@@ -272,9 +272,11 @@ tr:hover .email-subject-title {
                             <div class="btn-group btn-group-sm shadow-sm" role="group">
                                 {% if record.displayed_category == 'ENQUIRY' or record.displayed_category == 'QUOTATION_REQUEST' %}
                                     {% if not record.is_added_to_rfq %}
-                                        <a href="{% url 'email_classifier:add_rfq_from_email' record.id %}" class="btn btn-success px-2.5" title="Add RFQ from this email">
+                                        <button type="button" class="btn btn-success px-2.5" title="Add RFQ from this email"
+                                            data-url="{% url 'email_classifier:add_rfq_from_email' record.id %}"
+                                            onclick="addRfqFromEmail(event, this)">
                                             <i class="bi bi-plus-circle me-1"></i>Add RFQ
-                                        </a>
+                                        </button>
                                     {% endif %}
                                 {% elif record.displayed_category == 'CUSTOMER_ORDER' %}
                                     {% if not record.is_added_to_po and not record.is_added_to_rfq %}
@@ -379,9 +381,11 @@ tr:hover .email-subject-title {
                                             <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
                                             {% if record.displayed_category == 'ENQUIRY' or record.displayed_category == 'QUOTATION_REQUEST' %}
                                                 {% if not record.is_added_to_rfq %}
-                                                    <a href="{% url 'email_classifier:add_rfq_from_email' record.id %}" class="btn btn-success btn-sm">
+                                                    <button type="button" class="btn btn-success btn-sm"
+                                                        data-url="{% url 'email_classifier:add_rfq_from_email' record.id %}"
+                                                        onclick="addRfqFromEmail(event, this)">
                                                         <i class="bi bi-plus-circle me-1"></i> Add RFQ
-                                                    </a>
+                                                    </button>
                                                 {% endif %}
                                             {% elif record.displayed_category == 'CUSTOMER_ORDER' %}
                                                 {% if not record.is_added_to_po and not record.is_added_to_rfq %}
@@ -480,5 +484,93 @@ function handleDateFilterChange(selectEl) {
         selectEl.form.submit();
     }
 }
+
+function addRfqFromEmail(event, btn) {
+    event.preventDefault();
+    var url = btn.getAttribute('data-url');
+
+    // Disable button and show spinner while loading
+    btn.disabled = true;
+    var originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Loading...';
+
+    fetch(url, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+
+        if (data.status === 'found') {
+            // Customer exists — go straight to Add RFQ
+            window.location.href = data.redirect_url;
+        } else if (data.status === 'new_customer') {
+            // Customer not found — show the popup modal
+            var modal = document.getElementById('newCustomerAlertModal');
+            modal.querySelector('#newCustModalName').textContent = data.customer_name;
+            modal.querySelector('#newCustOkBtn').setAttribute('href', data.add_customer_url);
+            modal.querySelector('#newCustSkipBtn').setAttribute('href', data.skip_rfq_url);
+            var bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        // On network error, fall back to normal navigation
+        window.location.href = url;
+    });
+}
+
+function handleSkipBtn(event) {
+    event.preventDefault();
+    var skipUrl = document.getElementById('newCustSkipBtn').getAttribute('href');
+    var modalEl = document.getElementById('newCustomerAlertModal');
+    var bsModal = bootstrap.Modal.getInstance(modalEl);
+    if (bsModal) {
+        bsModal.hide();
+    }
+    // Navigate after the modal hides (slight delay to let animation finish)
+    setTimeout(function() {
+        window.location.href = skipUrl;
+    }, 200);
+}
 </script>
+
+<!-- New Customer Alert Modal -->
+<div class="modal fade" id="newCustomerAlertModal" tabindex="-1" aria-labelledby="newCustModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-warning-subtle border-bottom-0 pb-0 rounded-top-4" style="border-radius: 14px 14px 0 0;">
+                <div class="d-flex align-items-center gap-2 w-100 pt-1">
+                    <i class="bi bi-exclamation-circle-fill text-warning fs-4"></i>
+                    <h5 class="modal-title fw-bold text-dark mb-0" id="newCustModalLabel">Customer Not Found</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body px-4 py-3">
+                <p class="text-dark mb-1">
+                    The customer <strong><span id="newCustModalName"></span></strong> does not exist in the system.
+                </p>
+                <p class="text-muted small mb-0">You need to add a new customer before creating an RFQ, or skip and go directly to the Add RFQ page.</p>
+            </div>
+            <div class="modal-footer border-top-0 pt-0 pb-3 px-4 d-flex gap-2 justify-content-end">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancel</button>
+                <a id="newCustSkipBtn" href="#" class="btn btn-outline-primary px-4" onclick="handleSkipBtn(event)">
+                    <i class="bi bi-skip-forward me-1"></i>Skip
+                </a>
+                <a id="newCustOkBtn" href="#" class="btn btn-success px-4">
+                    <i class="bi bi-person-plus me-1"></i>OK — Add Customer
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
+

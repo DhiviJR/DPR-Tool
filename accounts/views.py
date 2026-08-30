@@ -1194,7 +1194,7 @@ def _send_rfq_supplier_price_requests(
                 subject=subject,
                 body=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[],
+                to=[settings.DEFAULT_FROM_EMAIL],  # Must have a valid To header — suppliers stay in BCC
                 bcc=recipient_list,
                 cc=cc_list,
             )
@@ -6733,6 +6733,11 @@ def get_rfq_email_thread(request, rfq_id):
     seen_keys = set()
     customer = rfq.customer
 
+    # Initialize source_msg_id here so it is always defined in the message loop below
+    source_msg_id = None
+    if hasattr(rfq, 'source_email') and rfq.source_email:
+        source_msg_id = (rfq.source_email.imap_uid or f"er-{rfq.source_email.id}@inbox").strip('<>')
+
     if show_all:
         email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:500]
     else:
@@ -6775,12 +6780,6 @@ def get_rfq_email_thread(request, rfq_id):
                     other_q |= Q(subject__icontains=o_no)
             candidate_msgs = candidate_msgs.exclude(Q(rfq__isnull=True) & other_q)
 
-        # Strictly verify customer email match
-        # Identify originating source message ID if RFQ was created from an email
-        source_msg_id = None
-        if hasattr(rfq, 'source_email') and rfq.source_email:
-            source_msg_id = (rfq.source_email.imap_uid or f"er-{rfq.source_email.id}@inbox").strip('<>')
-
         filtered_msgs = []
         for msg in candidate_msgs.order_by('-sent_at'):
             is_rfq_ref = (rfq.rfq_no and rfq.rfq_no.lower() in (msg.subject or '').lower()) or \
@@ -6804,6 +6803,10 @@ def get_rfq_email_thread(request, rfq_id):
         if earliest_in:
             earliest_in_msg_id = earliest_in.id
 
+    # key_to_data_idx lets us retroactively update an entry's is_source flag
+    # if the EmailRecord loop later identifies it as the originating email.
+    key_to_data_idx = {}
+
     for msg in email_messages:
         key = (
             (msg.subject or '').strip().lower(),
@@ -6811,13 +6814,15 @@ def get_rfq_email_thread(request, rfq_id):
             msg.sent_at.strftime('%Y-%m-%d %H:%M') if msg.sent_at else ''
         )
         seen_keys.add(key)
-        
+
         is_src = False
-        if source_msg_id and source_msg_id in (msg.message_id or '').strip('<>'):
+        # Compare stripped Message-ID with exact equality (not substring) to avoid false matches
+        if source_msg_id and source_msg_id == (msg.message_id or '').strip('<>'):
             is_src = True
         elif earliest_in_msg_id and msg.id == earliest_in_msg_id:
             is_src = True
 
+        idx = len(data)
         data.append({
             'id': msg.id,
             'message_id': msg.message_id,
@@ -6834,6 +6839,7 @@ def get_rfq_email_thread(request, rfq_id):
             'is_source': is_src,
             '_sort_date': msg.sent_at or timezone.now()
         })
+        key_to_data_idx[key] = idx
 
     # Merge EmailRecord (from Email Classifier page)
     try:
@@ -6884,9 +6890,12 @@ def get_rfq_email_thread(request, rfq_id):
                 (er.sender or '').strip().lower(),
                 er.received_at.strftime('%Y-%m-%d %H:%M') if er.received_at else ''
             )
+            is_src = bool(hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk)
+
             if er_key not in seen_keys:
+                # New entry — add it normally
                 seen_keys.add(er_key)
-                is_src = bool(hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk)
+                idx = len(data)
                 data.append({
                     'id': f"er_{er.id}",
                     'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
@@ -6903,8 +6912,28 @@ def get_rfq_email_thread(request, rfq_id):
                     'is_source': is_src,
                     '_sort_date': er.received_at or timezone.now()
                 })
+                key_to_data_idx[er_key] = idx
+            elif is_src:
+                # This EmailRecord is the source email but was already added from
+                # RFQEmailMessage (same subject/sender/time). Instead of skipping it,
+                # update the existing entry's is_source flag to True so the
+                # highlight always appears correctly.
+                existing_idx = key_to_data_idx.get(er_key)
+                if existing_idx is not None:
+                    data[existing_idx]['is_source'] = True
     except Exception as e:
         logger.warning(f"Could not merge EmailRecord into RFQ email thread: {e}")
+
+    # Safety net: if no entry is marked as source yet, fall back to marking the
+    # earliest incoming RFQEmailMessage for this RFQ (covers manually-created RFQs
+    # and any edge case where the above matching still fails).
+    if not any(entry.get('is_source') for entry in data):
+        earliest_in = RFQEmailMessage.objects.filter(rfq=rfq, direction='IN').order_by('sent_at').first()
+        if earliest_in:
+            for entry in data:
+                if entry.get('id') == earliest_in.id:
+                    entry['is_source'] = True
+                    break
 
     # Sort thread: Originating RFQ email FIRST (is_source=True), followed by newest emails first
     data.sort(key=lambda x: (1 if x.get('is_source') else 0, x.get('_sort_date') or timezone.now()), reverse=True)

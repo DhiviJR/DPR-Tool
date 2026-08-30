@@ -1098,7 +1098,14 @@ def add_rfq_from_email(request, record_id):
             if len(products_json) < 1800:
                 params_dict['products_json'] = products_json
 
-        return redirect(f"{url}?{urlencode(params_dict)}")
+        rfq_url = f"{url}?{urlencode(params_dict)}"
+
+        # AJAX request: return JSON so the frontend can redirect directly
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({'status': 'found', 'redirect_url': rfq_url})
+
+        return redirect(rfq_url)
     else:
         cust_name_final = ext_company_name or target_cust_name or clean_sname or 'New Customer'
         cust_name_final = re.sub(r'[\-\s]*\b\d{7,12}\b', '', cust_name_final).strip(' -_')
@@ -1109,7 +1116,8 @@ def add_rfq_from_email(request, record_id):
             request.session['email_prefill_products_json'] = products_json
             request.session[f'email_products_{record.id}'] = products_json
 
-        url = reverse('customer_details')
+        # Build the Add Customer URL (pre-filled with email data)
+        add_cust_url = reverse('customer_details')
         cust_params = {
             'customer_name': cust_name_final or 'New Customer',
             'email': sender_email if not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS) else '',
@@ -1126,8 +1134,40 @@ def add_rfq_from_email(request, record_id):
             'product_remarks_param': product_remarks,
             'product_specifications_param': single_specs_json,
         }
+        add_cust_redirect = f"{add_cust_url}?{urlencode(cust_params)}"
+
+        # Build the Skip-to-Add-RFQ URL (without a customer_id)
+        rfq_url = reverse('rfq_details')
+        rfq_params = {
+            'add_rfq': '1',
+            'from_email_id': record.id,
+            'mail_date': mail_date_str,
+            'enquiry_details': record.subject,
+            'region': ext_region or '',
+            'product_name': clean_product_name,
+            'product_type': product_type,
+            'quantity': qty,
+            'unit': unit,
+            'product_remarks': product_remarks,
+            'product_specifications': single_specs_json,
+        }
+        if products_json and len(products_json) < 1800:
+            rfq_params['products_json'] = products_json
+        skip_rfq_redirect = f"{rfq_url}?{urlencode(rfq_params)}"
+
+        # AJAX request: return JSON so the frontend shows the popup
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({
+                'status': 'new_customer',
+                'customer_name': cust_name_final or 'New Customer',
+                'add_customer_url': add_cust_redirect,
+                'skip_rfq_url': skip_rfq_redirect,
+            })
+
+        # Non-AJAX fallback: redirect to customer details page (original behaviour)
         messages.info(request, f'New customer "{cust_name_final}" detected. Please complete customer master details to proceed to Add RFQ.')
-        return redirect(f"{url}?{urlencode(cust_params)}")
+        return redirect(add_cust_redirect)
 
 
 
