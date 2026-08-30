@@ -280,7 +280,7 @@ tr:hover .email-subject-title {
                                     {% endif %}
                                 {% elif record.displayed_category == 'CUSTOMER_ORDER' %}
                                     {% if not record.is_added_to_po and not record.is_added_to_rfq %}
-                                        <a href="{% url 'email_classifier:add_po_from_email' record.id %}" class="btn btn-primary px-2.5" title="Add PO from this email">
+                                        <a href="{% url 'email_classifier:add_po_from_email' record.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-primary px-2.5" title="Add PO from this email">
                                             <i class="bi bi-cart-plus me-1"></i>Add PO
                                         </a>
                                     {% endif %}
@@ -294,7 +294,7 @@ tr:hover .email-subject-title {
                             <div class="modal fade text-start" id="emailDetailModal{{ record.id }}" tabindex="-1" aria-labelledby="modalLabel{{ record.id }}" aria-hidden="true">
                                 <div class="modal-dialog modal-lg modal-dialog-scrollable">
                                     <div class="modal-content border-0 shadow-lg" style="border-radius: 14px;">
-                                        <div class="modal-header bg-light py-3">
+                                        <div class="modal-header bg-light py-3 d-flex align-items-center justify-content-between">
                                             <div>
                                                 <h5 class="modal-title fw-bold text-dark mb-0" id="modalLabel{{ record.id }}">
                                                     <i class="bi bi-envelope-open me-2 text-primary"></i>{{ record.subject }}
@@ -305,7 +305,12 @@ tr:hover .email-subject-title {
                                                     <span class="text-secondary fw-medium">Received: {{ record.received_at|date:'d M Y, H:i' }}</span>
                                                 </div>
                                             </div>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm p-1.5 leading-none" title="Maximize Window" onclick="toggleModalMaximize(this)">
+                                                    <i class="bi bi-arrows-fullscreen"></i>
+                                                </button>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
                                         </div>
                                          <div class="modal-body p-4">
                                              <!-- Category & Metadata Bar -->
@@ -374,7 +379,7 @@ tr:hover .email-subject-title {
                                              <!-- Email Body -->
                                              <div class="mb-0">
                                                  <h6 class="fw-bold text-dark mb-2"><i class="bi bi-envelope-open-text me-1 text-primary"></i>Full Email Message Body</h6>
-                                                 <div class="p-3.5 bg-white rounded-3 border text-dark shadow-xs" style="white-space: pre-wrap; word-break: break-word; max-height: 420px; overflow-y: auto; background-color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 0.92rem; line-height: 1.68; color: #1f2937 !important; border: 1px solid #dee2e6 !important;">{{ record.body|default:'No message body text.' }}</div>
+                                                 <div class="p-3.5 bg-white rounded-3 border text-dark shadow-xs email-body-content" style="white-space: pre-wrap; word-break: break-word; max-height: 420px; overflow-y: auto; background-color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 0.92rem; line-height: 1.68; color: #1f2937 !important; border: 1px solid #dee2e6 !important;">{{ record.body|default:'No message body text.' }}</div>
                                              </div>
                                          </div>
                                          <div class="modal-footer bg-light py-2">
@@ -389,7 +394,7 @@ tr:hover .email-subject-title {
                                                 {% endif %}
                                             {% elif record.displayed_category == 'CUSTOMER_ORDER' %}
                                                 {% if not record.is_added_to_po and not record.is_added_to_rfq %}
-                                                    <a href="{% url 'email_classifier:add_po_from_email' record.id %}" class="btn btn-primary btn-sm">
+                                                    <a href="{% url 'email_classifier:add_po_from_email' record.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
                                                         <i class="bi bi-cart-plus me-1"></i> Add PO
                                                     </a>
                                                 {% endif %}
@@ -507,8 +512,8 @@ function addRfqFromEmail(event, btn) {
         btn.innerHTML = originalHtml;
 
         if (data.status === 'found') {
-            // Customer exists — go straight to Add RFQ
-            window.location.href = data.redirect_url;
+            // Customer exists — open Add RFQ in a new tab
+            window.open(data.redirect_url, '_blank');
         } else if (data.status === 'new_customer') {
             // Customer not found — show the popup modal
             var modal = document.getElementById('newCustomerAlertModal');
@@ -522,8 +527,8 @@ function addRfqFromEmail(event, btn) {
     .catch(function() {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
-        // On network error, fall back to normal navigation
-        window.location.href = url;
+        // On network error, fall back to opening in a new tab
+        window.open(url, '_blank');
     });
 }
 
@@ -535,12 +540,75 @@ function handleSkipBtn(event) {
     if (bsModal) {
         bsModal.hide();
     }
-    // Navigate after the modal hides (slight delay to let animation finish)
+    // Open in a new tab after the modal hides
     setTimeout(function() {
-        window.location.href = skipUrl;
+        window.open(skipUrl, '_blank');
     }, 200);
 }
+
+function handleOkBtn(event) {
+    event.preventDefault();
+    var addCustUrl = document.getElementById('newCustOkBtn').getAttribute('href');
+    var modalEl = document.getElementById('newCustomerAlertModal');
+    var bsModal = bootstrap.Modal.getInstance(modalEl);
+    if (bsModal) {
+        bsModal.hide();
+    }
+    // Open in a new tab after the modal hides
+    setTimeout(function() {
+        window.open(addCustUrl, '_blank');
+    }, 200);
+}
+
+function toggleModalMaximize(btn) {
+    var modalDialog = btn.closest('.modal-dialog');
+    var icon = btn.querySelector('i');
+    if (!modalDialog) return;
+
+    if (modalDialog.classList.contains('modal-fullscreen')) {
+        modalDialog.classList.remove('modal-fullscreen');
+        modalDialog.classList.add('modal-lg');
+        if (icon) {
+            icon.className = 'bi bi-arrows-fullscreen';
+        }
+        btn.setAttribute('title', 'Maximize Window');
+    } else {
+        modalDialog.classList.remove('modal-lg');
+        modalDialog.classList.add('modal-fullscreen');
+        if (icon) {
+            icon.className = 'bi bi-fullscreen-exit';
+        }
+        btn.setAttribute('title', 'Restore Window');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.modal').forEach(function(modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', function() {
+            var dialog = this.querySelector('.modal-dialog');
+            var maxBtn = this.querySelector('button[onclick="toggleModalMaximize(this)"]');
+            if (dialog && dialog.classList.contains('modal-fullscreen')) {
+                dialog.classList.remove('modal-fullscreen');
+                dialog.classList.add('modal-lg');
+                if (maxBtn) {
+                    var icon = maxBtn.querySelector('i');
+                    if (icon) icon.className = 'bi bi-arrows-fullscreen';
+                    maxBtn.setAttribute('title', 'Maximize Window');
+                }
+            }
+        });
+    });
+});
 </script>
+
+<style>
+.modal-fullscreen .email-body-content {
+    max-height: calc(100vh - 290px) !important;
+}
+.modal-fullscreen .modal-content {
+    border-radius: 0 !important;
+}
+</style>
 
 <!-- New Customer Alert Modal -->
 <div class="modal fade" id="newCustomerAlertModal" tabindex="-1" aria-labelledby="newCustModalLabel" aria-hidden="true">
@@ -561,10 +629,10 @@ function handleSkipBtn(event) {
             </div>
             <div class="modal-footer border-top-0 pt-0 pb-3 px-4 d-flex gap-2 justify-content-end">
                 <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancel</button>
-                <a id="newCustSkipBtn" href="#" class="btn btn-outline-primary px-4" onclick="handleSkipBtn(event)">
+                <a id="newCustSkipBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary px-4" onclick="handleSkipBtn(event)">
                     <i class="bi bi-skip-forward me-1"></i>Skip
                 </a>
-                <a id="newCustOkBtn" href="#" class="btn btn-success px-4">
+                <a id="newCustOkBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-success px-4" onclick="handleOkBtn(event)">
                     <i class="bi bi-person-plus me-1"></i>OK — Add Customer
                 </a>
             </div>

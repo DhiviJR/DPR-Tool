@@ -283,22 +283,22 @@ def _normalize_spec_key(key):
         'PRODUCT NAME': 'PRODUCT NAME',
         'MATERIAL': 'MATERIAL',
         'SIZE': 'SIZE',
-        'MEASURING LOAD': 'MEASURING LOAD',
+        'MEASURING LOAD': 'MEASURING LAND',
         'MEASURING LAND': 'MEASURING LAND',
         'DEPTH COLLAR': 'DEPTH COLLAR',
-        'DEPTH COLLOR': 'DEPTH COLLOR',
+        'DEPTH COLLOR': 'DEPTH COLLAR',
         'ENGRAVING DETAILS': 'ENGRAVING DETAILS',
         'EXTENSION': 'EXTENSION',
-        'EXTENTION': 'EXTENTION',
+        'EXTENTION': 'EXTENSION',
         'TYPE OF ID': 'TYPE OF ID',
         'TYPE OF OD': 'TYPE OF OD',
         'ROUGHNESS': 'ROUGHNESS',
         'JET FROM FACE': 'JET FROM FACE',
         'NO. OF JETS': 'NO. OF JETS',
-        'NO. JETS': 'NO. JETS',
+        'NO. JETS': 'NO. OF JETS',
         'NO OF JETS': 'NO. OF JETS',
         'GAUGE TYPE': 'GAUGE TYPE',
-        'GAGUE TYPE': 'GAGUE TYPE',
+        'GAGUE TYPE': 'GAUGE TYPE',
         'BENCH MOUNT DETAILS': 'BENCH MOUNT DETAILS',
         'PULL / CHOPPER': 'PULL / CHOPPER',
         'PULL/CHOPPER': 'PULL / CHOPPER',
@@ -327,7 +327,6 @@ def _spec_sort_key(norm_key):
         'MATERIAL',
         'SIZE',
         'MEASURING LAND',
-        'MEASURING LOAD',
         'DEPTH COLLAR',
         'DEPTH COLLOR',
         'ENGRAVING DETAILS',
@@ -6983,15 +6982,30 @@ def send_rfq_email_reply(request, rfq_id):
 
     # 1. Automatically attach prepared quotation PDF for this RFQ
     try:
-        latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
-        if latest_quotation and latest_quotation.products_snapshot:
-            products = _deserialize_quotation_products(latest_quotation.products_snapshot)
-            quote_no = latest_quotation.quotation_number
-        else:
-            products, _ = _build_selected_quotation_products(rfq, [], [])
-            if not products:
-                products = list(rfq.products.all())
+        product_ids = request.POST.getlist('quotation_product_ids')
+        supplier_price_ids = request.POST.getlist('quotation_supplier_price_ids')
+        mes_rates = request.POST.getlist('mes_rates')
+        delivery_weeks = request.POST.get('delivery_weeks', '').strip()
+        installation_charge = request.POST.get('installation_charge', '').strip()
+
+        if product_ids:
+            products, _ = _build_selected_quotation_products(
+                rfq, product_ids, supplier_price_ids,
+                mes_rates=mes_rates,
+                delivery_weeks=delivery_weeks,
+                installation_charge=installation_charge
+            )
             quote_no = _get_mes_quote_no(rfq)
+        else:
+            latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
+            if latest_quotation and latest_quotation.products_snapshot:
+                products = _deserialize_quotation_products(latest_quotation.products_snapshot)
+                quote_no = latest_quotation.quotation_number
+            else:
+                products, _ = _build_selected_quotation_products(rfq, [], [])
+                if not products:
+                    products = list(rfq.products.all())
+                quote_no = _get_mes_quote_no(rfq)
 
         if products:
             pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
@@ -7226,9 +7240,12 @@ def get_supplier_email_thread(request, dpr_id):
 
     messages_query = RFQEmailMessage.objects.none()
     if supplier and supplier.email:
+        sup_emails = [e.strip() for e in re.split(r'[,;\s]+', supplier.email) if e.strip()]
+        email_q = Q()
+        for em in sup_emails:
+            email_q |= Q(sender__icontains=em) | Q(recipients__icontains=em)
         messages_query = RFQEmailMessage.objects.filter(
-            Q(sender__icontains=supplier.email) |
-            Q(recipients__icontains=supplier.email) |
+            email_q |
             Q(subject__icontains=dpr.serial_number) |
             Q(body__icontains=dpr.serial_number)
         )

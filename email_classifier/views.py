@@ -745,8 +745,8 @@ def _extract_product_specifications(product_name, product_type, line_text='', fu
     is_arg = ptype in ('ARG', 'SARG') or ('AIR' in pname.upper() and 'RING' in pname.upper())
 
     if is_air_gauge:
-        load_m = re.search(r'(?i)(?:measuring\s*load|load)\s*[:\-]\s*([^\r\n,;]+)', combined_context)
-        specs["Measuring load"] = load_m.group(1).strip() if load_m else "Standard"
+        load_m = re.search(r'(?i)(?:measuring\s*(?:land|load)|land|load)\s*[:\-]\s*([^\r\n,;]+)', combined_context)
+        specs["Measuring land"] = load_m.group(1).strip() if load_m else "Standard"
 
         if is_arg:
             specs["Type of OD"] = "Stepper" if re.search(r'\b(stepper|step)\b', combined_context, re.I) else "Plain"
@@ -790,9 +790,6 @@ def _extract_product_specifications(product_name, product_type, line_text='', fu
             specs["Gauge Type"] = "Unit mount"
         else:
             specs["Gauge Type"] = "Hand held"
-
-        specs["Pull / Chopper"] = "Yes" if re.search(r'(?i)\b(pull\s*/\s*chopper|chopper\s*:\s*yes|with\s+chopper|chopper)\b', combined_context) else "No"
-        specs["Packaging"] = "MABC: Not required" if re.search(r'(?i)\bmabc\s*:\s*not\s+required\b', combined_context) else "MABC: Required"
 
     eng_m = re.search(r'(?i)(?:engraving\s+details?|marking\s+text|engraving|marking)\s*[:\-]\s*([^\r\n,;]+)', combined_context)
     if eng_m:
