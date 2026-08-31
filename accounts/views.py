@@ -7161,8 +7161,8 @@ def sync_all_mail(request):
             from email_classifier.models import EmailRecord
 
             classifier = get_classifier()
-            BATCH_SIZE = 50
-            MAX_SAVED = 300 if is_full else 100
+            BATCH_SIZE = 15
+            MAX_SAVED = 50 if is_full else 20
             offset = 0
             is_initial_import = (EmailRecord.objects.count() == 0) or is_full
             consecutive_skipped_batches = 0
