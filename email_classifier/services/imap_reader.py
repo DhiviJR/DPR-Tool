@@ -134,7 +134,7 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
             num_to_header = {h['num']: h for h in new_headers if h.get('num')}
             num_list = list(num_to_header.keys())
 
-            FETCH_CHUNK = 50
+            FETCH_CHUNK = 10
             for i in range(0, len(num_list), FETCH_CHUNK):
                 chunk = num_list[i:i + FETCH_CHUNK]
                 try:
