@@ -287,22 +287,22 @@ def _normalize_spec_key(key):
         'PRODUCT NAME': 'PRODUCT NAME',
         'MATERIAL': 'MATERIAL',
         'SIZE': 'SIZE',
-        'MEASURING LOAD': 'MEASURING LOAD',
+        'MEASURING LOAD': 'MEASURING LAND',
         'MEASURING LAND': 'MEASURING LAND',
         'DEPTH COLLAR': 'DEPTH COLLAR',
-        'DEPTH COLLOR': 'DEPTH COLLOR',
+        'DEPTH COLLOR': 'DEPTH COLLAR',
         'ENGRAVING DETAILS': 'ENGRAVING DETAILS',
         'EXTENSION': 'EXTENSION',
-        'EXTENTION': 'EXTENTION',
+        'EXTENTION': 'EXTENSION',
         'TYPE OF ID': 'TYPE OF ID',
         'TYPE OF OD': 'TYPE OF OD',
         'ROUGHNESS': 'ROUGHNESS',
         'JET FROM FACE': 'JET FROM FACE',
         'NO. OF JETS': 'NO. OF JETS',
-        'NO. JETS': 'NO. JETS',
+        'NO. JETS': 'NO. OF JETS',
         'NO OF JETS': 'NO. OF JETS',
         'GAUGE TYPE': 'GAUGE TYPE',
-        'GAGUE TYPE': 'GAGUE TYPE',
+        'GAGUE TYPE': 'GAUGE TYPE',
         'BENCH MOUNT DETAILS': 'BENCH MOUNT DETAILS',
         'PULL / CHOPPER': 'PULL / CHOPPER',
         'PULL/CHOPPER': 'PULL / CHOPPER',
@@ -331,7 +331,6 @@ def _spec_sort_key(norm_key):
         'MATERIAL',
         'SIZE',
         'MEASURING LAND',
-        'MEASURING LOAD',
         'DEPTH COLLAR',
         'DEPTH COLLOR',
         'ENGRAVING DETAILS',
@@ -845,7 +844,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 19 * mm, "NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 22 * mm, "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri, Tamil Nadu - 635109")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 25 * mm, "Phone : +91-965-577-8807 / +91-965-577-8871")
-                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 28 * mm, "Email-ID : info@mesinstruments.co.in | Web : www.mesinstruments.co.in")
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 28 * mm, f"Email-ID : {settings.DEFAULT_FROM_EMAIL} | Web : www.mesinstruments.co.in")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 31 * mm, "GST : 33ABKFM1033E1ZS | PAN : ABKFM1033E")
                 
                 # Draw thick black line under header
@@ -1066,7 +1065,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         installation_str,
        'Discount : Negotiable',
         f'Quotation Validity : This offer is Valid till {valid_till}',
-        'Purchase Order : Purchase Order must be send to info@mesinstruments.co.in',
+        f'Purchase Order : Purchase Order must be send to {settings.DEFAULT_FROM_EMAIL}',
         'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
         'Force Majeure: The Company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
         'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
@@ -1198,7 +1197,7 @@ def _send_rfq_supplier_price_requests(
                 subject=subject,
                 body=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[],
+                to=[getattr(settings, 'SUPPLIER_RFQ_TO_EMAIL', 'ftp@mesinstruments.co.in')],  # Host copy recipient (ftp@mesinstruments.co.in); suppliers stay in BCC
                 bcc=recipient_list,
                 cc=cc_list,
             )
@@ -3998,7 +3997,7 @@ def rfq_details(request):
                             rfq=rfq,
                             message_id=msg_id,
                             sender=source_email_obj.sender or (rfq.customer.email if rfq.customer else 'Unknown'),
-                            recipients=getattr(settings, 'EMAIL_HOST_USER', 'info@mesinstruments.co.in'),
+                            recipients=settings.DEFAULT_FROM_EMAIL,
                             subject=source_email_obj.subject or f"Enquiry - {rfq.rfq_no}",
                             body=source_email_obj.body or rfq.enquiry_details,
                             direction='IN',
@@ -5372,7 +5371,7 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         'NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br/>'
         '2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri, Tamilnadu-635109.<br/>'
         'Phone : +91-965-577-8807 / +91-965-577-8871<br/>'
-        'Email : info@mesinstruments.co.in | Web : www.mesinstruments.co.in',
+        f'Email : {settings.DEFAULT_FROM_EMAIL} | Web : www.mesinstruments.co.in',
         center_style
     )
 
@@ -6145,7 +6144,7 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri,<br/>"
         "Tamilnadu - 635109,<br/>"
         "Contact: 9655778871, 9655778807<br/>"
-        "Email : info@mesinstruments.co.in<br/>"
+        f"Email : {settings.DEFAULT_FROM_EMAIL}<br/>"
         "GSTIN : 33ABKFM1033E1ZS"
     )
 
@@ -6739,6 +6738,11 @@ def get_rfq_email_thread(request, rfq_id):
     seen_keys = set()
     customer = rfq.customer
 
+    # Initialize source_msg_id here so it is always defined in the message loop below
+    source_msg_id = None
+    if hasattr(rfq, 'source_email') and rfq.source_email:
+        source_msg_id = (rfq.source_email.imap_uid or f"er-{rfq.source_email.id}@inbox").strip('<>')
+
     if show_all:
         email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:500]
     else:
@@ -6781,12 +6785,6 @@ def get_rfq_email_thread(request, rfq_id):
                     other_q |= Q(subject__icontains=o_no)
             candidate_msgs = candidate_msgs.exclude(Q(rfq__isnull=True) & other_q)
 
-        # Strictly verify customer email match
-        # Identify originating source message ID if RFQ was created from an email
-        source_msg_id = None
-        if hasattr(rfq, 'source_email') and rfq.source_email:
-            source_msg_id = (rfq.source_email.imap_uid or f"er-{rfq.source_email.id}@inbox").strip('<>')
-
         filtered_msgs = []
         for msg in candidate_msgs.order_by('-sent_at'):
             is_rfq_ref = (rfq.rfq_no and rfq.rfq_no.lower() in (msg.subject or '').lower()) or \
@@ -6810,6 +6808,10 @@ def get_rfq_email_thread(request, rfq_id):
         if earliest_in:
             earliest_in_msg_id = earliest_in.id
 
+    # key_to_data_idx lets us retroactively update an entry's is_source flag
+    # if the EmailRecord loop later identifies it as the originating email.
+    key_to_data_idx = {}
+
     for msg in email_messages:
         key = (
             (msg.subject or '').strip().lower(),
@@ -6817,13 +6819,15 @@ def get_rfq_email_thread(request, rfq_id):
             msg.sent_at.strftime('%Y-%m-%d %H:%M') if msg.sent_at else ''
         )
         seen_keys.add(key)
-        
+
         is_src = False
-        if source_msg_id and source_msg_id in (msg.message_id or '').strip('<>'):
+        # Compare stripped Message-ID with exact equality (not substring) to avoid false matches
+        if source_msg_id and source_msg_id == (msg.message_id or '').strip('<>'):
             is_src = True
         elif earliest_in_msg_id and msg.id == earliest_in_msg_id:
             is_src = True
 
+        idx = len(data)
         data.append({
             'id': msg.id,
             'message_id': msg.message_id,
@@ -6840,6 +6844,7 @@ def get_rfq_email_thread(request, rfq_id):
             'is_source': is_src,
             '_sort_date': msg.sent_at or timezone.now()
         })
+        key_to_data_idx[key] = idx
 
     # Merge EmailRecord (from Email Classifier page)
     try:
@@ -6879,7 +6884,7 @@ def get_rfq_email_thread(request, rfq_id):
             for er in er_qs:
                 if hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk:
                     er_filtered.append(er)
-                elif check_customer_email_match(er.sender, 'info@mesinstruments.co.in', customer):
+                elif check_customer_email_match(er.sender, settings.DEFAULT_FROM_EMAIL, customer):
                     er_filtered.append(er)
 
             er_qs = er_filtered
@@ -6890,15 +6895,18 @@ def get_rfq_email_thread(request, rfq_id):
                 (er.sender or '').strip().lower(),
                 er.received_at.strftime('%Y-%m-%d %H:%M') if er.received_at else ''
             )
+            is_src = bool(hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk)
+
             if er_key not in seen_keys:
+                # New entry — add it normally
                 seen_keys.add(er_key)
-                is_src = bool(hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk)
+                idx = len(data)
                 data.append({
                     'id': f"er_{er.id}",
                     'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
                     'in_reply_to': '',
                     'sender': er.sender or (rfq.customer.email if rfq.customer else ''),
-                    'recipients': getattr(settings, 'EMAIL_HOST_USER', 'info@mesinstruments.co.in'),
+                    'recipients': settings.DEFAULT_FROM_EMAIL,
                     'cc_recipients': '',
                     'subject': er.subject or f"Enquiry - {rfq.rfq_no}",
                     'body': er.body or '',
@@ -6909,8 +6917,28 @@ def get_rfq_email_thread(request, rfq_id):
                     'is_source': is_src,
                     '_sort_date': er.received_at or timezone.now()
                 })
+                key_to_data_idx[er_key] = idx
+            elif is_src:
+                # This EmailRecord is the source email but was already added from
+                # RFQEmailMessage (same subject/sender/time). Instead of skipping it,
+                # update the existing entry's is_source flag to True so the
+                # highlight always appears correctly.
+                existing_idx = key_to_data_idx.get(er_key)
+                if existing_idx is not None:
+                    data[existing_idx]['is_source'] = True
     except Exception as e:
         logger.warning(f"Could not merge EmailRecord into RFQ email thread: {e}")
+
+    # Safety net: if no entry is marked as source yet, fall back to marking the
+    # earliest incoming RFQEmailMessage for this RFQ (covers manually-created RFQs
+    # and any edge case where the above matching still fails).
+    if not any(entry.get('is_source') for entry in data):
+        earliest_in = RFQEmailMessage.objects.filter(rfq=rfq, direction='IN').order_by('sent_at').first()
+        if earliest_in:
+            for entry in data:
+                if entry.get('id') == earliest_in.id:
+                    entry['is_source'] = True
+                    break
 
     # Sort thread: Originating RFQ email FIRST (is_source=True), followed by newest emails first
     data.sort(key=lambda x: (1 if x.get('is_source') else 0, x.get('_sort_date') or timezone.now()), reverse=True)
@@ -6960,15 +6988,30 @@ def send_rfq_email_reply(request, rfq_id):
 
     # 1. Automatically attach prepared quotation PDF for this RFQ
     try:
-        latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
-        if latest_quotation and latest_quotation.products_snapshot:
-            products = _deserialize_quotation_products(latest_quotation.products_snapshot)
-            quote_no = latest_quotation.quotation_number
-        else:
-            products, _ = _build_selected_quotation_products(rfq, [], [])
-            if not products:
-                products = list(rfq.products.all())
+        product_ids = request.POST.getlist('quotation_product_ids')
+        supplier_price_ids = request.POST.getlist('quotation_supplier_price_ids')
+        mes_rates = request.POST.getlist('mes_rates')
+        delivery_weeks = request.POST.get('delivery_weeks', '').strip()
+        installation_charge = request.POST.get('installation_charge', '').strip()
+
+        if product_ids:
+            products, _ = _build_selected_quotation_products(
+                rfq, product_ids, supplier_price_ids,
+                mes_rates=mes_rates,
+                delivery_weeks=delivery_weeks,
+                installation_charge=installation_charge
+            )
             quote_no = _get_mes_quote_no(rfq)
+        else:
+            latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
+            if latest_quotation and latest_quotation.products_snapshot:
+                products = _deserialize_quotation_products(latest_quotation.products_snapshot)
+                quote_no = latest_quotation.quotation_number
+            else:
+                products, _ = _build_selected_quotation_products(rfq, [], [])
+                if not products:
+                    products = list(rfq.products.all())
+                quote_no = _get_mes_quote_no(rfq)
 
         if products:
             pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
@@ -7203,9 +7246,12 @@ def get_supplier_email_thread(request, dpr_id):
 
     messages_query = RFQEmailMessage.objects.none()
     if supplier and supplier.email:
+        sup_emails = [e.strip() for e in re.split(r'[,;\s]+', supplier.email) if e.strip()]
+        email_q = Q()
+        for em in sup_emails:
+            email_q |= Q(sender__icontains=em) | Q(recipients__icontains=em)
         messages_query = RFQEmailMessage.objects.filter(
-            Q(sender__icontains=supplier.email) |
-            Q(recipients__icontains=supplier.email) |
+            email_q |
             Q(subject__icontains=dpr.serial_number) |
             Q(body__icontains=dpr.serial_number)
         )
@@ -7267,7 +7313,7 @@ def get_supplier_email_thread(request, dpr_id):
                         'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
                         'in_reply_to': '',
                         'sender': er.sender or '',
-                        'recipients': 'info@mesinstruments.co.in',
+                        'recipients': settings.DEFAULT_FROM_EMAIL,
                         'cc_recipients': '',
                         'subject': er.subject or '(No Subject)',
                         'body': er.body or '',

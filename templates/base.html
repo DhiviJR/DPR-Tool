@@ -29,14 +29,19 @@
                 <li class="nav-item">
                     <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">Dashboard</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link dpr-nav-link {% if request.resolver_match.app_name == 'email_classifier' %}active{% endif %}" href="{% url 'email_classifier:dashboard' %}">
+                        <i class="bi bi-envelope-paper me-1"></i>Emails
+                    </a>
+                </li>
+                {% if can_view_rfq %}
+                <li class="nav-item">
+                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'rfq_details' %}active{% endif %}" href="{% url 'rfq_details' %}">RFQ</a>
+                </li>
+                {% endif %}
                 {% if can_view_dpr %}
                 <li class="nav-item">
                     <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'dpr_view' %}active{% endif %}" href="{% url 'dpr_view' %}">DPR View</a>
-                </li>
-                {% endif %}
-                {% if can_view_customer_po %}
-                <li class="nav-item">
-                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'customer_po_product_details' %}active{% endif %}" href="{% url 'customer_po_product_details' %}">Customer PO</a>
                 </li>
                 {% endif %}
                 {% if can_view_supplier_po %}
@@ -51,6 +56,11 @@
                     </ul>
                 </li>
                 {% endif %}
+                {% if can_view_customer_po %}
+                <li class="nav-item">
+                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'customer_po_product_details' %}active{% endif %}" href="{% url 'customer_po_product_details' %}">Customer PO</a>
+                </li>
+                {% endif %}
                 {% if can_view_accounts %}
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle dpr-nav-link {% if request.resolver_match.url_name == 'accounts_details' or request.resolver_match.url_name == 'supplier_accounts_details' %}active{% endif %}"
@@ -63,16 +73,6 @@
                     </ul>
                 </li>
                 {% endif %}
-                {% if can_view_rfq %}
-                <li class="nav-item">
-                    <a class="nav-link dpr-nav-link {% if request.resolver_match.url_name == 'rfq_details' %}active{% endif %}" href="{% url 'rfq_details' %}">RFQ</a>
-                </li>
-                {% endif %}
-                <li class="nav-item">
-                    <a class="nav-link dpr-nav-link {% if request.resolver_match.app_name == 'email_classifier' %}active{% endif %}" href="{% url 'email_classifier:dashboard' %}">
-                        <i class="bi bi-envelope-paper me-1"></i>Emails
-                    </a>
-                </li>
                 {% if can_view_masters or can_view_customer_details %}
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle dpr-nav-link {% if request.resolver_match.url_name == 'customer_details' or request.resolver_match.url_name == 'supplier_details' or request.resolver_match.url_name == 'supplier_rate_cards' %}active{% endif %}"
@@ -91,20 +91,33 @@
                 </li>
                 {% endif %}
             </ul>
-            <div class="d-flex align-items-center gap-3">
-                <div class="dpr-user-pill d-none d-md-flex align-items-center gap-2">
-                    <span class="dpr-user-avatar">{{ user.username|slice:":1"|upper }}</span>
-                    <span>{{ user.username }}</span>
-                    {% if user_role %}
-                    <span class="badge bg-light text-dark fw-bold text-uppercase border" style="font-size: 0.75rem;">{{ user_role }}</span>
-                    {% endif %}
-                </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-outline-light btn-sm shadow-sm d-inline-flex align-items-center gap-1" id="globalSyncMailBtn" title="Sync All Emails (RFQ, Reply Mail & Classified Emails)">
+                    <i class="bi bi-arrow-repeat" id="globalSyncSpinner"></i>
+                    <span>Sync Email</span>
+                </button>
+                {% if user_role %}
+                <span class="badge bg-light text-dark fw-bold text-uppercase border px-2 py-1" style="font-size: 0.75rem;">{{ user_role }}</span>
+                {% else %}
+                <span class="badge bg-light text-dark fw-bold text-uppercase border px-2 py-1" style="font-size: 0.75rem;">{{ user.username }}</span>
+                {% endif %}
                 <a href="{% url 'logout' %}" class="btn btn-outline-light btn-sm">Logout</a>
             </div>
         </div>
         {% endif %}
     </div>
 </nav>
+
+<div id="globalSyncAlertToast" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1085; display: none;">
+    <div id="globalSyncToastInner" class="toast show align-items-center text-white bg-primary border-0 shadow-lg" role="alert">
+        <div class="d-flex p-2">
+            <div class="toast-body py-1 fs-6" id="globalSyncToastMsg">
+                Syncing emails...
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="document.getElementById('globalSyncAlertToast').style.display='none';"></button>
+        </div>
+    </div>
+</div>
 
 <div class="container-fluid px-4 dpr-main">
     {% block content %}{% endblock %}
@@ -122,6 +135,15 @@
 </div>
 
 <style>
+@keyframes dashSpinAnim {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.dash-spinning {
+    display: inline-block;
+    animation: dashSpinAnim 1s linear infinite;
+}
+
 .dpr-loader-overlay {
     position: fixed;
     top: 0;
@@ -233,6 +255,61 @@ window.escapeHtml = function(value) {
         };
     }
 })();
+
+document.addEventListener('DOMContentLoaded', function() {
+    const syncBtn = document.getElementById('globalSyncMailBtn');
+    if (syncBtn) {
+        syncBtn.addEventListener('click', function() {
+            const btn = this;
+            const spinner = document.getElementById('globalSyncSpinner');
+            const alertToast = document.getElementById('globalSyncAlertToast');
+            const toastInner = document.getElementById('globalSyncToastInner');
+            const toastMsg = document.getElementById('globalSyncToastMsg');
+
+            if (spinner) spinner.classList.add('dash-spinning');
+            btn.disabled = true;
+
+            if (alertToast && toastMsg && toastInner) {
+                toastInner.className = 'toast show align-items-center text-white bg-primary border-0 shadow-lg';
+                toastMsg.innerHTML = '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2"></div>Syncing all inboxes (RFQ & Emails)...</div>';
+                alertToast.style.display = 'block';
+            }
+
+            fetch('{% url "sync_all_mail" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'X-Skip-Loader': '1'
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (spinner) spinner.classList.remove('dash-spinning');
+                btn.disabled = false;
+                const bgClass = data.status === 'success' ? 'bg-success' : (data.status === 'warning' ? 'bg-warning text-dark' : 'bg-danger');
+                const icon = data.status === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill';
+                if (alertToast && toastMsg && toastInner) {
+                    toastInner.className = `toast show align-items-center text-white ${bgClass} border-0 shadow-lg`;
+                    toastMsg.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-${icon} me-2 fs-5"></i><span>${window.escapeHtml(data.message || 'Sync completed.')}</span></div>`;
+                    setTimeout(function() {
+                        if (alertToast) alertToast.style.display = 'none';
+                    }, 6000);
+                }
+            })
+            .catch(err => {
+                if (spinner) spinner.classList.remove('dash-spinning');
+                btn.disabled = false;
+                if (alertToast && toastMsg && toastInner) {
+                    toastInner.className = 'toast show align-items-center text-white bg-danger border-0 shadow-lg';
+                    toastMsg.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-x-circle-fill me-2 fs-5"></i><span>Sync error: ${window.escapeHtml(err.message)}</span></div>`;
+                    setTimeout(function() {
+                        if (alertToast) alertToast.style.display = 'none';
+                    }, 6000);
+                }
+            });
+        });
+    }
+});
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

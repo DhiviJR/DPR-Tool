@@ -104,6 +104,35 @@
         justify-content: center;
         flex-shrink: 0;
     }
+
+    /* Resizable Column Widths for RFQ Product Description Table */
+    #rfqProductTable {
+        table-layout: fixed !important;
+    }
+
+    #rfqProductTable th {
+        position: relative !important;
+        user-select: none;
+        vertical-align: middle;
+    }
+
+    #rfqProductTable th .table-col-resizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 8px;
+        height: 100%;
+        cursor: col-resize;
+        user-select: none;
+        touch-action: none;
+        z-index: 25;
+    }
+
+    #rfqProductTable th .table-col-resizer:hover,
+    #rfqProductTable th .table-col-resizer.is-resizing {
+        background-color: #2563eb;
+        opacity: 0.85;
+    }
 </style>
 
 <div class="modal fade" id="addRfqModal" tabindex="-1">
@@ -176,18 +205,18 @@
                                 <table class="table table-bordered align-middle mb-2" id="rfqProductTable" style="min-width: 1400px;">
                                     <thead class="table-light">
                                         <tr>
-                                            <th class="text-center align-middle rfq-select-col" style="width: 40px;">
+                                            <th class="text-center align-middle rfq-select-col" style="width: 45px;">
                                                 <input type="checkbox" class="form-check-input" id="rfqSelectAllUnknownProducts" title="Select / Deselect all products with unknown price">
                                             </th>
-                                            <th>S.no</th>
-                                            <th>Product</th>
-                                            <th>Product Type</th>
-                                            <th>Price Known?</th>
-                                            <th>Qty</th>
-                                            <th>Rate Per Unit</th>
-                                            <th>Value</th>
-                                            <th>Remarks</th>
-                                            <th>Action</th>
+                                            <th style="width: 55px;">S.no</th>
+                                            <th style="width: 320px;">Product</th>
+                                            <th style="width: 160px;">Product Type</th>
+                                            <th style="width: 125px;">Price Known?</th>
+                                            <th style="width: 160px;">Qty</th>
+                                            <th style="width: 220px;">Rate Per Unit</th>
+                                            <th style="width: 130px;">Value</th>
+                                            <th style="width: 200px;">Remarks</th>
+                                            <th style="width: 65px;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -406,9 +435,9 @@
                             </select>
                         </div>
 
-                        <!-- Measuring Load (APG/ARG) -->
+                        <!-- Measuring Land (APG/ARG) -->
                         <div class="col-md-4 apg-arg-field" id="grp_measuring_load">
-                            <label class="form-label small fw-semibold">Measuring Load <span class="text-danger">*</span></label>
+                            <label class="form-label small fw-semibold">Measuring Land <span class="text-danger">*</span></label>
                             <input type="text" id="param_measuring_load" class="form-control form-control-sm" placeholder="e.g. Standard">
                         </div>
 
@@ -489,16 +518,6 @@
                             <input type="text" id="param_bench_mount_details" class="form-control form-control-sm" placeholder="Enter Bench Mount details">
                         </div>
 
-                        <!-- Pull / Chopper (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_pull_chopper">
-                            <label class="form-label small fw-semibold">Pull / Chopper <span class="text-danger">*</span></label>
-                            <select id="param_pull_chopper" class="form-select form-select-sm">
-                                <option value="">Select</option>
-                                <option value="Yes">Yes</option>
-                                <option value="No">No</option>
-                            </select>
-                        </div>
-
                         <!-- Unit Std Air Specific Fields -->
                         <div class="col-md-6 unit-air-field d-none" id="grp_unit_product_name">
                             <label class="form-label small fw-semibold">Product Name <span class="text-danger">*</span></label>
@@ -560,16 +579,6 @@
                         <div class="col-md-6" id="grp_engraving_details">
                             <label class="form-label small fw-semibold">Engraving Details <span class="text-danger">*</span></label>
                             <input type="text" id="param_engraving_details" class="form-control form-control-sm" placeholder="e.g. Marking text">
-                        </div>
-
-                        <!-- Packaging (APG/ARG) -->
-                        <div class="col-md-6 apg-arg-field" id="grp_packaging_mabc">
-                            <label class="form-label small fw-semibold">Packaging (MABC) <span class="text-danger">*</span></label>
-                            <select id="param_packaging_mabc" class="form-select form-select-sm">
-                                <option value="">Select Packaging</option>
-                                <option value="MABC: Required">MABC: Required</option>
-                                <option value="MABC: Not required">MABC: Not required</option>
-                            </select>
                         </div>
 
                         <!-- Remarks -->
@@ -1190,6 +1199,9 @@
                     </div>
                 </div>
                 <div class="ms-auto d-flex align-items-center gap-2">
+                    <button type="button" id="ecPrepareQuotationBtn" class="btn btn-sm text-white" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);font-size:0.8rem;" title="Open Prepare Quotation Table">
+                        <i class="bi bi-table me-1"></i>Prepare Quotation Table
+                    </button>
                     <span id="ecMessageCount" class="badge" style="background:rgba(255,255,255,0.15);font-size:0.75rem;"></span>
                     <button type="button" id="maximizeEmailChainBtn" class="btn btn-sm" style="background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.25);font-size:0.8rem;" title="Maximize Window">
                         <i class="bi bi-arrows-fullscreen" id="maximizeIcon"></i>
@@ -1335,31 +1347,51 @@ function buildQuotationEmailBody(rfq, selectedItems) {
     ].join('\n');
 }
 
+function ensureSupplierPriceSelection(row, rfq) {
+    const checkboxes = row.querySelectorAll('.rfq-quotation-product:not(:disabled)');
+    let hasUnselectedMultiSupplier = false;
+    const unselectedProductNames = [];
+
+    checkboxes.forEach(cb => {
+        cb.checked = true;
+        const productId = cb.value;
+        const radios = row.querySelectorAll(`.rfq-quotation-supplier-price[data-product-id="${productId}"]`);
+
+        if (radios.length === 1) {
+            radios[0].checked = true;
+        } else if (radios.length > 1) {
+            const hasChecked = Array.from(radios).some(r => r.checked);
+            if (!hasChecked) {
+                hasUnselectedMultiSupplier = true;
+                const product = (rfq.products || []).find(p => String(p.id) === String(productId));
+                if (product) {
+                    unselectedProductNames.push(product.product_name || `Product #${productId}`);
+                }
+            }
+        }
+    });
+
+    return {
+        hasUnselectedMultiSupplier: hasUnselectedMultiSupplier,
+        unselectedProductNames: unselectedProductNames
+    };
+}
+
 function openQuotationEmailModal(button) {
     const row = button.closest('tr[data-rfq-id]');
     const rfqId = Number(button.dataset.rfqId);
     const rfq = rfqData.find(item => item.id === rfqId);
     if (!row || !rfq) return;
 
-    let selectedItems = getSelectedQuotationItems(row);
-    if (selectedItems.productIds.length === 0) {
-        // Automatically check all products that have finalized prices and their supplier prices
-        row.querySelectorAll('.rfq-quotation-product:not(:disabled)').forEach(cb => {
-            cb.checked = true;
-            const productId = cb.value;
-            const radios = row.querySelectorAll(`.rfq-quotation-supplier-price[data-product-id="${productId}"]`);
-            if (radios.length === 1) {
-                radios[0].checked = true;
-            } else if (radios.length > 1) {
-                const checkedRadio = Array.from(radios).find(r => r.checked);
-                if (!checkedRadio) {
-                    radios[0].checked = true;
-                }
-            }
-        });
-        selectedItems = getSelectedQuotationItems(row);
+    const selectionResult = ensureSupplierPriceSelection(row, rfq);
+    if (selectionResult.hasUnselectedMultiSupplier) {
+        const pNames = selectionResult.unselectedProductNames.join(', ');
+        alert(`Multiple supplier prices are available for: ${pNames}.\n\nPlease select one supplier price radio button for each product before proceeding.`);
+        showQuotationSelectionWarning(row, 'Select Supplier Price', `Please select a supplier price radio button for: ${pNames}`, 'alert-warning');
+        return;
     }
 
+    const selectedItems = getSelectedQuotationItems(row);
     const validationMessage = validateSelectedQuotationItems(rfq, selectedItems);
     if (validationMessage) {
         showQuotationSelectionWarning(row, 'Cannot Prepare Quotation', validationMessage, 'alert-danger');
@@ -1387,6 +1419,7 @@ function openQuotationEmailModal(button) {
     const form = document.getElementById('prepareQuotationForm');
     form.reset();
     form.dataset.rfqId = String(rfq.id);
+    form.dataset.mode = 'new';
     form.dataset.hasSentEmail = hasSentEmail ? 'true' : 'false';
 
     const titleEl = document.getElementById('prepareQuotationModalLabel');
@@ -1753,6 +1786,8 @@ document.addEventListener('submit', function (e) {
     const deliveryWeeks = document.getElementById('deliveryWeeksInput')?.value || '';
     const installationCharge = document.getElementById('installationChargeInput')?.value || '';
 
+    const isReplyMode = form.dataset.mode === 'reply';
+
     // Hide prepare quotation modal
     const modalEl = document.getElementById('prepareQuotationModal');
     const modal = bootstrap.Modal.getInstance(modalEl);
@@ -1760,7 +1795,19 @@ document.addEventListener('submit', function (e) {
         modal.hide();
     }
 
-    // Populate quotation email form
+    if (isReplyMode) {
+        window.activeReplyQuotationParams = {
+            productIds: productIds,
+            supplierPriceIds: supplierPriceIds,
+            mesRates: mesRates,
+            deliveryWeeks: deliveryWeeks,
+            installationCharge: installationCharge
+        };
+        openEmailChainModalDirect(rfq.id, rfq.rfq_no || ('RFQ #' + rfq.id));
+        return;
+    }
+
+    // Populate quotation email form (New Email mode)
     const emailForm = document.getElementById('quotationEmailForm');
     emailForm.reset();
     document.getElementById('quotationEmailRfqId').value = rfq.id;
@@ -2926,15 +2973,9 @@ document.getElementById('maximizeEmailChainBtn')?.addEventListener('click', func
     }
 });
 
-document.addEventListener('click', function(e) {
-    const chainBtn = e.target.closest('.rfq-email-chain-btn');
-    if (!chainBtn) return;
-
-    const rfqId = chainBtn.getAttribute('data-rfq-id');
-    const rfqNo = chainBtn.getAttribute('data-rfq-no') || ('RFQ #' + rfqId);
-
+function openEmailChainModalDirect(rfqId, rfqNo) {
     document.getElementById('emailChainRfqId').value = rfqId;
-    document.getElementById('emailChainRfqNo').textContent = rfqNo;
+    document.getElementById('emailChainRfqNo').textContent = rfqNo || ('RFQ #' + rfqId);
     document.getElementById('emailChainAlert').innerHTML = '';
     document.getElementById('emailReplyComposer').style.display = 'none';
     document.getElementById('ecDetailContent').style.display = 'none';
@@ -2945,6 +2986,105 @@ document.addEventListener('click', function(e) {
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
     loadEmailThread(rfqId, true);
+}
+
+function openQuotationModalForReply(chainBtn) {
+    const rfqId = Number(chainBtn.getAttribute('data-rfq-id'));
+    const rfqNo = chainBtn.getAttribute('data-rfq-no') || ('RFQ #' + rfqId);
+    const row = chainBtn.closest ? chainBtn.closest('tr[data-rfq-id]') : document.querySelector(`tr[data-rfq-id="${rfqId}"]`);
+    const rfq = (typeof rfqData !== 'undefined') ? rfqData.find(item => item.id === rfqId) : null;
+
+    if (!row || !rfq || !rfq.products || rfq.products.length === 0 || !rfq.has_prices) {
+        openEmailChainModalDirect(rfqId, rfqNo);
+        return;
+    }
+
+    const selectionResult = ensureSupplierPriceSelection(row, rfq);
+    if (selectionResult.hasUnselectedMultiSupplier) {
+        const pNames = selectionResult.unselectedProductNames.join(', ');
+        alert(`Multiple supplier prices are available for: ${pNames}.\n\nPlease select one supplier price radio button for each product before replying.`);
+        showQuotationSelectionWarning(row, 'Select Supplier Price', `Please select a supplier price radio button for: ${pNames}`, 'alert-warning');
+        return;
+    }
+
+    const selectedItems = getSelectedQuotationItems(row);
+    const validationMessage = validateSelectedQuotationItems(rfq, selectedItems);
+    if (validationMessage) {
+        openEmailChainModalDirect(rfqId, rfqNo);
+        return;
+    }
+
+    const form = document.getElementById('prepareQuotationForm');
+    form.reset();
+    form.dataset.rfqId = String(rfq.id);
+    form.dataset.mode = 'reply';
+
+    const titleEl = document.getElementById('prepareQuotationModalLabel');
+    if (titleEl) {
+        titleEl.textContent = `Prepare Quotation (Reply Email) - ${rfq.rfq_no}`;
+    }
+
+    const submitBtn = document.getElementById('prepareQuotationSubmitBtn');
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i class="bi bi-reply-all me-1"></i>Continue to Reply Email';
+    }
+
+    const tbody = document.querySelector('#prepareQuotationTable tbody');
+    tbody.innerHTML = '';
+    const datalist = document.getElementById('rfqProductsDatalist');
+    if (datalist) {
+        datalist.innerHTML = '';
+        (rfq.products || []).forEach(product => {
+            const option = document.createElement('option');
+            option.value = product.product_name || '';
+            datalist.appendChild(option);
+        });
+    }
+
+    selectedItems.productIds.forEach(productId => {
+        const product = (rfq.products || []).find(item => String(item.id) === String(productId));
+        if (!product) return;
+        let rate = parseFloat(product.rate_per_unit) || 0;
+        let supplierValue = parseFloat(product.value) || 0;
+        let supplierPriceId = '';
+        const checkedSupplierPrice = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${product.id}"]:checked`);
+        if (checkedSupplierPrice) {
+            const supplierPrice = (product.supplier_prices || []).find(price => String(price.id) === String(checkedSupplierPrice.value));
+            if (supplierPrice) {
+                rate = parseFloat(supplierPrice.price) || rate;
+                supplierValue = parseFloat(supplierPrice.value) || supplierValue;
+                supplierPriceId = String(supplierPrice.id);
+            }
+        }
+        addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId);
+    });
+
+    checkDeliveryWeeksVisibility();
+    checkInstallationChargeVisibility();
+    checkProfitWarning();
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal')).show();
+}
+
+document.addEventListener('click', function(e) {
+    const chainBtn = e.target.closest('.rfq-email-chain-btn');
+    if (!chainBtn) return;
+    openQuotationModalForReply(chainBtn);
+});
+
+document.getElementById('ecPrepareQuotationBtn')?.addEventListener('click', function() {
+    const rfqId = Number(document.getElementById('emailChainRfqId').value);
+    if (!rfqId) return;
+    const row = document.querySelector(`tr[data-rfq-id="${rfqId}"]`);
+    const rfq = (typeof rfqData !== 'undefined') ? rfqData.find(item => item.id === rfqId) : null;
+    if (row && rfq) {
+        const ecModal = bootstrap.Modal.getInstance(document.getElementById('emailChainModal'));
+        if (ecModal) ecModal.hide();
+        const chainBtn = row.querySelector('.rfq-email-chain-btn');
+        if (chainBtn) {
+            openQuotationModalForReply(chainBtn);
+        }
+    }
 });
 
 // Toggle Smart Filter ON/OFF
@@ -3134,7 +3274,11 @@ function openReplyComposer(msg) {
     // Pre-populate default quotation template body if rfq exists
     let defaultBody = '';
     if (rfq && typeof buildQuotationEmailBody === 'function') {
-        defaultBody = buildQuotationEmailBody(rfq, { productIds: [], supplierPriceIds: [] });
+        const qP = window.activeReplyQuotationParams || { productIds: [], supplierPriceIds: [] };
+        defaultBody = buildQuotationEmailBody(rfq, {
+            productIds: qP.productIds || [],
+            supplierPriceIds: (qP.supplierPriceIds || []).filter(Boolean)
+        });
     }
 
     // Append previous email thread history below the reply content
@@ -3150,7 +3294,17 @@ function openReplyComposer(msg) {
     // Update quotation PDF preview link
     const previewBtn = document.getElementById('previewReplyQuotationPdfBtn');
     if (previewBtn && rfqId) {
-        previewBtn.href = `/rfq/${rfqId}/quotation/download/`;
+        const qParams = new URLSearchParams();
+        if (window.activeReplyQuotationParams) {
+            const qP = window.activeReplyQuotationParams;
+            (qP.productIds || []).forEach(id => qParams.append('product_ids', id));
+            (qP.supplierPriceIds || []).forEach(id => { if (id) qParams.append('supplier_price_ids', id); });
+            (qP.mesRates || []).forEach(r => qParams.append('mes_rates', r));
+            if (qP.deliveryWeeks) qParams.append('delivery_weeks', qP.deliveryWeeks);
+            if (qP.installationCharge) qParams.append('installation_charge', qP.installationCharge);
+        }
+        const qs = qParams.toString();
+        previewBtn.href = `/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`;
     }
 
     // Hide detail view (header, body, footer) and display reply composer cleanly
@@ -3255,9 +3409,19 @@ document.getElementById('emailReplyForm')?.addEventListener('submit', function(e
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
 
+    const formData = new FormData(this);
+    if (window.activeReplyQuotationParams) {
+        const qP = window.activeReplyQuotationParams;
+        (qP.productIds || []).forEach(id => formData.append('quotation_product_ids', id));
+        (qP.supplierPriceIds || []).forEach(id => { if (id) formData.append('quotation_supplier_price_ids', id); });
+        (qP.mesRates || []).forEach(r => formData.append('mes_rates', r));
+        if (qP.deliveryWeeks) formData.append('delivery_weeks', qP.deliveryWeeks);
+        if (qP.installationCharge) formData.append('installation_charge', qP.installationCharge);
+    }
+
     fetch(`/rfq/${rfqId}/send-reply/`, {
         method: 'POST',
-        body: new FormData(this),
+        body: formData,
         headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value }
     })
     .then(r => r.json())
@@ -3331,7 +3495,7 @@ function isProductSpecComplete(row) {
         } else {
             if (!hasVal("Size") || !hasVal("Material") || !hasVal("Engraving details") || !hasVal("Remarks")) return false;
             if (category !== 'TRG' && category !== 'TPG') {
-                if (!hasVal("Measuring load") || !hasVal("Jet from face") || !hasVal("No. of jets") || !hasVal("Module") || !hasVal("Gauge Type") || !hasVal("Pull / Chopper") || !hasVal("Packaging")) return false;
+                if ((!hasVal("Measuring land") && !hasVal("Measuring load")) || !hasVal("Jet from face") || !hasVal("No. of jets") || !hasVal("Module") || !hasVal("Gauge Type")) return false;
                 if (category === 'ARG') {
                     if (!hasVal("Type of OD")) return false;
                 } else { // APG
@@ -3517,7 +3681,8 @@ function openProductParamsModal(row) {
                     if (data["Material"]) document.getElementById('param_material').value = data["Material"];
 
                     if (category !== 'TRG' && category !== 'TPG') {
-                        if (data["Measuring load"]) document.getElementById('param_measuring_load').value = data["Measuring load"];
+                        if (data["Measuring land"]) document.getElementById('param_measuring_load').value = data["Measuring land"];
+                        else if (data["Measuring load"]) document.getElementById('param_measuring_load').value = data["Measuring load"];
                         if (data["Type of ID"]) document.getElementById('param_type_of_id').value = data["Type of ID"];
                         if (data["Type of OD"]) document.getElementById('param_type_of_od').value = data["Type of OD"];
                         if (data["Depth collar"]) document.getElementById('param_depth_collar').value = data["Depth collar"];
@@ -3532,8 +3697,6 @@ function openProductParamsModal(row) {
                             }
                         }
                         if (data["Bench mount details"]) document.getElementById('param_bench_mount_details').value = data["Bench mount details"];
-                        if (data["Pull / Chopper"]) document.getElementById('param_pull_chopper').value = data["Pull / Chopper"];
-                        if (data["Packaging"]) document.getElementById('param_packaging_mabc').value = data["Packaging"];
                     }
                 }
             }
@@ -3685,7 +3848,7 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
         specs["Material"] = document.getElementById('param_material').value;
 
         if (category !== 'TRG' && category !== 'TPG') {
-            specs["Measuring load"] = document.getElementById('param_measuring_load').value.trim();
+            specs["Measuring land"] = document.getElementById('param_measuring_load').value.trim();
 
             if (category === 'ARG') {
                 specs["Type of OD"] = document.getElementById('param_type_of_od').value;
@@ -3704,9 +3867,6 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
             if (gType === 'Bench mount') {
                 specs["Bench mount details"] = document.getElementById('param_bench_mount_details').value.trim();
             }
-
-            specs["Pull / Chopper"] = document.getElementById('param_pull_chopper').value;
-            specs["Packaging"] = document.getElementById('param_packaging_mabc').value;
         }
     }
 
@@ -3775,6 +3935,68 @@ document.addEventListener('click', function(e) {
 // Initial update of spec previews on table load
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('#rfqProductTable tbody tr').forEach(row => updateSpecPreview(row));
+});
+
+// ============================================================
+// Resizable Column Widths for Product Description Table
+// ============================================================
+function initResizableRfqTable() {
+    const table = document.getElementById('rfqProductTable');
+    if (!table) return;
+
+    const ths = table.querySelectorAll('thead th');
+    ths.forEach((th, index) => {
+        // Skip last column (Action button column)
+        if (index === ths.length - 1) return;
+
+        if (!th.querySelector('.table-col-resizer')) {
+            const resizer = document.createElement('div');
+            resizer.className = 'table-col-resizer';
+            resizer.title = 'Drag to resize column width';
+            th.appendChild(resizer);
+
+            let startX = 0;
+            let startWidth = 0;
+
+            const onMouseMove = (e) => {
+                const dx = e.clientX - startX;
+                const newWidth = Math.max(35, startWidth + dx);
+                th.style.width = newWidth + 'px';
+                th.style.minWidth = newWidth + 'px';
+            };
+
+            const onMouseUp = () => {
+                resizer.classList.remove('is-resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+
+            resizer.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                startX = e.clientX;
+                startWidth = th.offsetWidth;
+                resizer.classList.add('is-resizing');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initResizableRfqTable();
+
+    const addRfqModal = document.getElementById('addRfqModal');
+    if (addRfqModal) {
+        addRfqModal.addEventListener('shown.bs.modal', function() {
+            initResizableRfqTable();
+        });
+    }
 });
 
 // ============================================================
