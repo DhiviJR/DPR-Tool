@@ -275,6 +275,67 @@ class DatasheetAccessoryRate(models.Model):
         return f"{self.size_range_label or 'Accessory'}: ₹{self.unit_rate}"
 
 
+class DatasheetExtensionRate(models.Model):
+    datasheet = models.ForeignKey(
+        SupplierDatasheet,
+        on_delete=models.CASCADE,
+        related_name='extensions'
+    )
+    from_size = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    to_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Null means 'and above'")
+    price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Extension Add-on Rate (₹)")
+
+    class Meta:
+        ordering = ['from_size', 'id']
+
+    def __str__(self):
+        to_str = f"{self.to_size}mm" if self.to_size else "above"
+        return f"Extension {self.from_size} - {to_str}: ₹{self.price}"
+
+
+class DatasheetDepthCollarRate(models.Model):
+    datasheet = models.ForeignKey(
+        SupplierDatasheet,
+        on_delete=models.CASCADE,
+        related_name='depth_collars'
+    )
+    from_size = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    to_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Null means 'and above'")
+    price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Depth Collar Add-on Rate (₹)")
+
+    class Meta:
+        ordering = ['from_size', 'id']
+
+    def __str__(self):
+        to_str = f"{self.to_size}mm" if self.to_size else "above"
+        return f"Depth Collar {self.from_size} - {to_str}: ₹{self.price}"
+
+
+class DatasheetAddonRate(models.Model):
+    ADJUSTMENT_TYPE_CHOICES = (
+        ('FIXED', 'Rate (₹)'),
+        ('PERCENTAGE', 'Percentage (%)'),
+    )
+
+    datasheet = models.ForeignKey(
+        SupplierDatasheet,
+        on_delete=models.CASCADE,
+        related_name='addons'
+    )
+    addon_name = models.CharField(max_length=150, help_text="e.g. Right angle attachment, Air jet")
+    spec_value = models.CharField(max_length=150, blank=True, null=True, help_text="Extra parameter e.g. number of air jets '3'")
+    adjustment_type = models.CharField(max_length=20, choices=ADJUSTMENT_TYPE_CHOICES, default='FIXED')
+    adjustment_value = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        adj = f"+{self.adjustment_value}%" if self.adjustment_type == 'PERCENTAGE' else f"+₹{self.adjustment_value}"
+        spec_str = f" ({self.spec_value})" if self.spec_value else ""
+        return f"{self.addon_name}{spec_str}: {adj}"
+
+
 
 
 

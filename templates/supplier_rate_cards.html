@@ -128,8 +128,8 @@
                                     <tr>
                                         <th>Above (mm)</th>
                                         <th>Up to & Including (mm)</th>
-                                        <th>Air Plug Gauge Rate (₹)</th>
-                                        <th>Setting Ring Rate (₹)</th>
+                                        <th id="viewHeadPrice1">Air Plug Gauge Rate (₹)</th>
+                                        <th id="viewHeadPrice2" class="col-sr-price">Setting Ring Rate (₹)</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -138,19 +138,19 @@
                     </div>
                 </div>
 
-                <!-- View Modifiers -->
-                <div class="card mb-4 border shadow-sm">
+                <!-- View Extensions to check deeper bores -->
+                <div class="card mb-4 border shadow-sm" id="viewExtensionsCard">
                     <div class="card-header bg-light py-2">
-                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-sliders me-2 text-primary"></i>Specification Price Modifiers (% / ₹ Add-ons)</h6>
+                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-arrows-expand me-2 text-primary"></i>Extension to Check Deeper Bores (Add-on Rates)</h6>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
-                            <table class="table table-sm table-striped align-middle mb-0" id="viewModifiersTable">
+                            <table class="table table-sm table-striped align-middle mb-0" id="viewExtensionsTable">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>Spec Parameter Key</th>
-                                        <th>Match Value</th>
-                                        <th>Adjustment</th>
+                                        <th>From Size (mm)</th>
+                                        <th>To Size (mm)</th>
+                                        <th>Extension Rate (₹)</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -159,18 +159,40 @@
                     </div>
                 </div>
 
-                <!-- View Accessories -->
+                <!-- View Depth Collar for air plug gauges -->
+                <div class="card mb-4 border shadow-sm" id="viewDepthCollarsCard">
+                    <div class="card-header bg-light py-2">
+                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-disc me-2 text-primary"></i>Depth Collar for Air Plug Gauges (Add-on Rates)</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0" id="viewDepthCollarsTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>From Size (mm)</th>
+                                        <th>To Size (mm)</th>
+                                        <th>Depth Collar Rate (₹)</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View Add-on Rates -->
                 <div class="card mb-3 border shadow-sm">
                     <div class="card-header bg-light py-2">
-                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-gear me-2 text-primary"></i>Accessory Rates</h6>
+                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-plus-circle me-2 text-primary"></i>Add-on Rates</h6>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
-                            <table class="table table-sm table-striped align-middle mb-0" id="viewAccessoriesTable">
+                            <table class="table table-sm table-striped align-middle mb-0" id="viewAddonsTable">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>Size / Range Label</th>
-                                        <th>Unit Rate (₹)</th>
+                                        <th>Description</th>
+                                        <th>Rate / Percentage</th>
+                                        <th>Value</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -217,9 +239,9 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Product Type</label>
-                            <select name="product_type" id="ds_product_type" class="form-select">
-                                <option value="">Select Product Type (Optional)</option>
+                            <label class="form-label fw-semibold">Product Type <span class="text-danger">*</span></label>
+                            <select name="product_type" id="ds_product_type" class="form-select" required>
+                                <option value="">Select Product Type</option>
                                 {% for value, label in product_type_choices %}
                                 <option value="{{ value }}">{{ label }}</option>
                                 {% endfor %}
@@ -242,8 +264,8 @@
                                         <tr>
                                             <th>Above (mm)</th>
                                             <th>Up to & Including (mm)</th>
-                                            <th>Air Plug Gauge Rate (₹)</th>
-                                            <th>Setting Ring Rate (₹)</th>
+                                            <th id="dsHeadPrice1">Air Plug Gauge Rate (₹)</th>
+                                            <th id="dsHeadPrice2" class="col-sr-price">Setting Ring Rate (₹)</th>
                                             <th style="width: 60px;">Action</th>
                                         </tr>
                                     </thead>
@@ -255,54 +277,86 @@
                         </div>
                     </div>
 
-                    <!-- Section 2: Spec Modifiers -->
-                    <div class="card mb-4 border shadow-sm">
+                    <!-- Section 2: Extension to check deeper bores (APG only) -->
+                    <div class="card mb-4 border shadow-sm" id="dsExtensionsCard">
                         <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-                            <h6 class="mb-0 fw-bold"><i class="bi bi-sliders me-2 text-primary"></i>Specification Price Modifiers (Add-ons / % Rules)</h6>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="addDsModifierRowBtn">
-                                <i class="bi bi-plus-lg me-1"></i>Add Modifier Row
+                            <h6 class="mb-0 fw-bold"><i class="bi bi-arrows-expand me-2 text-primary"></i>Extension to Check Deeper Bores (Add-on Rates)</h6>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="addDsExtensionRowBtn">
+                                <i class="bi bi-plus-lg me-1"></i>Add Extension Row
                             </button>
                         </div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0" id="dsModifiersTable">
+                                <table class="table table-sm align-middle mb-0" id="dsExtensionsTable">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Spec Parameter Key</th>
-                                            <th>Match Value</th>
-                                            <th style="width: 150px;">Adjustment Type</th>
-                                            <th style="width: 150px;">Adjustment Value</th>
+                                            <th>From Size (mm)</th>
+                                            <th>To Size (mm)</th>
+                                            <th>Extension Rate (₹)</th>
                                             <th style="width: 60px;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <!-- Dynamic Modifier Rows -->
+                                        <!-- Dynamic Extension Rows -->
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Section 3: Accessories -->
-                    <div class="card mb-3 border shadow-sm">
+                    <!-- Section 3: Depth Collar for air plug gauges (APG only) -->
+                    <div class="card mb-4 border shadow-sm" id="dsDepthCollarsCard">
                         <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-                            <h6 class="mb-0 fw-bold"><i class="bi bi-gear me-2 text-primary"></i>Accessory Rates</h6>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="addDsAccessoryRowBtn">
-                                <i class="bi bi-plus-lg me-1"></i>Add Accessory Row
+                            <h6 class="mb-0 fw-bold"><i class="bi bi-disc me-2 text-primary"></i>Depth Collar for Air Plug Gauges (Add-on Rates)</h6>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="addDsDepthCollarRowBtn">
+                                <i class="bi bi-plus-lg me-1"></i>Add Depth Collar Row
                             </button>
                         </div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0" id="dsAccessoriesTable">
+                                <table class="table table-sm align-middle mb-0" id="dsDepthCollarsTable">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Size / Range Label</th>
-                                            <th style="width: 150px;">Unit Rate (₹)</th>
+                                            <th>From Size (mm)</th>
+                                            <th>To Size (mm)</th>
+                                            <th>Depth Collar Rate (₹)</th>
                                             <th style="width: 60px;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <!-- Dynamic Accessory Rows -->
+                                        <!-- Dynamic Depth Collar Rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 4: Add-on Rates -->
+                    <div class="card mb-3 border shadow-sm">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                            <h6 class="mb-0 fw-bold"><i class="bi bi-plus-circle me-2 text-primary"></i>Add-on Rates (Right Angle, Bench Mount, Super Blind, Dull Chrome, Air Jet, etc.)</h6>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-info btn-sm" id="addDsAirJetRowBtn">
+                                    <i class="bi bi-plus-lg me-1"></i>Add Air Jet Row
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="addDsAddonRowBtn">
+                                    <i class="bi bi-plus-lg me-1"></i>Add Custom Add-on
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0" id="dsAddonsTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Description</th>
+                                            <th style="width: 220px;">Rate / Percentage</th>
+                                            <th style="width: 180px;">Value</th>
+                                            <th style="width: 60px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Dynamic Add-on Rows -->
                                     </tbody>
                                 </table>
                             </div>
@@ -324,15 +378,47 @@
 <script>
 let currentViewingDatasheetId = null;
 
+function toggleFormSectionsForProductType(prodType) {
+    const pType = (prodType || '').toUpperCase();
+    const isAPG = pType === '' || pType === 'APG';
+    const isARG = pType === 'ARG';
+    const isDual = isAPG || isARG;
+
+    // Toggle Extensions and Depth Collars cards (APG only)
+    const extCard = document.getElementById('dsExtensionsCard');
+    const dcCard = document.getElementById('dsDepthCollarsCard');
+    if (extCard) extCard.style.display = isAPG ? 'block' : 'none';
+    if (dcCard) dcCard.style.display = isAPG ? 'block' : 'none';
+
+    // Update Form Table Headers
+    const h1 = document.getElementById('dsHeadPrice1');
+    const h2 = document.getElementById('dsHeadPrice2');
+    if (h1) h1.textContent = isAPG ? 'Air Plug Gauge Rate (₹)' : (isARG ? 'Air Ring Gauge Rate (₹)' : 'Base Rate (₹)');
+    if (h2) {
+        h2.textContent = isAPG ? 'Setting Ring Rate (₹)' : (isARG ? 'Master Setting Plug Rate (₹)' : '');
+        h2.style.display = isDual ? '' : 'none';
+    }
+
+    // Toggle 2nd rate column in existing Form rows
+    document.querySelectorAll('#dsRangesTable .col-sr-price').forEach(td => {
+        td.style.display = isDual ? '' : 'none';
+    });
+}
+
 function addDsRangeRow(data = {}) {
     const tbody = document.querySelector('#dsRangesTable tbody');
     if (!tbody) return;
+    const prodType = (document.getElementById('ds_product_type')?.value || 'APG').toUpperCase();
+    const isAPG = prodType === '' || prodType === 'APG';
+    const isARG = prodType === 'ARG';
+    const isDual = isAPG || isARG;
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
         <td><input type="number" step="0.01" name="range_min_diameter[]" class="form-control form-control-sm" value="${data.min_diameter !== undefined ? data.min_diameter : '0.00'}" placeholder="Above mm"></td>
         <td><input type="number" step="0.01" name="range_max_diameter[]" class="form-control form-control-sm" value="${data.max_diameter !== undefined ? data.max_diameter : ''}" placeholder="Up to mm (blank for above)"></td>
-        <td><input type="number" step="0.01" name="range_price[]" class="form-control form-control-sm" value="${data.price !== undefined ? data.price : '0.00'}" placeholder="APG Rate ₹"></td>
-        <td><input type="number" step="0.01" name="range_sr_price[]" class="form-control form-control-sm" value="${data.setting_ring_price !== undefined ? data.setting_ring_price : '0.00'}" placeholder="SR Rate ₹"></td>
+        <td><input type="number" step="0.01" name="range_price[]" class="form-control form-control-sm" value="${data.price !== undefined ? data.price : '0.00'}" placeholder="Rate ₹"></td>
+        <td class="col-sr-price" style="${isDual ? '' : 'display: none;'}"><input type="number" step="0.01" name="range_sr_price[]" class="form-control form-control-sm" value="${data.setting_ring_price !== undefined ? data.setting_ring_price : '0.00'}" placeholder="Rate 2 ₹"></td>
         <td>
             <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="this.closest('tr').remove()">
                 <i class="bi bi-trash"></i>
@@ -342,36 +428,77 @@ function addDsRangeRow(data = {}) {
     tbody.appendChild(tr);
 }
 
-function addDsModifierRow(data = {}) {
-    const tbody = document.querySelector('#dsModifiersTable tbody');
+function addDsExtensionRow(data = {}) {
+    const tbody = document.querySelector('#dsExtensionsTable tbody');
     if (!tbody) return;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-        <td><input type="text" name="modifier_spec_key[]" class="form-control form-control-sm" value="${data.spec_key || 'No. of jets'}" placeholder="e.g. No. of jets"></td>
-        <td><input type="text" name="modifier_spec_val[]" class="form-control form-control-sm" value="${data.spec_value_match || ''}" placeholder="e.g. 3"></td>
+        <td><input type="number" step="0.01" name="extension_from_size[]" class="form-control form-control-sm" value="${data.from_size !== undefined ? data.from_size : '0.00'}" placeholder="From mm"></td>
+        <td><input type="number" step="0.01" name="extension_to_size[]" class="form-control form-control-sm" value="${data.to_size !== undefined ? data.to_size : ''}" placeholder="To mm (blank for above)"></td>
+        <td><input type="number" step="0.01" name="extension_price[]" class="form-control form-control-sm" value="${data.price !== undefined ? data.price : '0.00'}" placeholder="Add-on Rate ₹"></td>
         <td>
-            <select name="modifier_adj_type[]" class="form-select form-select-sm">
-                <option value="PERCENTAGE" ${data.adjustment_type !== 'FIXED' ? 'selected' : ''}>% Add-on</option>
-                <option value="FIXED" ${data.adjustment_type === 'FIXED' ? 'selected' : ''}>₹ Fixed</option>
+            <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="this.closest('tr').remove()">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function addDsDepthCollarRow(data = {}) {
+    const tbody = document.querySelector('#dsDepthCollarsTable tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="number" step="0.01" name="depth_collar_from_size[]" class="form-control form-control-sm" value="${data.from_size !== undefined ? data.from_size : '0.00'}" placeholder="From mm"></td>
+        <td><input type="number" step="0.01" name="depth_collar_to_size[]" class="form-control form-control-sm" value="${data.to_size !== undefined ? data.to_size : ''}" placeholder="To mm (blank for above)"></td>
+        <td><input type="number" step="0.01" name="depth_collar_price[]" class="form-control form-control-sm" value="${data.price !== undefined ? data.price : '0.00'}" placeholder="Add-on Rate ₹"></td>
+        <td>
+            <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="this.closest('tr').remove()">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function addDsAddonRow(data = {}) {
+    const tbody = document.querySelector('#dsAddonsTable tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    
+    const isAirJet = (data.addon_name || '').toLowerCase().includes('air jet');
+    const nameVal = data.addon_name || '';
+    const specVal = data.spec_value || '';
+    const adjType = data.adjustment_type || 'FIXED';
+    const adjVal = data.adjustment_value !== undefined ? data.adjustment_value : '0.00';
+
+    let descCellHtml = '';
+    if (isAirJet) {
+        descCellHtml = `
+            <div class="d-flex align-items-center gap-2">
+                <input type="text" name="addon_name[]" class="form-control form-control-sm fw-semibold" value="${nameVal || 'Air jet'}" style="width: 140px;">
+                <input type="text" name="addon_spec_val[]" class="form-control form-control-sm" value="${specVal}" placeholder="No. of jets (e.g. 3, 4, 6)" style="flex: 1;">
+            </div>
+        `;
+    } else {
+        descCellHtml = `
+            <div class="d-flex align-items-center gap-2">
+                <input type="text" name="addon_name[]" class="form-control form-control-sm" value="${nameVal}" placeholder="Add-on description">
+                <input type="hidden" name="addon_spec_val[]" value="${specVal}">
+            </div>
+        `;
+    }
+
+    tr.innerHTML = `
+        <td>${descCellHtml}</td>
+        <td>
+            <select name="addon_adj_type[]" class="form-select form-select-sm">
+                <option value="FIXED" ${adjType === 'FIXED' ? 'selected' : ''}>Rate (₹)</option>
+                <option value="PERCENTAGE" ${adjType === 'PERCENTAGE' ? 'selected' : ''}>Percentage (%)</option>
             </select>
         </td>
-        <td><input type="number" step="0.01" name="modifier_adj_val[]" class="form-control form-control-sm" value="${data.adjustment_value !== undefined ? data.adjustment_value : '0.00'}" placeholder="Value"></td>
-        <td>
-            <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="this.closest('tr').remove()">
-                <i class="bi bi-trash"></i>
-            </button>
-        </td>
-    `;
-    tbody.appendChild(tr);
-}
-
-function addDsAccessoryRow(data = {}) {
-    const tbody = document.querySelector('#dsAccessoriesTable tbody');
-    if (!tbody) return;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-        <td><input type="text" name="accessory_size_label[]" class="form-control form-control-sm" value="${data.size_range_label || data.item_name || ''}" placeholder="e.g. Bench Mount / 2.0mm to 50.0mm"></td>
-        <td><input type="number" step="0.01" name="accessory_rate[]" class="form-control form-control-sm" value="${data.unit_rate !== undefined ? data.unit_rate : '0.00'}" placeholder="Rate ₹"></td>
+        <td><input type="number" step="0.01" name="addon_adj_val[]" class="form-control form-control-sm" value="${adjVal}" placeholder="Value"></td>
         <td>
             <button type="button" class="btn btn-outline-danger btn-sm p-1" onclick="this.closest('tr').remove()">
                 <i class="bi bi-trash"></i>
@@ -385,13 +512,23 @@ function resetDatasheetForm() {
     document.getElementById('supplierDatasheetForm').reset();
     document.getElementById('ds_datasheet_id').value = '';
     document.querySelector('#dsRangesTable tbody').innerHTML = '';
-    document.querySelector('#dsModifiersTable tbody').innerHTML = '';
-    document.querySelector('#dsAccessoriesTable tbody').innerHTML = '';
+    document.querySelector('#dsExtensionsTable tbody').innerHTML = '';
+    document.querySelector('#dsDepthCollarsTable tbody').innerHTML = '';
+    document.querySelector('#dsAddonsTable tbody').innerHTML = '';
     document.getElementById('datasheetFormAlert').innerHTML = '';
 
+    toggleFormSectionsForProductType(document.getElementById('ds_product_type')?.value);
+
     addDsRangeRow();
-    addDsModifierRow();
-    addDsAccessoryRow();
+    addDsExtensionRow();
+    addDsDepthCollarRow();
+    
+    // Add default pre-filled 5 add-on rows matching datasheet
+    addDsAddonRow({ addon_name: 'Right angle attachment', adjustment_type: 'FIXED', adjustment_value: '0.00' });
+    addDsAddonRow({ addon_name: 'Bracket or Bench mounted', adjustment_type: 'FIXED', adjustment_value: '0.00' });
+    addDsAddonRow({ addon_name: 'Super Blind Bore', adjustment_type: 'PERCENTAGE', adjustment_value: '0.00' });
+    addDsAddonRow({ addon_name: 'Dull chrome plated setting ring', adjustment_type: 'PERCENTAGE', adjustment_value: '0.00' });
+    addDsAddonRow({ addon_name: 'Air jet', spec_value: '', adjustment_type: 'PERCENTAGE', adjustment_value: '0.00' });
 }
 
 function openEditModalForId(dsId) {
@@ -404,20 +541,33 @@ function openEditModalForId(dsId) {
                 document.getElementById('ds_supplier_id').value = ds.supplier_id;
                 document.getElementById('ds_product_type').value = ds.product_type || '';
 
+                toggleFormSectionsForProductType(ds.product_type);
+
                 const rangesTbody = document.querySelector('#dsRangesTable tbody');
                 rangesTbody.innerHTML = '';
                 (ds.price_ranges || []).forEach(r => addDsRangeRow(r));
                 if (!ds.price_ranges || ds.price_ranges.length === 0) addDsRangeRow();
 
-                const modsTbody = document.querySelector('#dsModifiersTable tbody');
-                modsTbody.innerHTML = '';
-                (ds.modifiers || []).forEach(m => addDsModifierRow(m));
-                if (!ds.modifiers || ds.modifiers.length === 0) addDsModifierRow();
+                const extsTbody = document.querySelector('#dsExtensionsTable tbody');
+                extsTbody.innerHTML = '';
+                (ds.extensions || []).forEach(e => addDsExtensionRow(e));
+                if (!ds.extensions || ds.extensions.length === 0) addDsExtensionRow();
 
-                const accsTbody = document.querySelector('#dsAccessoriesTable tbody');
-                accsTbody.innerHTML = '';
-                (ds.accessories || []).forEach(a => addDsAccessoryRow(a));
-                if (!ds.accessories || ds.accessories.length === 0) addDsAccessoryRow();
+                const dcTbody = document.querySelector('#dsDepthCollarsTable tbody');
+                dcTbody.innerHTML = '';
+                (ds.depth_collars || []).forEach(dc => addDsDepthCollarRow(dc));
+                if (!ds.depth_collars || ds.depth_collars.length === 0) addDsDepthCollarRow();
+
+                const addonsTbody = document.querySelector('#dsAddonsTable tbody');
+                addonsTbody.innerHTML = '';
+                (ds.addons || []).forEach(a => addDsAddonRow(a));
+                if (!ds.addons || ds.addons.length === 0) {
+                    addDsAddonRow({ addon_name: 'Right angle attachment', adjustment_type: 'FIXED', adjustment_value: '0.00' });
+                    addDsAddonRow({ addon_name: 'Bracket or Bench mounted', adjustment_type: 'FIXED', adjustment_value: '0.00' });
+                    addDsAddonRow({ addon_name: 'Super Blind Bore', adjustment_type: 'PERCENTAGE', adjustment_value: '0.00' });
+                    addDsAddonRow({ addon_name: 'Dull chrome plated setting ring', adjustment_type: 'PERCENTAGE', adjustment_value: '0.00' });
+                    addDsAddonRow({ addon_name: 'Air jet', spec_value: '', adjustment_type: 'PERCENTAGE', adjustment_value: '0.00' });
+                }
 
                 const modal = new bootstrap.Modal(document.getElementById('datasheetFormModal'));
                 modal.show();
@@ -425,6 +575,10 @@ function openEditModalForId(dsId) {
         })
         .catch(err => console.error('Error fetching datasheet:', err));
 }
+
+document.getElementById('ds_product_type')?.addEventListener('change', function() {
+    toggleFormSectionsForProductType(this.value);
+});
 
 document.addEventListener('click', function(e) {
     if (e.target.closest('#openCreateDatasheetModalBtn')) {
@@ -434,8 +588,10 @@ document.addEventListener('click', function(e) {
     }
 
     if (e.target.closest('#addDsRangeRowBtn')) addDsRangeRow();
-    if (e.target.closest('#addDsModifierRowBtn')) addDsModifierRow();
-    if (e.target.closest('#addDsAccessoryRowBtn')) addDsAccessoryRow();
+    if (e.target.closest('#addDsExtensionRowBtn')) addDsExtensionRow();
+    if (e.target.closest('#addDsDepthCollarRowBtn')) addDsDepthCollarRow();
+    if (e.target.closest('#addDsAirJetRowBtn')) addDsAddonRow({ addon_name: 'Air jet', spec_value: '', adjustment_type: 'PERCENTAGE', adjustment_value: '0.00', isAirJet: true });
+    if (e.target.closest('#addDsAddonRowBtn')) addDsAddonRow();
 
     // View Datasheet
     const viewBtn = e.target.closest('.btn-view-datasheet');
@@ -452,6 +608,24 @@ document.addEventListener('click', function(e) {
                     document.getElementById('view_ds_supplier_name').textContent = suppOption ? suppOption.text : 'Supplier';
                     document.getElementById('view_ds_product_type').textContent = ds.product_type || 'General / All';
 
+                    const pType = (ds.product_type || 'APG').toUpperCase();
+                    const isAPG = pType === '' || pType === 'APG';
+                    const isARG = pType === 'ARG';
+                    const isDual = isAPG || isARG;
+
+                    const vH1 = document.getElementById('viewHeadPrice1');
+                    const vH2 = document.getElementById('viewHeadPrice2');
+                    if (vH1) vH1.textContent = isAPG ? 'Air Plug Gauge Rate (₹)' : (isARG ? 'Air Ring Gauge Rate (₹)' : 'Base Rate (₹)');
+                    if (vH2) {
+                        vH2.textContent = isAPG ? 'Setting Ring Rate (₹)' : (isARG ? 'Master Setting Plug Rate (₹)' : '');
+                        vH2.style.display = isDual ? '' : 'none';
+                    }
+
+                    const vExtCard = document.getElementById('viewExtensionsCard');
+                    const vDcCard = document.getElementById('viewDepthCollarsCard');
+                    if (vExtCard) vExtCard.style.display = (isAPG && ds.extensions && ds.extensions.length > 0) ? 'block' : 'none';
+                    if (vDcCard) vDcCard.style.display = (isAPG && ds.depth_collars && ds.depth_collars.length > 0) ? 'block' : 'none';
+
                     // Populate View Ranges
                     const viewRangesTbody = document.querySelector('#viewRangesTable tbody');
                     viewRangesTbody.innerHTML = '';
@@ -460,38 +634,57 @@ document.addEventListener('click', function(e) {
                             const tr = document.createElement('tr');
                             const maxStr = r.max_diameter ? `${r.max_diameter} mm` : 'and above';
                             const srRateStr = r.setting_ring_price && parseFloat(r.setting_ring_price) > 0 ? `₹${parseFloat(r.setting_ring_price).toFixed(2)}` : '-';
-                            tr.innerHTML = `<td>${r.min_diameter} mm</td><td>${maxStr}</td><td class="fw-bold text-success">₹${parseFloat(r.price).toFixed(2)}</td><td class="fw-bold text-primary">${srRateStr}</td>`;
+                            const srTdHtml = isDual ? `<td class="fw-bold text-primary col-sr-price">${srRateStr}</td>` : '';
+                            tr.innerHTML = `<td>${r.min_diameter} mm</td><td>${maxStr}</td><td class="fw-bold text-success">₹${parseFloat(r.price).toFixed(2)}</td>${srTdHtml}`;
                             viewRangesTbody.appendChild(tr);
                         });
                     } else {
-                        viewRangesTbody.innerHTML = `<tr><td colspan="4" class="text-muted text-center py-2">No size ranges defined</td></tr>`;
+                        const colSpan = isDual ? 4 : 3;
+                        viewRangesTbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-muted text-center py-2">No size ranges defined</td></tr>`;
                     }
 
-                    // Populate View Modifiers
-                    const viewModsTbody = document.querySelector('#viewModifiersTable tbody');
-                    viewModsTbody.innerHTML = '';
-                    if (ds.modifiers && ds.modifiers.length > 0) {
-                        ds.modifiers.forEach(m => {
+                    // Populate View Extensions
+                    const viewExtsTbody = document.querySelector('#viewExtensionsTable tbody');
+                    viewExtsTbody.innerHTML = '';
+                    if (ds.extensions && ds.extensions.length > 0) {
+                        ds.extensions.forEach(ex => {
                             const tr = document.createElement('tr');
-                            const adjStr = m.adjustment_type === 'PERCENTAGE' ? `+${m.adjustment_value}%` : `+₹${parseFloat(m.adjustment_value).toFixed(2)}`;
-                            tr.innerHTML = `<td>${m.spec_key}</td><td><code>${m.spec_value_match}</code></td><td><span class="badge bg-primary">${adjStr}</span></td>`;
-                            viewModsTbody.appendChild(tr);
+                            const toStr = ex.to_size ? `${ex.to_size} mm` : 'and above';
+                            tr.innerHTML = `<td>${ex.from_size} mm</td><td>${toStr}</td><td class="fw-bold text-success">₹${parseFloat(ex.price).toFixed(2)}</td>`;
+                            viewExtsTbody.appendChild(tr);
                         });
                     } else {
-                        viewModsTbody.innerHTML = `<tr><td colspan="3" class="text-muted text-center py-2">No specification modifiers defined</td></tr>`;
+                        viewExtsTbody.innerHTML = `<tr><td colspan="3" class="text-muted text-center py-2">No depth extensions defined</td></tr>`;
                     }
 
-                    // Populate View Accessories
-                    const viewAccsTbody = document.querySelector('#viewAccessoriesTable tbody');
-                    viewAccsTbody.innerHTML = '';
-                    if (ds.accessories && ds.accessories.length > 0) {
-                        ds.accessories.forEach(a => {
+                    // Populate View Depth Collars
+                    const viewDcTbody = document.querySelector('#viewDepthCollarsTable tbody');
+                    viewDcTbody.innerHTML = '';
+                    if (ds.depth_collars && ds.depth_collars.length > 0) {
+                        ds.depth_collars.forEach(dc => {
                             const tr = document.createElement('tr');
-                            tr.innerHTML = `<td>${a.size_range_label || a.item_name || '-'}</td><td class="fw-semibold">₹${parseFloat(a.unit_rate).toFixed(2)}</td>`;
-                            viewAccsTbody.appendChild(tr);
+                            const toStr = dc.to_size ? `${dc.to_size} mm` : 'and above';
+                            tr.innerHTML = `<td>${dc.from_size} mm</td><td>${toStr}</td><td class="fw-bold text-success">₹${parseFloat(dc.price).toFixed(2)}</td>`;
+                            viewDcTbody.appendChild(tr);
                         });
                     } else {
-                        viewAccsTbody.innerHTML = `<tr><td colspan="2" class="text-muted text-center py-2">No accessory rates defined</td></tr>`;
+                        viewDcTbody.innerHTML = `<tr><td colspan="3" class="text-muted text-center py-2">No depth collar rates defined</td></tr>`;
+                    }
+
+                    // Populate View Addons
+                    const viewAddonsTbody = document.querySelector('#viewAddonsTable tbody');
+                    viewAddonsTbody.innerHTML = '';
+                    if (ds.addons && ds.addons.length > 0) {
+                        ds.addons.forEach(a => {
+                            const tr = document.createElement('tr');
+                            const typeStr = a.adjustment_type === 'PERCENTAGE' ? '2. Percentage (%)' : '1. Rate (₹)';
+                            const valStr = a.adjustment_type === 'PERCENTAGE' ? `+${parseFloat(a.adjustment_value).toFixed(2)}%` : `+₹${parseFloat(a.adjustment_value).toFixed(2)}`;
+                            const specStr = a.spec_value ? ` <span class="badge bg-secondary">No. of jets: ${a.spec_value}</span>` : '';
+                            tr.innerHTML = `<td><span class="fw-semibold">${a.addon_name}</span>${specStr}</td><td><span class="badge bg-light text-dark border">${typeStr}</span></td><td class="fw-bold text-success">${valStr}</td>`;
+                            viewAddonsTbody.appendChild(tr);
+                        });
+                    } else {
+                        viewAddonsTbody.innerHTML = `<tr><td colspan="3" class="text-muted text-center py-2">No add-on rates defined</td></tr>`;
                     }
 
                     const modal = new bootstrap.Modal(document.getElementById('viewDatasheetModal'));

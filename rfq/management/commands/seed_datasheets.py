@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from suppliers.models import Supplier
-from rfq.models import SupplierDatasheet, DatasheetPriceRange, DatasheetModifier, DatasheetAccessoryRate
+from rfq.models import SupplierDatasheet, DatasheetPriceRange, DatasheetModifier, DatasheetAccessoryRate, DatasheetExtensionRate, DatasheetDepthCollarRate, DatasheetAddonRate
 from decimal import Decimal
 
 
@@ -62,83 +62,25 @@ class Command(BaseCommand):
                 setting_ring_price=Decimal(str(sr_p)),
             )
 
-        # Modifiers for APG
-        DatasheetModifier.objects.create(
-            datasheet=apg_ds,
-            modifier_name='3 Jet Air Plug Gauge (+20%)',
-            spec_key='No. of jets',
-            spec_value_match='3',
-            adjustment_type='PERCENTAGE',
-            adjustment_value=Decimal('20.00')
-        )
-        DatasheetModifier.objects.create(
-            datasheet=apg_ds,
-            modifier_name='Super Blind Bore (+20%)',
-            spec_key='Type of ID',
-            spec_value_match='Super blind',
-            adjustment_type='PERCENTAGE',
-            adjustment_value=Decimal('20.00')
-        )
-        DatasheetModifier.objects.create(
-            datasheet=apg_ds,
-            modifier_name='Dull Chrome Plating (+25%)',
-            spec_key='Material',
-            spec_value_match='Dull chrome',
-            adjustment_type='PERCENTAGE',
-            adjustment_value=Decimal('25.00')
-        )
-        DatasheetModifier.objects.create(
-            datasheet=apg_ds,
-            modifier_name='Bench Mounted (+₹800)',
-            spec_key='Gauge Type',
-            spec_value_match='Bench mount',
-            adjustment_type='FIXED',
-            adjustment_value=Decimal('800.00')
-        )
-        DatasheetModifier.objects.create(
-            datasheet=apg_ds,
-            modifier_name='Hand Held (+₹200)',
-            spec_key='Gauge Type',
-            spec_value_match='Hand held',
-            adjustment_type='FIXED',
-            adjustment_value=Decimal('200.00')
-        )
+        # Extensions to check deeper bores
+        apg_ds.extensions.all().delete()
+        DatasheetExtensionRate.objects.create(datasheet=apg_ds, from_size=Decimal('50.00'), to_size=Decimal('100.00'), price=Decimal('250.00'))
+        DatasheetExtensionRate.objects.create(datasheet=apg_ds, from_size=Decimal('100.00'), to_size=Decimal('150.00'), price=Decimal('400.00'))
+        DatasheetExtensionRate.objects.create(datasheet=apg_ds, from_size=Decimal('150.00'), to_size=None, price=Decimal('600.00'))
 
-        # Accessories for APG
-        DatasheetAccessoryRate.objects.create(
-            datasheet=apg_ds,
-            product_code='SGU/1117',
-            item_name='Right angle attachment for Air Plug Gauges',
-            unit_rate=Decimal('430.00')
-        )
-        DatasheetAccessoryRate.objects.create(
-            datasheet=apg_ds,
-            product_code='SGU/1118',
-            item_name='Extension to check deeper bores (25mm/50mm)',
-            size_range_label='25mm/50mm',
-            unit_rate=Decimal('265.00')
-        )
-        DatasheetAccessoryRate.objects.create(
-            datasheet=apg_ds,
-            product_code='SGU/1118',
-            item_name='Extension to check deeper bores (75mm-200mm)',
-            size_range_label='75mm/100mm/200mm',
-            unit_rate=Decimal('320.00')
-        )
-        DatasheetAccessoryRate.objects.create(
-            datasheet=apg_ds,
-            product_code='SGU/1119',
-            item_name='Depth collar for air plug gauges (2.0mm to 50.0mm)',
-            size_range_label='2.0mm to 50.0mm',
-            unit_rate=Decimal('190.00')
-        )
-        DatasheetAccessoryRate.objects.create(
-            datasheet=apg_ds,
-            product_code='SGU/1119',
-            item_name='Depth collar for air plug gauges (50.0mm to 150.0mm)',
-            size_range_label='50.0mm to 150.0mm',
-            unit_rate=Decimal('320.00')
-        )
+        # Depth Collar for air plug gauges
+        apg_ds.depth_collars.all().delete()
+        DatasheetDepthCollarRate.objects.create(datasheet=apg_ds, from_size=Decimal('4.00'), to_size=Decimal('50.00'), price=Decimal('180.00'))
+        DatasheetDepthCollarRate.objects.create(datasheet=apg_ds, from_size=Decimal('50.00'), to_size=Decimal('100.00'), price=Decimal('320.00'))
+        DatasheetDepthCollarRate.objects.create(datasheet=apg_ds, from_size=Decimal('100.00'), to_size=None, price=Decimal('500.00'))
+
+        # Add-ons for APG
+        apg_ds.addons.all().delete()
+        DatasheetAddonRate.objects.create(datasheet=apg_ds, addon_name='Right angle attachment', spec_value='', adjustment_type='FIXED', adjustment_value=Decimal('450.00'))
+        DatasheetAddonRate.objects.create(datasheet=apg_ds, addon_name='Bracket or Bench mounted', spec_value='', adjustment_type='FIXED', adjustment_value=Decimal('800.00'))
+        DatasheetAddonRate.objects.create(datasheet=apg_ds, addon_name='Super Blind Bore', spec_value='', adjustment_type='PERCENTAGE', adjustment_value=Decimal('20.00'))
+        DatasheetAddonRate.objects.create(datasheet=apg_ds, addon_name='Dull chrome plated setting ring', spec_value='', adjustment_type='PERCENTAGE', adjustment_value=Decimal('25.00'))
+        DatasheetAddonRate.objects.create(datasheet=apg_ds, addon_name='Air jet', spec_value='3', adjustment_type='PERCENTAGE', adjustment_value=Decimal('20.00'))
 
         # 2. Air Ring Gauges (ARG) Rate Card
         SupplierDatasheet.objects.filter(supplier=supplier, product_type='ARG').delete()

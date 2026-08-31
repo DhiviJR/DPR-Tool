@@ -15,7 +15,8 @@ from dpr.models import DPR
 from products.models import CustomerProduct, SupplierProduct
 from rfq.models import (
     RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation, RFQEmailMessage,
-    SupplierDatasheet, DatasheetPriceRange, DatasheetModifier, DatasheetAccessoryRate
+    SupplierDatasheet, DatasheetPriceRange, DatasheetModifier, DatasheetAccessoryRate,
+    DatasheetExtensionRate, DatasheetDepthCollarRate, DatasheetAddonRate
 )
 from .email_services import send_threaded_rfq_email, sync_rfq_inbox, check_customer_email_match
 from django.http import HttpResponse, JsonResponse, Http404
@@ -7866,10 +7867,35 @@ def calculate_suggested_price(supplier_id, product_type, specs_dict):
             is_active=True
         ).first()
 
+def calculate_suggested_price(supplier_id, product_type=None, specs_dict=None, use_sr_price=False, size_override=None, selected_addon_ids=None, selected_ext_id=None, selected_dc_id=None):
+    if not supplier_id:
+        return {'success': False, 'message': 'Supplier ID is required.'}
+
+    specs_dict = specs_dict or {}
+
+    datasheet = SupplierDatasheet.objects.filter(
+        supplier_id=supplier_id,
+        product_type=product_type,
+        is_active=True
+    ).first()
+
+    if not datasheet:
+        datasheet = SupplierDatasheet.objects.filter(
+            supplier_id=supplier_id,
+            is_active=True
+        ).first()
+
     if not datasheet:
         return {'success': False, 'message': 'No active datasheet rate card found for this supplier.'}
 
-    size_val = parse_numeric_size(specs_dict.get('Size') or specs_dict.get('Nominal Diameter'))
+    if size_override is not None and str(size_override).strip():
+        try:
+            size_val = float(size_override)
+        except (ValueError, TypeError):
+            size_val = parse_numeric_size(specs_dict.get('Size') or specs_dict.get('Nominal Diameter'))
+    else:
+        size_val = parse_numeric_size(specs_dict.get('Size') or specs_dict.get('Nominal Diameter'))
+
     if size_val is None:
         return {'success': False, 'message': 'No valid numeric dimension/size found in parameters.'}
 
@@ -7884,7 +7910,6 @@ def calculate_suggested_price(supplier_id, product_type, specs_dict):
     if not matching_ranges:
         return {'success': False, 'message': f'No price range matching dimension {size_val}mm in datasheet.'}
 
-    # If multiple category ranges match, attempt category match
     matched_range = matching_ranges[0]
     category_spec = (specs_dict.get('Category') or specs_dict.get('Product Name') or '').lower()
     for pr in matching_ranges:
@@ -7892,43 +7917,88 @@ def calculate_suggested_price(supplier_id, product_type, specs_dict):
             matched_range = pr
             break
 
-    base_price = Decimal(str(matched_range.price))
+    if use_sr_price and matched_range.setting_ring_price and matched_range.setting_ring_price > Decimal('0'):
+        base_price = Decimal(str(matched_range.setting_ring_price))
+        rate_kind_str = "Setting Ring Rate"
+    else:
+        base_price = Decimal(str(matched_range.price))
+        rate_kind_str = "Air Plug Gauge Rate" if (product_type == 'APG' or not product_type) else "Base Rate"
+
     total_price = base_price
     range_lbl = f"{matched_range.min_diameter}-{matched_range.max_diameter or 'above'}mm"
-    breakdown_parts = [f"Base Rate ({range_lbl}): ₹{base_price:.2f}"]
+    breakdown_parts = [f"{rate_kind_str} ({range_lbl}): ₹{base_price:.2f}"]
 
-    # Evaluate modifiers
-    for mod in datasheet.modifiers.all():
-        spec_val = str(specs_dict.get(mod.spec_key) or '').strip().lower()
-        match_val = str(mod.spec_value_match).strip().lower()
-        if match_val and (match_val == spec_val or match_val in spec_val):
-            mod_label = mod.modifier_name or f"{mod.spec_key}: {mod.spec_value_match}"
-            if mod.adjustment_type == 'PERCENTAGE':
-                adj = (base_price * Decimal(str(mod.adjustment_value)) / Decimal('100.00')).quantize(Decimal('0.01'))
-                total_price += adj
-                breakdown_parts.append(f"{mod_label} (+{mod.adjustment_value}%): ₹{adj:.2f}")
+    # Extension selection
+    if selected_ext_id:
+        try:
+            ext_obj = datasheet.extensions.get(pk=selected_ext_id)
+            ext_p = Decimal(str(ext_obj.price))
+            total_price += ext_p
+            to_s_str = f"{ext_obj.to_size}mm" if ext_obj.to_size else "above"
+            breakdown_parts.append(f"Extension ({ext_obj.from_size}-{to_s_str}): ₹{ext_p:.2f}")
+        except Exception:
+            pass
+
+    # Depth collar selection
+    if selected_dc_id:
+        try:
+            dc_obj = datasheet.depth_collars.get(pk=selected_dc_id)
+            dc_p = Decimal(str(dc_obj.price))
+            total_price += dc_p
+            to_s_str = f"{dc_obj.to_size}mm" if dc_obj.to_size else "above"
+            breakdown_parts.append(f"Depth Collar ({dc_obj.from_size}-{to_s_str}): ₹{dc_p:.2f}")
+        except Exception:
+            pass
+
+    # Evaluate add-ons
+    all_addons = list(datasheet.addons.all())
+    if selected_addon_ids is not None:
+        addons_to_eval = [a for a in all_addons if str(a.id) in [str(x) for x in selected_addon_ids]]
+    else:
+        addons_to_eval = all_addons
+
+    for addon in addons_to_eval:
+        matched = False
+        if selected_addon_ids is not None:
+            matched = True
+        else:
+            a_name_lower = (addon.addon_name or '').lower()
+            a_spec_val = (addon.spec_value or '').strip().lower()
+
+            if 'air jet' in a_name_lower or 'jet' in a_name_lower:
+                rfq_jets = str(specs_dict.get('No. of jets') or specs_dict.get('Jets') or specs_dict.get('Air jet') or '').strip().lower()
+                if a_spec_val and (a_spec_val == rfq_jets or a_spec_val in rfq_jets):
+                    matched = True
+                elif not a_spec_val and rfq_jets and rfq_jets not in ('1', '2'):
+                    matched = True
             else:
-                adj = Decimal(str(mod.adjustment_value))
-                total_price += adj
-                breakdown_parts.append(f"{mod_label} (+₹{adj:.2f}): ₹{adj:.2f}")
+                for k, v in specs_dict.items():
+                    k_low, v_low = str(k).lower(), str(v).lower()
+                    if (a_name_lower in k_low or a_name_lower in v_low) and v_low not in ('no', 'false', 'none', ''):
+                        matched = True
+                        break
 
-    # Evaluate accessories
-    for acc in datasheet.accessories.all():
-        acc_lbl = (acc.size_range_label or acc.item_name or '').lower()
-        for k, v in specs_dict.items():
-            if v and (str(v).lower() in ('yes', 'true', 'included') or (acc.product_code and acc.product_code.lower() in str(v).lower())):
-                if k.lower() in acc_lbl or acc_lbl in k.lower():
-                    acc_rate = Decimal(str(acc.unit_rate))
-                    total_price += acc_rate
-                    breakdown_parts.append(f"{acc.size_range_label or acc.item_name}: ₹{acc_rate:.2f}")
-                    break
+        if matched:
+            lbl = f"{addon.addon_name}" + (f" ({addon.spec_value} jets)" if addon.spec_value else "")
+            if addon.adjustment_type == 'PERCENTAGE':
+                adj = (base_price * Decimal(str(addon.adjustment_value)) / Decimal('100.00')).quantize(Decimal('0.01'))
+                total_price += adj
+                breakdown_parts.append(f"{lbl} (+{addon.adjustment_value}%): ₹{adj:.2f}")
+            else:
+                adj = Decimal(str(addon.adjustment_value))
+                total_price += adj
+                breakdown_parts.append(f"{lbl} (+₹{adj:.2f}): ₹{adj:.2f}")
 
     return {
         'success': True,
         'suggested_price': float(total_price),
         'base_price': float(base_price),
+        'datasheet_id': datasheet.id,
         'datasheet_title': datasheet.title or f"{datasheet.supplier.supplier_name} - {datasheet.product_type or 'Rate Card'}",
-        'breakdown': " | ".join(breakdown_parts)
+        'breakdown': " | ".join(breakdown_parts),
+        'extensions': [{'id': e.id, 'from_size': str(e.from_size), 'to_size': str(e.to_size) if e.to_size else '', 'price': str(e.price)} for e in datasheet.extensions.all()],
+        'depth_collars': [{'id': dc.id, 'from_size': str(dc.from_size), 'to_size': str(dc.to_size) if dc.to_size else '', 'price': str(dc.price)} for dc in datasheet.depth_collars.all()],
+        'addons': [{'id': a.id, 'addon_name': a.addon_name, 'spec_value': a.spec_value or '', 'adjustment_type': a.adjustment_type, 'adjustment_value': str(a.adjustment_value)} for a in datasheet.addons.all()]
     }
 
 
@@ -7937,13 +8007,28 @@ def suggest_supplier_price(request):
     supplier_id = request.GET.get('supplier_id')
     product_type = request.GET.get('product_type', '').strip()
     specs_json = request.GET.get('specs', '{}')
+    use_sr_price = request.GET.get('use_sr_price') == 'true'
+    size_override = request.GET.get('size_mm')
+    selected_ext_id = request.GET.get('extension_id')
+    selected_dc_id = request.GET.get('depth_collar_id')
+
+    selected_addon_ids = request.GET.getlist('addon_ids[]') if 'addon_ids[]' in request.GET else None
 
     try:
         specs_dict = json.loads(specs_json) if isinstance(specs_json, str) else specs_json
     except Exception:
         specs_dict = {}
 
-    result = calculate_suggested_price(supplier_id, product_type, specs_dict)
+    result = calculate_suggested_price(
+        supplier_id=supplier_id,
+        product_type=product_type,
+        specs_dict=specs_dict,
+        use_sr_price=use_sr_price,
+        size_override=size_override,
+        selected_addon_ids=selected_addon_ids,
+        selected_ext_id=selected_ext_id,
+        selected_dc_id=selected_dc_id
+    )
     return JsonResponse(result)
 
 
@@ -7994,6 +8079,9 @@ def save_supplier_datasheet(request):
     if not supplier_id:
         return JsonResponse({'status': 'error', 'message': 'Supplier is required.'}, status=400)
 
+    if not product_type:
+        return JsonResponse({'status': 'error', 'message': 'Product Type is required.'}, status=400)
+
     try:
         supplier = Supplier.objects.get(pk=supplier_id)
     except Supplier.DoesNotExist:
@@ -8035,6 +8123,9 @@ def save_supplier_datasheet(request):
             datasheet.description = description or None
             datasheet.save()
             datasheet.price_ranges.all().delete()
+            datasheet.extensions.all().delete()
+            datasheet.depth_collars.all().delete()
+            datasheet.addons.all().delete()
             datasheet.modifiers.all().delete()
             datasheet.accessories.all().delete()
         else:
@@ -8056,44 +8147,69 @@ def save_supplier_datasheet(request):
                 setting_ring_price=sr_price
             )
 
-        # Parse modifier arrays (spec_key, spec_val, adj_type, adj_val)
-        mod_keys = request.POST.getlist('modifier_spec_key[]')
-        mod_vals = request.POST.getlist('modifier_spec_val[]')
-        mod_types = request.POST.getlist('modifier_adj_type[]')
-        mod_values = request.POST.getlist('modifier_adj_val[]')
-        mod_names = request.POST.getlist('modifier_name[]')
+        # Parse extension arrays (from_size, to_size, price)
+        ext_from_sizes = request.POST.getlist('extension_from_size[]')
+        ext_to_sizes = request.POST.getlist('extension_to_size[]')
+        ext_prices = request.POST.getlist('extension_price[]')
 
-        for i, s_key in enumerate(mod_keys):
-            if not s_key.strip():
+        for i, from_s_raw in enumerate(ext_from_sizes):
+            if not from_s_raw.strip():
                 continue
-            s_val = mod_vals[i] if i < len(mod_vals) else ''
-            a_type = mod_types[i] if i < len(mod_types) else 'PERCENTAGE'
-            a_val_raw = mod_values[i] if i < len(mod_values) else '0'
-            m_name = mod_names[i].strip() if i < len(mod_names) and mod_names[i].strip() else f"{s_key}: {s_val}"
+            to_s_raw = ext_to_sizes[i] if i < len(ext_to_sizes) else ''
+            p_raw = ext_prices[i] if i < len(ext_prices) else '0'
 
-            DatasheetModifier.objects.create(
+            f_size = Decimal(from_s_raw.strip())
+            t_size = Decimal(to_s_raw.strip()) if to_s_raw.strip() else None
+            ext_p = Decimal(p_raw.strip()) if p_raw.strip() else Decimal('0.00')
+
+            DatasheetExtensionRate.objects.create(
                 datasheet=datasheet,
-                modifier_name=m_name,
-                spec_key=s_key.strip(),
-                spec_value_match=s_val.strip(),
-                adjustment_type=a_type,
-                adjustment_value=Decimal(a_val_raw) if a_val_raw.strip() else Decimal('0.00')
+                from_size=f_size,
+                to_size=t_size,
+                price=ext_p
             )
 
-        # Parse accessory arrays (size_label, unit_rate)
-        acc_labels = request.POST.getlist('accessory_size_label[]')
-        acc_rates = request.POST.getlist('accessory_rate[]')
+        # Parse depth collar arrays (from_size, to_size, price)
+        dc_from_sizes = request.POST.getlist('depth_collar_from_size[]')
+        dc_to_sizes = request.POST.getlist('depth_collar_to_size[]')
+        dc_prices = request.POST.getlist('depth_collar_price[]')
 
-        for i, label in enumerate(acc_labels):
-            if not label.strip():
+        for i, from_s_raw in enumerate(dc_from_sizes):
+            if not from_s_raw.strip():
                 continue
-            rate_raw = acc_rates[i] if i < len(acc_rates) else '0'
+            to_s_raw = dc_to_sizes[i] if i < len(dc_to_sizes) else ''
+            p_raw = dc_prices[i] if i < len(dc_prices) else '0'
 
-            DatasheetAccessoryRate.objects.create(
+            f_size = Decimal(from_s_raw.strip())
+            t_size = Decimal(to_s_raw.strip()) if to_s_raw.strip() else None
+            dc_p = Decimal(p_raw.strip()) if p_raw.strip() else Decimal('0.00')
+
+            DatasheetDepthCollarRate.objects.create(
                 datasheet=datasheet,
-                item_name=label.strip(),
-                size_range_label=label.strip(),
-                unit_rate=Decimal(rate_raw) if rate_raw.strip() else Decimal('0.00')
+                from_size=f_size,
+                to_size=t_size,
+                price=dc_p
+            )
+
+        # Parse add-on arrays (addon_name, spec_val, adj_type, adj_val)
+        addon_names = request.POST.getlist('addon_name[]')
+        addon_spec_vals = request.POST.getlist('addon_spec_val[]')
+        addon_adj_types = request.POST.getlist('addon_adj_type[]')
+        addon_adj_vals = request.POST.getlist('addon_adj_val[]')
+
+        for i, a_name in enumerate(addon_names):
+            if not a_name.strip():
+                continue
+            s_val = addon_spec_vals[i].strip() if i < len(addon_spec_vals) else ''
+            a_type = addon_adj_types[i].strip() if i < len(addon_adj_types) else 'FIXED'
+            a_val_raw = addon_adj_vals[i] if i < len(addon_adj_vals) else '0'
+
+            DatasheetAddonRate.objects.create(
+                datasheet=datasheet,
+                addon_name=a_name.strip(),
+                spec_value=s_val or None,
+                adjustment_type=a_type,
+                adjustment_value=Decimal(a_val_raw) if a_val_raw.strip() else Decimal('0.00')
             )
 
     return JsonResponse({'status': 'ok', 'message': 'Supplier rate card saved successfully!'})
@@ -8102,7 +8218,7 @@ def save_supplier_datasheet(request):
 @role_required('ADMIN', 'SALES')
 def get_supplier_datasheet(request, datasheet_id):
     try:
-        datasheet = SupplierDatasheet.objects.prefetch_related('price_ranges', 'modifiers', 'accessories').get(pk=datasheet_id)
+        datasheet = SupplierDatasheet.objects.prefetch_related('price_ranges', 'extensions', 'depth_collars', 'addons').get(pk=datasheet_id)
     except SupplierDatasheet.DoesNotExist:
         return JsonResponse({'status': 'error', 'message': 'Datasheet not found.'}, status=404)
 
@@ -8123,6 +8239,31 @@ def get_supplier_datasheet(request, datasheet_id):
                     'setting_ring_price': str(pr.setting_ring_price or '0.00'),
                 }
                 for pr in datasheet.price_ranges.all()
+            ],
+            'extensions': [
+                {
+                    'from_size': str(e.from_size),
+                    'to_size': str(e.to_size) if e.to_size is not None else '',
+                    'price': str(e.price),
+                }
+                for e in datasheet.extensions.all()
+            ],
+            'depth_collars': [
+                {
+                    'from_size': str(dc.from_size),
+                    'to_size': str(dc.to_size) if dc.to_size is not None else '',
+                    'price': str(dc.price),
+                }
+                for dc in datasheet.depth_collars.all()
+            ],
+            'addons': [
+                {
+                    'addon_name': a.addon_name,
+                    'spec_value': a.spec_value or '',
+                    'adjustment_type': a.adjustment_type,
+                    'adjustment_value': str(a.adjustment_value),
+                }
+                for a in datasheet.addons.all()
             ],
             'modifiers': [
                 {
