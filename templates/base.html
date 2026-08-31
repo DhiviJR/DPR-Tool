@@ -281,7 +281,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     'X-Skip-Loader': '1'
                 }
             })
-            .then(r => r.json())
+            .then(async r => {
+                const ct = r.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    if (r.status === 401 || r.status === 403 || r.redirected || r.url.includes('/login')) {
+                        throw new Error('Session expired or unauthorized. Please refresh the page and log in again.');
+                    }
+                    throw new Error(`Server error (${r.status} ${r.statusText || ''}). Check cloud server logs for details.`);
+                }
+                return r.json();
+            })
             .then(data => {
                 if (spinner) spinner.classList.remove('dash-spinning');
                 btn.disabled = false;
