@@ -422,11 +422,11 @@ def _match_email_to_rfq(subject, body, from_str, to_str, in_reply_to=None, refer
     return None
 
 
-def sync_rfq_inbox(rfq=None, mail=None):
+def sync_rfq_inbox(rfq=None, mail=None, scan_limit=500):
     """
     Connects to IMAP server, fetches inbox headers in a single fast batch,
-    matches them in memory against RFQs, and downloads full messages ONLY for new matching RFQ emails.
-    Returns (synced_count, error_message).
+    and matches reply/quote emails to open RFQs across the system.
+    If scan_limit is None or 0, scans all emails in the inbox.
     """
     imap_host = getattr(settings, 'EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
     imap_port = int(getattr(settings, 'EMAIL_IMAP_PORT', 993))
@@ -454,13 +454,14 @@ def sync_rfq_inbox(rfq=None, mail=None):
             return 0, None
 
         msg_nums = data[0].split()
-        # Scan the most recent 500 emails for RFQ matching — fast for daily use.
-        # All real-world RFQs will be in recent emails; a 500-email window is more than enough.
-        recent_nums = msg_nums[-500:]
+        if scan_limit and isinstance(scan_limit, int) and scan_limit > 0:
+            recent_nums = msg_nums[-scan_limit:]
+        else:
+            recent_nums = msg_nums
         if not recent_nums:
             return 0, None
 
-        # Fetch headers in chunks of 200 to avoid IMAP command-length limits for large inboxes
+        # Fetch headers in chunks of 200 to avoid IMAP command-length limits
         HEADER_CHUNK = 200
         batch_headers = []
         for chunk_start in range(0, len(recent_nums), HEADER_CHUNK):
@@ -508,6 +509,7 @@ def sync_rfq_inbox(rfq=None, mail=None):
 
         # Preload Supplier and Customer email lists for thread matching
         from suppliers.models import Supplier
+        from customers.models import Customer
         supplier_emails = set()
         for sup_email in Supplier.objects.exclude(email=None).exclude(email='').values_list('email', flat=True):
             for em in re.split(r'[;, ]+', sup_email.lower().strip()):
@@ -522,7 +524,7 @@ def sync_rfq_inbox(rfq=None, mail=None):
                 if em and len(em) > 3 and 'mesinstruments' not in em and 'mbt-corporation' not in em:
                     customer_emails.add(em)
 
-        # 2. Parse batch headers in memory and identify matching RFQ / Supplier candidates
+        # 2. Parse batch headers in memory and identify matching RFQ candidates
         parsed_candidates = []
         all_candidate_msg_ids = []
 
@@ -579,18 +581,8 @@ def sync_rfq_inbox(rfq=None, mail=None):
                 rfq_map_by_id=rfq_map_by_id
             )
 
-            # Check if email is relevant to Supplier, Customer, or RFQ
-            sender_em = parseaddr(from_str or '')[1].lower().strip()
-            recip_em = parseaddr(to_str or '')[1].lower().strip()
-            is_supplier_or_customer = (
-                matched_rfq is not None or
-                any(se in sender_em or se in recip_em for se in supplier_emails) or
-                any(ce in sender_em or ce in recip_em for ce in customer_emails) or
-                'rfq' in (subject or '').lower() or
-                'dpr' in (subject or '').lower()
-            )
-
-            if not is_supplier_or_customer:
+            # Only process emails that actually match an RFQ (RFQEmailMessage requires an RFQ)
+            if not matched_rfq:
                 continue
 
             parsed_candidates.append({
@@ -638,6 +630,22 @@ def sync_rfq_inbox(rfq=None, mail=None):
             msg = email.message_from_bytes(raw_email)
             body = _extract_email_body(msg)
 
+            # If not matched by headers alone, try matching with full body
+            if not matched_rfq:
+                matched_rfq = _match_email_to_rfq(
+                    subject=cand['subject'],
+                    body=body,
+                    from_str=cand['from_str'],
+                    to_str=cand['to_str'],
+                    in_reply_to=cand['in_reply_to'],
+                    references=cand['references'],
+                    target_rfq=rfq
+                )
+
+            # If no RFQ is associated with this email, skip saving to RFQEmailMessage (which requires rfq_id)
+            if not matched_rfq:
+                continue
+
             sent_at = timezone.now()
             if cand['date_str']:
                 try:
@@ -659,22 +667,25 @@ def sync_rfq_inbox(rfq=None, mail=None):
                         if filename:
                             attachment_names.append(_clean_header_str(filename))
 
-            RFQEmailMessage.objects.create(
-                rfq=matched_rfq,
-                message_id=msg_id,
-                in_reply_to=cand['in_reply_to'] or None,
-                references=cand['references'] or None,
-                sender=cand['from_str'],
-                recipients=cand['to_str'],
-                cc_recipients=cand['cc_str'],
-                subject=cand['subject'] or "(No Subject)",
-                body=body,
-                direction='IN',
-                sent_at=sent_at,
-                has_attachments=has_attachments,
-                attachment_names=", ".join(attachment_names) if attachment_names else ""
-            )
-            synced_count += 1
+            try:
+                RFQEmailMessage.objects.create(
+                    rfq=matched_rfq,
+                    message_id=msg_id,
+                    in_reply_to=cand['in_reply_to'] or None,
+                    references=cand['references'] or None,
+                    sender=cand['from_str'],
+                    recipients=cand['to_str'],
+                    cc_recipients=cand['cc_str'],
+                    subject=cand['subject'] or "(No Subject)",
+                    body=body,
+                    direction='IN',
+                    sent_at=sent_at,
+                    has_attachments=has_attachments,
+                    attachment_names=", ".join(attachment_names) if attachment_names else ""
+                )
+                synced_count += 1
+            except Exception as e:
+                logger.warning(f"Could not create RFQEmailMessage for msg_id {msg_id}: {e}")
 
         return synced_count, None
 
