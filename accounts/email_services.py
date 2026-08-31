@@ -422,11 +422,11 @@ def _match_email_to_rfq(subject, body, from_str, to_str, in_reply_to=None, refer
     return None
 
 
-def sync_rfq_inbox(rfq=None, mail=None, scan_limit=500):
+def sync_rfq_inbox(rfq=None, mail=None, scan_limit=300):
     """
     Connects to IMAP server, fetches inbox headers in a single fast batch,
-    and matches reply/quote emails to open RFQs across the system.
-    If scan_limit is None or 0, scans all emails in the inbox.
+    matches them in memory against RFQs, and downloads full messages ONLY for new matching RFQ emails.
+    Returns (synced_count, error_message).
     """
     imap_host = getattr(settings, 'EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
     imap_port = int(getattr(settings, 'EMAIL_IMAP_PORT', 993))
@@ -445,40 +445,34 @@ def sync_rfq_inbox(rfq=None, mail=None, scan_limit=500):
             mail.login(imap_user, imap_password)
             close_mail_at_end = True
 
-        status, response = mail.select('INBOX', readonly=True)
-        if status != 'OK' or not response or not response[0]:
+        status, _ = mail.select('INBOX', readonly=True)
+        if status != 'OK':
             return 0, "Unable to select INBOX."
 
-        try:
-            inbox_total = int(response[0])
-        except Exception:
-            inbox_total = 0
-
-        if inbox_total <= 0:
+        status, data = mail.search(None, 'ALL')
+        if status != 'OK' or not data[0]:
             return 0, None
 
-        if scan_limit and isinstance(scan_limit, int) and scan_limit > 0:
-            scan_count = min(scan_limit, inbox_total)
-            start_seq = max(1, inbox_total - scan_count + 1)
-        else:
-            start_seq = 1
-
-        recent_range_bytes = f"{start_seq}:{inbox_total}".encode()
+        msg_nums = data[0].split()
+        limit_val = scan_limit if (scan_limit and isinstance(scan_limit, int) and scan_limit > 0) else 300
+        recent_nums = msg_nums[-limit_val:]
+        if not recent_nums:
+            return 0, None
 
         # Fetch headers in chunks of 200 to avoid IMAP command-length limits
         HEADER_CHUNK = 200
         batch_headers = []
-        try:
-            ch_status, ch_data = mail.fetch(
-                recent_range_bytes,
-                '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT FROM TO CC IN-REPLY-TO REFERENCES DATE)])'
-            )
-            if ch_status == 'OK' and ch_data:
-                batch_headers.extend(ch_data)
-        except Exception:
-            pass
-        if not batch_headers:
-            return 0, None
+        for chunk_start in range(0, len(recent_nums), HEADER_CHUNK):
+            chunk = recent_nums[chunk_start:chunk_start + HEADER_CHUNK]
+            try:
+                ch_status, ch_data = mail.fetch(
+                    b','.join(chunk),
+                    '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT FROM TO CC IN-REPLY-TO REFERENCES DATE)])'
+                )
+                if ch_status == 'OK' and ch_data:
+                    batch_headers.extend(ch_data)
+            except Exception:
+                pass  # Skip failed chunk, continue with the rest
 
         if not batch_headers:
             return 0, None

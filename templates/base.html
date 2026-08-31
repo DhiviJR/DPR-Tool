@@ -91,20 +91,10 @@
                 {% endif %}
             </ul>
             <div class="d-flex align-items-center gap-2">
-                <div class="btn-group shadow-sm">
-                    <button type="button" class="btn btn-outline-light btn-sm d-inline-flex align-items-center gap-1" id="globalSyncMailBtn" title="Sync Recent Emails (Fast daily sync)">
-                        <i class="bi bi-arrow-repeat" id="globalSyncSpinner"></i>
-                        <span>Sync Email</span>
-                    </button>
-                    <button type="button" class="btn btn-outline-light btn-sm dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" title="Sync Options">
-                        <span class="visually-hidden">Sync Options</span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="font-size: 0.85rem;">
-                        <li><a class="dropdown-item py-2 d-flex align-items-center" href="#" id="syncLatestMenuBtn"><i class="bi bi-clock-history text-primary me-2 fs-6"></i><span>Sync Latest (Fast)</span></a></li>
-                        <li><hr class="dropdown-divider my-1"></li>
-                        <li><a class="dropdown-item py-2 d-flex align-items-center" href="#" id="fullSyncMenuBtn"><i class="bi bi-inboxes-fill text-warning me-2 fs-6"></i><span>Full Sync (All Inbox Emails)</span></a></li>
-                    </ul>
-                </div>
+                <button type="button" class="btn btn-outline-light btn-sm shadow-sm d-inline-flex align-items-center gap-1" id="globalSyncMailBtn" title="Sync All Emails (RFQ, Reply Mail & Classified Emails)">
+                    <i class="bi bi-arrow-repeat" id="globalSyncSpinner"></i>
+                    <span>Sync Email</span>
+                </button>
                 {% if user_role %}
                 <span class="badge bg-light text-dark fw-bold text-uppercase border px-2 py-1" style="font-size: 0.75rem;">{{ user_role }}</span>
                 {% else %}
@@ -247,24 +237,12 @@ window.escapeHtml = function(value) {
         showLoading();
     });
 
-    if (window.fetch && !window.__globalLoaderFetchPatched) {
-        window.__globalLoaderFetchPatched = true;
-        const _origFetch = window.fetch;
-        window.fetch = function(input, init) {
-            init = init || {};
-            const headers = init.headers || {};
-            let skipLoader = false;
-
-            if (init.skipLoader) skipLoader = true;
-            if (headers instanceof Headers) {
-                if (headers.get('X-Skip-Loader') === '1') skipLoader = true;
-            } else if (typeof headers === 'object' && headers['X-Skip-Loader'] === '1') {
-                skipLoader = true;
-            }
-
+    if (window.fetch) {
+        const originalFetch = window.fetch;
+        window.fetch = function(resource, init) {
+            const skipLoader = init && (init.skipLoader || (init.headers && (init.headers['X-Skip-Loader'] || init.headers['x-skip-loader'])));
             if (!skipLoader) showLoading();
-
-            return _origFetch.apply(this, arguments)
+            return originalFetch.apply(this, arguments)
                 .then(function(response) {
                     if (!skipLoader) hideLoading();
                     return response;
@@ -278,88 +256,67 @@ window.escapeHtml = function(value) {
 })();
 
 document.addEventListener('DOMContentLoaded', function() {
-    function triggerMailSync(mode) {
-        const syncBtn = document.getElementById('globalSyncMailBtn');
-        const spinner = document.getElementById('globalSyncSpinner');
-        const alertToast = document.getElementById('globalSyncAlertToast');
-        const toastInner = document.getElementById('globalSyncToastInner');
-        const toastMsg = document.getElementById('globalSyncToastMsg');
+    const syncBtn = document.getElementById('globalSyncMailBtn');
+    if (syncBtn) {
+        syncBtn.addEventListener('click', function() {
+            const btn = this;
+            const spinner = document.getElementById('globalSyncSpinner');
+            const alertToast = document.getElementById('globalSyncAlertToast');
+            const toastInner = document.getElementById('globalSyncToastInner');
+            const toastMsg = document.getElementById('globalSyncToastMsg');
 
-        if (spinner) spinner.classList.add('dash-spinning');
-        if (syncBtn) syncBtn.disabled = true;
+            if (spinner) spinner.classList.add('dash-spinning');
+            btn.disabled = true;
 
-        const isFull = (mode === 'full');
-        const msgText = isFull 
-            ? 'Performing Full Historical Sync across all inbox emails (RFQ & Emails)...' 
-            : 'Syncing recent inbox messages (RFQ & Emails)...';
+            if (alertToast && toastMsg && toastInner) {
+                toastInner.className = 'toast show align-items-center text-white bg-primary border-0 shadow-lg';
+                toastMsg.innerHTML = '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2"></div>Syncing all inboxes (RFQ & Emails)...</div>';
+                alertToast.style.display = 'block';
+            }
 
-        if (alertToast && toastMsg && toastInner) {
-            toastInner.className = 'toast show align-items-center text-white bg-primary border-0 shadow-lg';
-            toastMsg.innerHTML = `<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2"></div>${msgText}</div>`;
-            alertToast.style.display = 'block';
-        }
-
-        const formData = new FormData();
-        formData.append('mode', mode || 'latest');
-
-        fetch('{% url "sync_all_mail" %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'X-Skip-Loader': '1'
-            },
-            body: formData
-        })
-        .then(async r => {
-            const ct = r.headers.get('content-type') || '';
-            if (!ct.includes('application/json')) {
-                if (r.status === 401 || r.status === 403 || r.redirected || r.url.includes('/login')) {
-                    throw new Error('Session expired or unauthorized. Please refresh the page and log in again.');
+            fetch('{% url "sync_all_mail" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'X-Skip-Loader': '1'
                 }
-                throw new Error(`Server error (${r.status} ${r.statusText || ''}). Check cloud server logs for details.`);
-            }
-            return r.json();
-        })
-        .then(data => {
-            if (spinner) spinner.classList.remove('dash-spinning');
-            if (syncBtn) syncBtn.disabled = false;
-            const bgClass = data.status === 'success' ? 'bg-success' : (data.status === 'warning' ? 'bg-warning text-dark' : 'bg-danger');
-            const icon = data.status === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill';
-            if (alertToast && toastMsg && toastInner) {
-                toastInner.className = `toast show align-items-center text-white ${bgClass} border-0 shadow-lg`;
-                toastMsg.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-${icon} me-2 fs-5"></i><span>${window.escapeHtml(data.message || 'Sync completed.')}</span></div>`;
-                setTimeout(function() {
-                    if (alertToast) alertToast.style.display = 'none';
-                }, 8000);
-            }
-        })
-        .catch(err => {
-            if (spinner) spinner.classList.remove('dash-spinning');
-            if (syncBtn) syncBtn.disabled = false;
-            if (alertToast && toastMsg && toastInner) {
-                toastInner.className = 'toast show align-items-center text-white bg-danger border-0 shadow-lg';
-                toastMsg.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-x-circle-fill me-2 fs-5"></i><span>Sync error: ${window.escapeHtml(err.message)}</span></div>`;
-                setTimeout(function() {
-                    if (alertToast) alertToast.style.display = 'none';
-                }, 8000);
-            }
+            })
+            .then(async r => {
+                const ct = r.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    if (r.status === 401 || r.status === 403 || r.redirected || r.url.includes('/login')) {
+                        throw new Error('Session expired or unauthorized. Please refresh the page and log in again.');
+                    }
+                    throw new Error(`Server error (${r.status} ${r.statusText || ''}). Check cloud server logs for details.`);
+                }
+                return r.json();
+            })
+            .then(data => {
+                if (spinner) spinner.classList.remove('dash-spinning');
+                btn.disabled = false;
+                const bgClass = data.status === 'success' ? 'bg-success' : (data.status === 'warning' ? 'bg-warning text-dark' : 'bg-danger');
+                const icon = data.status === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill';
+                if (alertToast && toastMsg && toastInner) {
+                    toastInner.className = `toast show align-items-center text-white ${bgClass} border-0 shadow-lg`;
+                    toastMsg.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-${icon} me-2 fs-5"></i><span>${window.escapeHtml(data.message || 'Sync completed.')}</span></div>`;
+                    setTimeout(function() {
+                        if (alertToast) alertToast.style.display = 'none';
+                    }, 6000);
+                }
+            })
+            .catch(err => {
+                if (spinner) spinner.classList.remove('dash-spinning');
+                btn.disabled = false;
+                if (alertToast && toastMsg && toastInner) {
+                    toastInner.className = 'toast show align-items-center text-white bg-danger border-0 shadow-lg';
+                    toastMsg.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-x-circle-fill me-2 fs-5"></i><span>Sync error: ${window.escapeHtml(err.message)}</span></div>`;
+                    setTimeout(function() {
+                        if (alertToast) alertToast.style.display = 'none';
+                    }, 6000);
+                }
+            });
         });
     }
-
-    document.getElementById('globalSyncMailBtn')?.addEventListener('click', function(e) {
-        e.preventDefault();
-        triggerMailSync('latest');
-    });
-
-    document.getElementById('syncLatestMenuBtn')?.addEventListener('click', function(e) {
-        e.preventDefault();
-        triggerMailSync('latest');
-    });
-
-    document.getElementById('fullSyncMenuBtn')?.addEventListener('click', function(e) {
-        e.preventDefault();
-        triggerMailSync('full');
-    });
 });
 </script>
 

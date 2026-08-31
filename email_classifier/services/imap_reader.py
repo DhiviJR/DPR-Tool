@@ -84,30 +84,24 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
         close_at_end = True
 
     try:
-        status, res = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
-        if status != 'OK' or not res or not res[0]:
+        status, _ = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
+        if status != 'OK':
             raise RuntimeError(f'Cannot open mailbox {settings.EMAIL_IMAP_MAILBOX}.')
 
-        try:
-            inbox_total = int(res[0])
-        except Exception:
-            inbox_total = 0
+        status, result = client.search(None, 'ALL')
+        if status != 'OK':
+            raise RuntimeError('Unable to search Inbox emails.')
 
-        if inbox_total <= 0:
-            return [], 0
+        message_numbers = list(reversed(result[0].split()))
+        batch = message_numbers[offset:offset + limit]
 
-        end_seq = max(1, inbox_total - offset)
-        start_seq = max(1, end_seq - limit + 1)
-
-        if start_seq > inbox_total or end_seq < 1 or start_seq > end_seq:
-            return [], inbox_total
-
-        batch_range = f"{start_seq}:{end_seq}".encode()
+        if not batch:
+            return [], len(message_numbers)
 
         # 1. Fast Header-Only fetch for batch in single request
         headers_info = []
         try:
-            status, data = client.fetch(batch_range, '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
+            status, data = client.fetch(b','.join(batch), '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
             if status == 'OK' and data:
                 for item in data:
                     if isinstance(item, tuple) and len(item) == 2 and item[1]:
@@ -135,41 +129,61 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
                 # All emails in batch already imported! Fast return!
                 return [], len(message_numbers)
 
-            # 3. Fetch body & attachment metadata ONLY for brand new emails (skips heavy binary attachments)
+            # 3. Fetch body & attachments ONLY for brand new emails in fast batch chunks
             messages = []
-            for h in new_headers:
-                n = h.get('num')
-                if not n:
-                    continue
-                try:
-                    st, d = client.fetch(n, '(BODY.PEEK[HEADER] BODY.PEEK[TEXT])')
-                    if st == 'OK' and d:
-                        header_bytes = b''
-                        text_bytes = b''
-                        for item in d:
-                            if isinstance(item, tuple) and len(item) == 2:
-                                if b'HEADER' in item[0]:
-                                    header_bytes = item[1]
-                                else:
-                                    text_bytes = item[1]
-                        raw_bytes = header_bytes + b'\r\n\r\n' + text_bytes
-                        m = email.message_from_bytes(raw_bytes)
-                        b_text = _body(m)
-                        has_att, att_names = _extract_attachments(m)
-                        messages.append({
-                            'uid': h['uid'],
-                            'sender': h['sender'],
-                            'subject': h['subject'],
-                            'body': b_text,
-                            'date': h['date'],
-                            'has_attachments': has_att,
-                            'attachment_names': '|||'.join(att_names),
-                        })
-                except Exception:
-                    pass
-            return messages, inbox_total
+            num_to_header = {h['num']: h for h in new_headers if h.get('num')}
+            num_list = list(num_to_header.keys())
 
-        return [], inbox_total
+            FETCH_CHUNK = 50
+            for i in range(0, len(num_list), FETCH_CHUNK):
+                chunk = num_list[i:i + FETCH_CHUNK]
+                try:
+                    st, d = client.fetch(b','.join(chunk), '(BODY.PEEK[])')
+                    if st == 'OK' and d:
+                        for item in d:
+                            if isinstance(item, tuple) and len(item) == 2 and item[1]:
+                                num_match = re.search(rb'^\d+', item[0])
+                                num_val = num_match.group(0) if num_match else b''
+                                h = num_to_header.get(num_val)
+                                if h and isinstance(item[1], bytes):
+                                    m = email.message_from_bytes(item[1])
+                                    b_text = _body(m)
+                                    has_att, att_names = _extract_attachments(m)
+                                    messages.append({
+                                        'uid': h['uid'],
+                                        'sender': h['sender'],
+                                        'subject': h['subject'],
+                                        'body': b_text,
+                                        'date': h['date'],
+                                        'has_attachments': has_att,
+                                        'attachment_names': '|||'.join(att_names),
+                                    })
+                except Exception:
+                    # Fallback to individual fetch if batch fetch fails on a specific server
+                    for n in chunk:
+                        h = num_to_header.get(n)
+                        if not h:
+                            continue
+                        try:
+                            st, d = client.fetch(n, '(BODY.PEEK[])')
+                            if st == 'OK' and d and d[0] and isinstance(d[0], tuple) and len(d[0]) > 1:
+                                m = email.message_from_bytes(d[0][1])
+                                b_text = _body(m)
+                                has_att, att_names = _extract_attachments(m)
+                                messages.append({
+                                    'uid': h['uid'],
+                                    'sender': h['sender'],
+                                    'subject': h['subject'],
+                                    'body': b_text,
+                                    'date': h['date'],
+                                    'has_attachments': has_att,
+                                    'attachment_names': '|||'.join(att_names),
+                                })
+                        except Exception:
+                            pass
+            return messages, len(message_numbers)
+
+        return [], len(message_numbers)
     finally:
         if close_at_end and client:
             try:
