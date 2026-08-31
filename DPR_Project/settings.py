@@ -185,6 +185,10 @@ DEFAULT_FROM_EMAIL = os.environ.get(
     'DJANGO_DEFAULT_FROM_EMAIL',
     'info@mesinstruments.co.in'
 )
+SUPPLIER_RFQ_TO_EMAIL = os.environ.get(
+    'DJANGO_SUPPLIER_RFQ_TO_EMAIL',
+    'ftp@mesinstruments.co.in'
+)
 # IMAP Settings for Inbox Sync
 EMAIL_IMAP_HOST = os.environ.get('DJANGO_EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
 EMAIL_IMAP_PORT = int(os.environ.get('DJANGO_EMAIL_IMAP_PORT', '993'))

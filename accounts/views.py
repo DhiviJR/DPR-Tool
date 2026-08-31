@@ -840,7 +840,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 19 * mm, "NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 22 * mm, "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri, Tamil Nadu - 635109")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 25 * mm, "Phone : +91-965-577-8807 / +91-965-577-8871")
-                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 28 * mm, "Email-ID : info@mesinstruments.co.in | Web : www.mesinstruments.co.in")
+                self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 28 * mm, f"Email-ID : {settings.DEFAULT_FROM_EMAIL} | Web : www.mesinstruments.co.in")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 31 * mm, "GST : 33ABKFM1033E1ZS | PAN : ABKFM1033E")
                 
                 # Draw thick black line under header
@@ -1061,7 +1061,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         installation_str,
        'Discount : Negotiable',
         f'Quotation Validity : This offer is Valid till {valid_till}',
-        'Purchase Order : Purchase Order must be send to info@mesinstruments.co.in',
+        f'Purchase Order : Purchase Order must be send to {settings.DEFAULT_FROM_EMAIL}',
         'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
         'Force Majeure: The Company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
         'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
@@ -1193,7 +1193,7 @@ def _send_rfq_supplier_price_requests(
                 subject=subject,
                 body=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[settings.DEFAULT_FROM_EMAIL],  # Must have a valid To header — suppliers stay in BCC
+                to=[getattr(settings, 'SUPPLIER_RFQ_TO_EMAIL', 'ftp@mesinstruments.co.in')],  # Host copy recipient (ftp@mesinstruments.co.in); suppliers stay in BCC
                 bcc=recipient_list,
                 cc=cc_list,
             )
@@ -3993,7 +3993,7 @@ def rfq_details(request):
                             rfq=rfq,
                             message_id=msg_id,
                             sender=source_email_obj.sender or (rfq.customer.email if rfq.customer else 'Unknown'),
-                            recipients=getattr(settings, 'EMAIL_HOST_USER', 'info@mesinstruments.co.in'),
+                            recipients=settings.DEFAULT_FROM_EMAIL,
                             subject=source_email_obj.subject or f"Enquiry - {rfq.rfq_no}",
                             body=source_email_obj.body or rfq.enquiry_details,
                             direction='IN',
@@ -5365,7 +5365,7 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         'NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br/>'
         '2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri, Tamilnadu-635109.<br/>'
         'Phone : +91-965-577-8807 / +91-965-577-8871<br/>'
-        'Email : info@mesinstruments.co.in | Web : www.mesinstruments.co.in',
+        f'Email : {settings.DEFAULT_FROM_EMAIL} | Web : www.mesinstruments.co.in',
         center_style
     )
 
@@ -6138,7 +6138,7 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri,<br/>"
         "Tamilnadu - 635109,<br/>"
         "Contact: 9655778871, 9655778807<br/>"
-        "Email : info@mesinstruments.co.in<br/>"
+        f"Email : {settings.DEFAULT_FROM_EMAIL}<br/>"
         "GSTIN : 33ABKFM1033E1ZS"
     )
 
@@ -6878,7 +6878,7 @@ def get_rfq_email_thread(request, rfq_id):
             for er in er_qs:
                 if hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk:
                     er_filtered.append(er)
-                elif check_customer_email_match(er.sender, 'info@mesinstruments.co.in', customer):
+                elif check_customer_email_match(er.sender, settings.DEFAULT_FROM_EMAIL, customer):
                     er_filtered.append(er)
 
             er_qs = er_filtered
@@ -6900,7 +6900,7 @@ def get_rfq_email_thread(request, rfq_id):
                     'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
                     'in_reply_to': '',
                     'sender': er.sender or (rfq.customer.email if rfq.customer else ''),
-                    'recipients': getattr(settings, 'EMAIL_HOST_USER', 'info@mesinstruments.co.in'),
+                    'recipients': settings.DEFAULT_FROM_EMAIL,
                     'cc_recipients': '',
                     'subject': er.subject or f"Enquiry - {rfq.rfq_no}",
                     'body': er.body or '',
@@ -7307,7 +7307,7 @@ def get_supplier_email_thread(request, dpr_id):
                         'message_id': er.imap_uid or f"<er-{er.id}@inbox>",
                         'in_reply_to': '',
                         'sender': er.sender or '',
-                        'recipients': 'info@mesinstruments.co.in',
+                        'recipients': settings.DEFAULT_FROM_EMAIL,
                         'cc_recipients': '',
                         'subject': er.subject or '(No Subject)',
                         'body': er.body or '',
