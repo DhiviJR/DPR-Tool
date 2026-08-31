@@ -6732,10 +6732,34 @@ def get_rfq_email_thread(request, rfq_id):
     seen_keys = set()
     customer = rfq.customer
 
-    # Initialize source_msg_id here so it is always defined in the message loop below
+    # Resolve source_email for this RFQ (direct link or matching EmailRecord marked as added to RFQ)
+    source_email = getattr(rfq, 'source_email', None)
+    if not source_email and rfq.enquiry_details:
+        clean_enquiry = (rfq.enquiry_details or '').strip()
+        if len(clean_enquiry) >= 4:
+            from email_classifier.models import EmailRecord
+            matching_er = EmailRecord.objects.filter(
+                is_added_to_rfq=True,
+                subject__iexact=clean_enquiry
+            ).first()
+            if not matching_er:
+                matching_er = EmailRecord.objects.filter(
+                    is_added_to_rfq=True,
+                    subject__icontains=clean_enquiry
+                ).first()
+            if matching_er:
+                source_email = matching_er
+                try:
+                    rfq.source_email = matching_er
+                    rfq.save(update_fields=['source_email'])
+                except Exception:
+                    pass
+
     source_msg_id = None
-    if hasattr(rfq, 'source_email') and rfq.source_email:
-        source_msg_id = (rfq.source_email.imap_uid or f"er-{rfq.source_email.id}@inbox").strip('<>')
+    source_subject = None
+    if source_email:
+        source_msg_id = (source_email.imap_uid or f"er-{source_email.id}@inbox").strip('<>')
+        source_subject = (source_email.subject or '').strip().lower()
 
     if show_all:
         email_messages = RFQEmailMessage.objects.all().order_by('-sent_at')[:500]
@@ -6795,13 +6819,6 @@ def get_rfq_email_thread(request, rfq_id):
 
         email_messages = filtered_msgs
 
-    # Determine earliest incoming message if source_email is not set
-    earliest_in_msg_id = None
-    if not (hasattr(rfq, 'source_email') and rfq.source_email):
-        earliest_in = RFQEmailMessage.objects.filter(rfq=rfq, direction='IN').order_by('sent_at').first()
-        if earliest_in:
-            earliest_in_msg_id = earliest_in.id
-
     # key_to_data_idx lets us retroactively update an entry's is_source flag
     # if the EmailRecord loop later identifies it as the originating email.
     key_to_data_idx = {}
@@ -6815,11 +6832,13 @@ def get_rfq_email_thread(request, rfq_id):
         seen_keys.add(key)
 
         is_src = False
-        # Compare stripped Message-ID with exact equality (not substring) to avoid false matches
-        if source_msg_id and source_msg_id == (msg.message_id or '').strip('<>'):
-            is_src = True
-        elif earliest_in_msg_id and msg.id == earliest_in_msg_id:
-            is_src = True
+        # Highlight ONLY when this RFQ was created from an email
+        if source_email:
+            msg_clean_id = (msg.message_id or '').strip('<>')
+            if source_msg_id and source_msg_id == msg_clean_id:
+                is_src = True
+            elif source_subject and (msg.subject or '').strip().lower() == source_subject and msg.direction == 'IN':
+                is_src = True
 
         idx = len(data)
         data.append({
@@ -6847,8 +6866,8 @@ def get_rfq_email_thread(request, rfq_id):
             er_qs = EmailRecord.objects.all().order_by('-received_at')[:500]
         else:
             er_conds = Q()
-            if hasattr(rfq, 'source_email') and rfq.source_email:
-                er_conds |= Q(pk=rfq.source_email.pk)
+            if source_email:
+                er_conds |= Q(pk=source_email.pk)
 
             if customer:
                 if customer.email:
@@ -6876,7 +6895,7 @@ def get_rfq_email_thread(request, rfq_id):
 
             er_filtered = []
             for er in er_qs:
-                if hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk:
+                if source_email and er.pk == source_email.pk:
                     er_filtered.append(er)
                 elif check_customer_email_match(er.sender, 'info@mesinstruments.co.in', customer):
                     er_filtered.append(er)
@@ -6889,7 +6908,14 @@ def get_rfq_email_thread(request, rfq_id):
                 (er.sender or '').strip().lower(),
                 er.received_at.strftime('%Y-%m-%d %H:%M') if er.received_at else ''
             )
-            is_src = bool(hasattr(rfq, 'source_email') and rfq.source_email and er.pk == rfq.source_email.pk)
+            is_src = False
+            if source_email:
+                if er.pk == source_email.pk:
+                    is_src = True
+                elif source_msg_id and er.imap_uid and er.imap_uid.strip('<>') == source_msg_id:
+                    is_src = True
+                elif source_subject and (er.subject or '').strip().lower() == source_subject:
+                    is_src = True
 
             if er_key not in seen_keys:
                 # New entry — add it normally
@@ -6913,26 +6939,39 @@ def get_rfq_email_thread(request, rfq_id):
                 })
                 key_to_data_idx[er_key] = idx
             elif is_src:
-                # This EmailRecord is the source email but was already added from
-                # RFQEmailMessage (same subject/sender/time). Instead of skipping it,
-                # update the existing entry's is_source flag to True so the
-                # highlight always appears correctly.
+                # Update existing entry's is_source flag to True
                 existing_idx = key_to_data_idx.get(er_key)
                 if existing_idx is not None:
                     data[existing_idx]['is_source'] = True
     except Exception as e:
         logger.warning(f"Could not merge EmailRecord into RFQ email thread: {e}")
 
-    # Safety net: if no entry is marked as source yet, fall back to marking the
-    # earliest incoming RFQEmailMessage for this RFQ (covers manually-created RFQs
-    # and any edge case where the above matching still fails).
-    if not any(entry.get('is_source') for entry in data):
-        earliest_in = RFQEmailMessage.objects.filter(rfq=rfq, direction='IN').order_by('sent_at').first()
-        if earliest_in:
-            for entry in data:
-                if entry.get('id') == earliest_in.id:
-                    entry['is_source'] = True
-                    break
+    # Ensure originating email is present in thread if rfq was created from email
+    if source_email and not any(entry.get('is_source') for entry in data):
+        # 1. Try matching by subject among entries in data
+        for entry in data:
+            if source_subject and (entry.get('subject') or '').strip().lower() == source_subject and entry.get('direction') == 'IN':
+                entry['is_source'] = True
+                break
+
+        # 2. If still not in data, inject the source EmailRecord directly
+        if not any(entry.get('is_source') for entry in data):
+            data.append({
+                'id': f"er_{source_email.id}",
+                'message_id': source_email.imap_uid or f"<er-{source_email.id}@inbox>",
+                'in_reply_to': '',
+                'sender': source_email.sender or (rfq.customer.email if rfq.customer else ''),
+                'recipients': getattr(settings, 'EMAIL_HOST_USER', 'info@mesinstruments.co.in'),
+                'cc_recipients': '',
+                'subject': source_email.subject or f"Enquiry - {rfq.rfq_no}",
+                'body': source_email.body or '',
+                'direction': 'IN',
+                'sent_at': timezone.localtime(source_email.received_at).strftime('%b %d, %Y %I:%M %p') if source_email.received_at else '',
+                'has_attachments': source_email.has_attachments,
+                'attachment_names': source_email.attachment_names or '',
+                'is_source': True,
+                '_sort_date': source_email.received_at or timezone.now()
+            })
 
     # Sort thread: Originating RFQ email FIRST (is_source=True), followed by newest emails first
     data.sort(key=lambda x: (1 if x.get('is_source') else 0, x.get('_sort_date') or timezone.now()), reverse=True)
@@ -7063,7 +7102,7 @@ def sync_rfq_email_inbox(request, rfq_id=0):
     })
 
 
-@login_required
+@csrf_exempt
 def sync_all_mail(request):
     """
     Unified mail synchronization from the main dashboard:
@@ -7077,6 +7116,9 @@ def sync_all_mail(request):
 
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'message': 'Authentication required. Please log in.'}, status=401)
 
     rfq_synced = 0
     rfq_err = None
@@ -7107,18 +7149,18 @@ def sync_all_mail(request):
             logger.exception("RFQ sync failed during unified sync: %s", e)
             rfq_err = str(e)
 
-        # 2. Sync EMAILS classifier inbox — newest-first; stop as soon as we're caught up
+        # 2. Sync EMAILS classifier inbox — fast newest-first scan
         try:
             from email_classifier.services.imap_reader import fetch_all_messages
             from email_classifier.services.classifier_service import get_classifier
             from email_classifier.models import EmailRecord
 
             classifier = get_classifier()
-            BATCH_SIZE = 100        # emails per IMAP round-trip
-            MAX_NEW_PER_SYNC = 200  # cap per sync press to keep the button fast
+            BATCH_SIZE = 50
             offset = 0
+            is_initial_import = (EmailRecord.objects.count() == 0)
 
-            while email_saved < MAX_NEW_PER_SYNC:
+            while True:
                 try:
                     messages_list, inbox_total = fetch_all_messages(
                         offset=offset, limit=BATCH_SIZE, mail_client=mail_client
@@ -7128,22 +7170,22 @@ def sync_all_mail(request):
                     break
 
                 if not messages_list:
-                    # Emails are newest-first; empty batch means this batch is all already in DB.
-                    # Since we scan newest → oldest, stop immediately — inbox is up to date.
-                    break
+                    if not is_initial_import:
+                        break
+                    offset += BATCH_SIZE
+                    if offset >= inbox_total:
+                        break
+                    continue
 
                 uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
                 existing_uids = set(
                     EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True)
                 )
 
-                batch_had_new = False
                 for message in messages_list:
                     if message['uid'] in existing_uids:
                         email_skipped += 1
                         continue
-                    if email_saved >= MAX_NEW_PER_SYNC:
-                        break
                     try:
                         result = classifier.classify(
                             subject=message['subject'], body=message['body'], sender=message['sender'],
@@ -7163,15 +7205,15 @@ def sync_all_mail(request):
                             attachment_names=message.get('attachment_names', ''),
                         )
                         email_saved += 1
-                        batch_had_new = True
                     except Exception as e:
                         logger.exception('Failed to classify message uid %s: %s', message.get('uid'), e)
 
+                # For regular daily sync, once the newest batch is processed, we are caught up
+                if not is_initial_import:
+                    break
+
                 offset += BATCH_SIZE
                 if offset >= inbox_total:
-                    break
-                # If every email in this batch was already in DB, no need to scan older emails
-                if not batch_had_new:
                     break
 
         except Exception as e:

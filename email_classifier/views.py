@@ -145,36 +145,59 @@ def toggle_enquiry_status(request, record_id):
 def sync_inbox(request):
     if request.method == 'POST':
         try:
-            messages_list, inbox_total = fetch_all_messages(offset=0, limit=25)
             classifier = get_classifier()
             saved = 0
             skipped = 0
-            
-            uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
-            existing_uids = set(EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True))
+            offset = 0
+            BATCH_SIZE = 50
+            is_initial_import = (EmailRecord.objects.count() == 0)
 
-            for message in messages_list:
-                if message['uid'] in existing_uids:
-                    skipped += 1
-                    continue
+            while True:
                 try:
-                    result = classifier.classify(
-                        subject=message['subject'], body=message['body'], sender=message['sender'],
-                    )
-                    EmailRecord.objects.create(
-                        sender=message['sender'], subject=message['subject'], body=message['body'],
-                        source='imap', imap_uid=message['uid'],
-                        received_at=message.get('date'),
-                        ai_category=result['category'],
-                        confidence=result['confidence'],
-                        reason=result['reason'],
-                        important_details=result['important_details'],
-                        has_attachments=message.get('has_attachments', False),
-                        attachment_names=message.get('attachment_names', ''),
-                    )
-                    saved += 1
+                    messages_list, inbox_total = fetch_all_messages(offset=offset, limit=BATCH_SIZE)
                 except Exception:
-                    pass
+                    break
+
+                if not messages_list:
+                    if not is_initial_import:
+                        break
+                    offset += BATCH_SIZE
+                    if offset >= inbox_total:
+                        break
+                    continue
+
+                uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
+                existing_uids = set(EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True))
+
+                for message in messages_list:
+                    if message['uid'] in existing_uids:
+                        skipped += 1
+                        continue
+                    try:
+                        result = classifier.classify(
+                            subject=message['subject'], body=message['body'], sender=message['sender'],
+                        )
+                        EmailRecord.objects.create(
+                            sender=message['sender'], subject=message['subject'], body=message['body'],
+                            source='imap', imap_uid=message['uid'],
+                            received_at=message.get('date'),
+                            ai_category=result['category'],
+                            confidence=result['confidence'],
+                            reason=result['reason'],
+                            important_details=result['important_details'],
+                            has_attachments=message.get('has_attachments', False),
+                            attachment_names=message.get('attachment_names', ''),
+                        )
+                        saved += 1
+                    except Exception:
+                        pass
+
+                if not is_initial_import:
+                    break
+
+                offset += BATCH_SIZE
+                if offset >= inbox_total:
+                    break
 
             # Sync RFQ & Supplier email threads across the system
             rfq_synced = 0

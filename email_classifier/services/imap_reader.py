@@ -128,30 +128,58 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
                 # All emails in batch already imported! Fast return!
                 return [], len(message_numbers)
 
-            # 3. Fetch body & attachments ONLY for brand new emails
+            # 3. Fetch body & attachments ONLY for brand new emails in fast batch chunks
             messages = []
-            for h in new_headers:
+            num_to_header = {h['num']: h for h in new_headers if h.get('num')}
+            num_list = list(num_to_header.keys())
+
+            FETCH_CHUNK = 50
+            for i in range(0, len(num_list), FETCH_CHUNK):
+                chunk = num_list[i:i + FETCH_CHUNK]
                 try:
-                    b_text = ''
-                    has_att = False
-                    att_names = []
-                    if h['num']:
-                        st, d = client.fetch(h['num'], '(BODY.PEEK[])')
-                        if st == 'OK' and d and d[0] and isinstance(d[0], tuple) and len(d[0]) > 1:
-                            m = email.message_from_bytes(d[0][1])
-                            b_text = _body(m)
-                            has_att, att_names = _extract_attachments(m)
-                    messages.append({
-                        'uid': h['uid'],
-                        'sender': h['sender'],
-                        'subject': h['subject'],
-                        'body': b_text,
-                        'date': h['date'],
-                        'has_attachments': has_att,
-                        'attachment_names': '|||'.join(att_names),
-                    })
+                    st, d = client.fetch(b','.join(chunk), '(BODY.PEEK[])')
+                    if st == 'OK' and d:
+                        for item in d:
+                            if isinstance(item, tuple) and len(item) == 2 and item[1]:
+                                num_match = re.search(rb'^\d+', item[0])
+                                num_val = num_match.group(0) if num_match else b''
+                                h = num_to_header.get(num_val)
+                                if h and isinstance(item[1], bytes):
+                                    m = email.message_from_bytes(item[1])
+                                    b_text = _body(m)
+                                    has_att, att_names = _extract_attachments(m)
+                                    messages.append({
+                                        'uid': h['uid'],
+                                        'sender': h['sender'],
+                                        'subject': h['subject'],
+                                        'body': b_text,
+                                        'date': h['date'],
+                                        'has_attachments': has_att,
+                                        'attachment_names': '|||'.join(att_names),
+                                    })
                 except Exception:
-                    pass
+                    # Fallback to individual fetch if batch fetch fails on a specific server
+                    for n in chunk:
+                        h = num_to_header.get(n)
+                        if not h:
+                            continue
+                        try:
+                            st, d = client.fetch(n, '(BODY.PEEK[])')
+                            if st == 'OK' and d and d[0] and isinstance(d[0], tuple) and len(d[0]) > 1:
+                                m = email.message_from_bytes(d[0][1])
+                                b_text = _body(m)
+                                has_att, att_names = _extract_attachments(m)
+                                messages.append({
+                                    'uid': h['uid'],
+                                    'sender': h['sender'],
+                                    'subject': h['subject'],
+                                    'body': b_text,
+                                    'date': h['date'],
+                                    'has_attachments': has_att,
+                                    'attachment_names': '|||'.join(att_names),
+                                })
+                        except Exception:
+                            pass
             return messages, len(message_numbers)
 
         return [], len(message_numbers)
