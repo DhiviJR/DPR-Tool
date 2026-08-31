@@ -422,11 +422,11 @@ def _match_email_to_rfq(subject, body, from_str, to_str, in_reply_to=None, refer
     return None
 
 
-def sync_rfq_inbox(rfq=None, mail=None):
+def sync_rfq_inbox(rfq=None, mail=None, scan_limit=500):
     """
     Connects to IMAP server, fetches inbox headers in a single fast batch,
-    matches them in memory against RFQs, and downloads full messages ONLY for new matching RFQ emails.
-    Returns (synced_count, error_message).
+    and matches reply/quote emails to open RFQs across the system.
+    If scan_limit is None or 0, scans all emails in the inbox.
     """
     imap_host = getattr(settings, 'EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
     imap_port = int(getattr(settings, 'EMAIL_IMAP_PORT', 993))
@@ -454,8 +454,10 @@ def sync_rfq_inbox(rfq=None, mail=None):
             return 0, None
 
         msg_nums = data[0].split()
-        # Scan the most recent 200 emails for RFQ matching — fast for daily use.
-        recent_nums = msg_nums[-200:]
+        if scan_limit and isinstance(scan_limit, int) and scan_limit > 0:
+            recent_nums = msg_nums[-scan_limit:]
+        else:
+            recent_nums = msg_nums
         if not recent_nums:
             return 0, None
 

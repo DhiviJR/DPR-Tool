@@ -7086,12 +7086,15 @@ def sync_rfq_email_inbox(request, rfq_id=0):
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
 
+    mode = request.POST.get('mode') or request.GET.get('mode')
+    is_full = (mode == 'full')
+    scan_limit = None if is_full else 500
+
     rfq = None
     if rfq_id and int(rfq_id) > 0:
         rfq = RFQ.objects.filter(id=rfq_id).first()
 
-    # Pass target rfq into sync_rfq_inbox so it matches specifically for target_rfq if provided
-    synced_count, err = sync_rfq_inbox(rfq=rfq)
+    synced_count, err = sync_rfq_inbox(rfq=rfq, scan_limit=scan_limit)
 
     if err:
         return JsonResponse({'status': 'warning', 'message': f'Sync notice: {err}', 'synced_count': synced_count})
@@ -7106,9 +7109,7 @@ def sync_rfq_email_inbox(request, rfq_id=0):
 def sync_all_mail(request):
     """
     Unified mail synchronization from the main dashboard:
-    1. Reuses a single authenticated IMAP connection
-    2. Synchronizes RFQ inbox & reply chains across all RFQs via sync_rfq_inbox()
-    3. Synchronizes & classifies incoming emails for the EMAILS module
+    Supports mode='full' (historical backfill across entire inbox) and mode='latest' (quick daily sync).
     """
     import logging
     import imaplib
@@ -7119,6 +7120,9 @@ def sync_all_mail(request):
 
     if not request.user.is_authenticated:
         return JsonResponse({'status': 'error', 'message': 'Authentication required. Please log in.'}, status=401)
+
+    mode = request.POST.get('mode') or request.GET.get('mode')
+    is_full = (mode == 'full')
 
     rfq_synced = 0
     rfq_err = None
@@ -7144,12 +7148,13 @@ def sync_all_mail(request):
         # 1. Sync RFQ & Reply Mail
         try:
             from .email_services import sync_rfq_inbox
-            rfq_synced, rfq_err = sync_rfq_inbox(rfq=None, mail=mail_client)
+            scan_limit = None if is_full else 500
+            rfq_synced, rfq_err = sync_rfq_inbox(rfq=None, mail=mail_client, scan_limit=scan_limit)
         except Exception as e:
             logger.exception("RFQ sync failed during unified sync: %s", e)
             rfq_err = str(e)
 
-        # 2. Sync EMAILS classifier inbox — fast newest-first scan
+        # 2. Sync EMAILS classifier inbox
         try:
             from email_classifier.services.imap_reader import fetch_all_messages
             from email_classifier.services.classifier_service import get_classifier
@@ -7157,10 +7162,12 @@ def sync_all_mail(request):
 
             classifier = get_classifier()
             BATCH_SIZE = 50
+            MAX_SAVED = 300 if is_full else 100
             offset = 0
-            is_initial_import = (EmailRecord.objects.count() == 0)
+            is_initial_import = (EmailRecord.objects.count() == 0) or is_full
+            consecutive_skipped_batches = 0
 
-            while True:
+            while email_saved < MAX_SAVED:
                 try:
                     messages_list, inbox_total = fetch_all_messages(
                         offset=offset, limit=BATCH_SIZE, mail_client=mail_client
@@ -7170,8 +7177,6 @@ def sync_all_mail(request):
                     break
 
                 if not messages_list:
-                    if not is_initial_import:
-                        break
                     offset += BATCH_SIZE
                     if offset >= inbox_total:
                         break
@@ -7182,6 +7187,7 @@ def sync_all_mail(request):
                     EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True)
                 )
 
+                new_count_in_batch = 0
                 for message in messages_list:
                     if message['uid'] in existing_uids:
                         email_skipped += 1
@@ -7205,11 +7211,23 @@ def sync_all_mail(request):
                             attachment_names=message.get('attachment_names', ''),
                         )
                         email_saved += 1
+                        new_count_in_batch += 1
+                        if email_saved >= MAX_SAVED:
+                            break
                     except Exception as e:
                         logger.exception('Failed to classify message uid %s: %s', message.get('uid'), e)
 
-                # For regular daily sync, once the newest batch is processed, we are caught up
-                if not is_initial_import:
+                if new_count_in_batch == 0:
+                    consecutive_skipped_batches += 1
+                else:
+                    consecutive_skipped_batches = 0
+
+                # For quick daily sync, stop as soon as we hit an already-synced batch
+                if not is_full and consecutive_skipped_batches >= 1:
+                    break
+
+                # For full sync, stop if we've skipped 5 consecutive batches (meaning we are caught up in history)
+                if is_full and consecutive_skipped_batches >= 5:
                     break
 
                 offset += BATCH_SIZE
