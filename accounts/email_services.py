@@ -445,36 +445,40 @@ def sync_rfq_inbox(rfq=None, mail=None, scan_limit=500):
             mail.login(imap_user, imap_password)
             close_mail_at_end = True
 
-        status, _ = mail.select('INBOX', readonly=True)
-        if status != 'OK':
+        status, response = mail.select('INBOX', readonly=True)
+        if status != 'OK' or not response or not response[0]:
             return 0, "Unable to select INBOX."
 
-        status, data = mail.search(None, 'ALL')
-        if status != 'OK' or not data[0]:
+        try:
+            inbox_total = int(response[0])
+        except Exception:
+            inbox_total = 0
+
+        if inbox_total <= 0:
             return 0, None
 
-        msg_nums = data[0].split()
         if scan_limit and isinstance(scan_limit, int) and scan_limit > 0:
-            recent_nums = msg_nums[-scan_limit:]
+            scan_count = min(scan_limit, inbox_total)
+            start_seq = max(1, inbox_total - scan_count + 1)
         else:
-            recent_nums = msg_nums
-        if not recent_nums:
-            return 0, None
+            start_seq = 1
+
+        recent_range_bytes = f"{start_seq}:{inbox_total}".encode()
 
         # Fetch headers in chunks of 200 to avoid IMAP command-length limits
         HEADER_CHUNK = 200
         batch_headers = []
-        for chunk_start in range(0, len(recent_nums), HEADER_CHUNK):
-            chunk = recent_nums[chunk_start:chunk_start + HEADER_CHUNK]
-            try:
-                ch_status, ch_data = mail.fetch(
-                    b','.join(chunk),
-                    '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT FROM TO CC IN-REPLY-TO REFERENCES DATE)])'
-                )
-                if ch_status == 'OK' and ch_data:
-                    batch_headers.extend(ch_data)
-            except Exception:
-                pass  # Skip failed chunk, continue with the rest
+        try:
+            ch_status, ch_data = mail.fetch(
+                recent_range_bytes,
+                '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT FROM TO CC IN-REPLY-TO REFERENCES DATE)])'
+            )
+            if ch_status == 'OK' and ch_data:
+                batch_headers.extend(ch_data)
+        except Exception:
+            pass
+        if not batch_headers:
+            return 0, None
 
         if not batch_headers:
             return 0, None

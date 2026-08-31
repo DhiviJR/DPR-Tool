@@ -84,24 +84,30 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
         close_at_end = True
 
     try:
-        status, _ = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
-        if status != 'OK':
+        status, res = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
+        if status != 'OK' or not res or not res[0]:
             raise RuntimeError(f'Cannot open mailbox {settings.EMAIL_IMAP_MAILBOX}.')
 
-        status, result = client.search(None, 'ALL')
-        if status != 'OK':
-            raise RuntimeError('Unable to search Inbox emails.')
+        try:
+            inbox_total = int(res[0])
+        except Exception:
+            inbox_total = 0
 
-        message_numbers = list(reversed(result[0].split()))
-        batch = message_numbers[offset:offset + limit]
+        if inbox_total <= 0:
+            return [], 0
 
-        if not batch:
-            return [], len(message_numbers)
+        end_seq = max(1, inbox_total - offset)
+        start_seq = max(1, end_seq - limit + 1)
+
+        if start_seq > inbox_total or end_seq < 1 or start_seq > end_seq:
+            return [], inbox_total
+
+        batch_range = f"{start_seq}:{end_seq}".encode()
 
         # 1. Fast Header-Only fetch for batch in single request
         headers_info = []
         try:
-            status, data = client.fetch(b','.join(batch), '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
+            status, data = client.fetch(batch_range, '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
             if status == 'OK' and data:
                 for item in data:
                     if isinstance(item, tuple) and len(item) == 2 and item[1]:
@@ -161,9 +167,9 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
                         })
                 except Exception:
                     pass
-            return messages, len(message_numbers)
+            return messages, inbox_total
 
-        return [], len(message_numbers)
+        return [], inbox_total
     finally:
         if close_at_end and client:
             try:
