@@ -644,15 +644,8 @@ def sync_rfq_inbox(rfq=None, mail=None, scan_limit=300):
             if not matched_rfq:
                 continue
 
-            sent_at = timezone.now()
-            if cand['date_str']:
-                try:
-                    dt = parsedate_to_datetime(cand['date_str'])
-                    if timezone.is_naive(dt):
-                        dt = timezone.make_aware(dt)
-                    sent_at = dt
-                except Exception:
-                    pass
+            from email_classifier.services.imap_reader import _parse_date
+            sent_at = _parse_date(cand.get('date_str'))
 
             has_attachments = False
             attachment_names = []

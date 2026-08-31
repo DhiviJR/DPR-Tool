@@ -7183,6 +7183,8 @@ def sync_all_mail(request):
                     offset += BATCH_SIZE
                     continue
 
+                messages_list.sort(key=lambda x: x.get('date') or timezone.now(), reverse=True)
+
                 uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
                 existing_uids = set(
                     EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True)
