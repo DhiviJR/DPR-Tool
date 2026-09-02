@@ -1961,6 +1961,8 @@ def customer_po_product_details(request):
         )
 
         sps = list(product.supplierproduct_set.all())
+        product.supplier_qty_ordered = sum(sp.quantity for sp in sps)
+        product.supplier_qty_received = sum(sp.quantity_received for sp in sps)
         if not sps:
             product.material_status_code = 'pending'
             product.material_status_label = 'Not Delivered (Pending)'
@@ -1986,20 +1988,93 @@ def customer_po_product_details(request):
 
         product.generated_invoices = list(product.invoices.all().order_by('id'))
 
+    # Group products by DPR
+    from collections import OrderedDict
+    dpr_groups = OrderedDict()
+    for product in products:
+        dpr = product.dpr
+        if dpr.id not in dpr_groups:
+            dpr_groups[dpr.id] = {
+                'dpr': dpr,
+                'products': [],
+                'first_product_id': product.id,
+                'validity_state': product.validity_state,
+            }
+        dpr_groups[dpr.id]['products'].append(product)
+
+    grouped_rows = []
+    for dpr_id, g in dpr_groups.items():
+        dpr = g['dpr']
+        prods = g['products']
+        first_product_id = g['first_product_id']
+        validity_state = g['validity_state']
+
+        total_supplier_ordered = sum(p.supplier_qty_ordered for p in prods)
+        total_supplier_received = sum(p.supplier_qty_received for p in prods)
+        total_customer_ordered = sum(p.quantity_ordered or 0 for p in prods)
+        total_customer_delivered = sum(p.quantity_delivered or 0 for p in prods)
+
+        # Determine overall status of the DPR group
+        if all(p.status == 'delivered' or (p.quantity_delivered and p.quantity_delivered >= p.quantity_ordered) for p in prods):
+            group_status = 'delivered'
+        elif all(p.status == 'cancelled' for p in prods):
+            group_status = 'cancelled'
+        elif any(p.status == 'invoice_pending' for p in prods):
+            group_status = 'invoice_pending'
+        elif any((p.quantity_delivered or 0) > 0 or p.status == 'partially_delivered' for p in prods):
+            group_status = 'partially_delivered'
+        else:
+            group_status = None
+
+        row_class = _get_status_validity_row_class(group_status, validity_state)
+        filter_state = _get_status_validity_filter_state(group_status, validity_state)
+
+        # Collect all generated invoices across products in this DPR (deduplicated by invoice_number)
+        seen_inv_nos = set()
+        group_invoices = []
+        for p in prods:
+            for inv in p.generated_invoices:
+                if inv.invoice_number not in seen_inv_nos:
+                    seen_inv_nos.add(inv.invoice_number)
+                    group_invoices.append(inv)
+
+        any_material_received = any(p.material_status_code != 'pending' for p in prods)
+        is_all_delivered = (total_customer_delivered >= total_customer_ordered and total_customer_ordered > 0) or (group_status == 'delivered')
+
+        product_names_display = ', '.join([p.product_name for p in prods])
+
+        grouped_rows.append({
+            'dpr': dpr,
+            'products': prods,
+            'product_count': len(prods),
+            'first_product_id': first_product_id,
+            'validity_state': validity_state,
+            'status': group_status,
+            'row_class': row_class,
+            'filter_state': filter_state,
+            'total_supplier_qty_ordered': total_supplier_ordered,
+            'total_supplier_qty_received': total_supplier_received,
+            'total_customer_qty_ordered': total_customer_ordered,
+            'total_customer_qty_delivered': total_customer_delivered,
+            'group_invoices': group_invoices,
+            'any_material_received': any_material_received,
+            'is_all_delivered': is_all_delivered,
+            'product_names_display': product_names_display,
+        })
+
     # Sort Red (Pending/Expired/Not Delivered) at TOP (0), Yellow (Partial/Due Soon) in MIDDLE (1), Green (Delivered/Closed) at BOTTOM (2)
-    def _color_rank(p):
-        if p.status == 'delivered' or (p.quantity_delivered and p.quantity_delivered >= p.quantity_ordered):
+    def _color_rank(row):
+        if row['is_all_delivered'] or row['row_class'] == 'table-success':
             return 2
-        if p.row_class == 'table-success':
-            return 2
-        if p.status == 'partially_delivered' or p.row_class in ('table-warning', 'table-info'):
+        if row['status'] == 'partially_delivered' or row['row_class'] in ('table-warning', 'table-info'):
             return 1
         return 0
 
     import datetime
-    products.sort(key=lambda p: (_color_rank(p), p.dpr.po_validity or datetime.date.max, -p.id))
+    grouped_rows.sort(key=lambda r: (_color_rank(r), r['dpr'].po_validity or datetime.date.max, -r['dpr'].id))
 
     total_products = len(products)
+    total_dprs = len(grouped_rows)
     delivered_count = sum(1 for p in products if p.status == 'delivered')
     not_delivered_count = total_products - delivered_count
 
@@ -2012,8 +2087,9 @@ def customer_po_product_details(request):
         request,
         'customer_po_product_details.html',
         {
-            'products': products,
+            'products': grouped_rows,
             'total_products': total_products,
+            'total_dprs': total_dprs,
             'delivered_count': delivered_count,
             'not_delivered_count': not_delivered_count,
             'total_ordered_qty': total_ordered_qty,
@@ -2121,16 +2197,17 @@ def supplier_status_details(request, product_id):
         raise Http404
 
     supplier_rows = SupplierProduct.objects.filter(
-        customer_product=customer_product
-    ).select_related('supplier')
+        customer_product__dpr=customer_product.dpr
+    ).select_related('supplier', 'customer_product')
 
     data = [
         {
-            'supplier_name': row.supplier.supplier_name,
+            'product_name': row.customer_product.product_name if row.customer_product else '',
+            'supplier_name': row.supplier.supplier_name if row.supplier else '-',
             'quantity': row.quantity,
             'quantity_received': row.quantity_received,
             'expected_date': row.expected_date.strftime('%Y-%m-%d') if row.expected_date else '-',
-            'po_number': row.po_number,
+            'po_number': row.po_number or '-',
             'po_value': str(row.po_value),
             'po_date': row.po_date.strftime('%Y-%m-%d') if row.po_date else '-',
             'po_validity': row.po_validity.strftime('%Y-%m-%d') if row.po_validity else '-',
@@ -2138,8 +2215,11 @@ def supplier_status_details(request, product_id):
         for row in supplier_rows
     ]
 
+    all_names = list(set([r['product_name'] for r in data if r['product_name']]))
+    display_name = ', '.join(all_names) if all_names else customer_product.product_name
+
     return JsonResponse({
-        'product_name': customer_product.product_name,
+        'product_name': display_name,
         'dpr_serial': customer_product.dpr.serial_number,
         'supplier_rows': data,
     })
@@ -6050,7 +6130,7 @@ def check_customer_po_number(request):
     return JsonResponse({'exists': qs.exists()})
 
 
-def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_ids=None, custom_qtys=None):
+def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_ids=None, custom_qtys=None, custom_data=None):
     from products.models import CustomerProduct, CustomerInvoice
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -6147,9 +6227,9 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
     )
 
     class NumberedCanvas(canvas.Canvas):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.pages = []
+        def __init__(*args, **kwargs):
+            super(NumberedCanvas, args[0]).__init__(*args[1:], **kwargs)
+            args[0].pages = []
 
         def showPage(self):
             self.pages.append(dict(self.__dict__))
@@ -6208,8 +6288,39 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
             inv_no = f"MES-F{target_product.id:04d}"
         inv_date = timezone.localdate().strftime('%d/%m/%Y')
 
+    if custom_data and custom_data.get('invoice_date'):
+        try:
+            raw_inv_d = custom_data.get('invoice_date').strip()
+            if '-' in raw_inv_d:
+                parts = raw_inv_d.split('-')
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    inv_date = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                else:
+                    inv_date = raw_inv_d
+            else:
+                inv_date = raw_inv_d
+        except Exception:
+            pass
+
     po_no = dpr.po_number or dpr.serial_number or '-'
+    if custom_data and custom_data.get('po_number'):
+        po_no = custom_data.get('po_number').strip()
+
     po_date_str = dpr.po_date.strftime('%d/%m/%Y') if dpr.po_date else '-'
+    if custom_data and custom_data.get('po_date'):
+        try:
+            raw_po_d = custom_data.get('po_date').strip()
+            if '-' in raw_po_d:
+                parts = raw_po_d.split('-')
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    po_date_str = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                else:
+                    po_date_str = raw_po_d
+            else:
+                po_date_str = raw_po_d
+        except Exception:
+            pass
+
     raw_terms = str(customer.payment_terms).strip() if customer.payment_terms else ''
     if raw_terms.isdigit():
         terms = f"{raw_terms} Week{'s' if raw_terms != '1' else ''}"
@@ -6218,18 +6329,29 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
     else:
         terms = '30 Days Against Invoice'
 
+    if custom_data and custom_data.get('terms_of_payment'):
+        terms = custom_data.get('terms_of_payment').strip()
+
+    despatch_through_val = custom_data.get('despatch_through', 'By Hand').strip() if (custom_data and custom_data.get('despatch_through')) else 'By Hand'
+    destination_val = custom_data.get('destination', '').strip() if (custom_data and custom_data.get('destination')) else ''
+    shipping_addr_val = custom_data.get('shipping_address', '').strip() if (custom_data and custom_data.get('shipping_address')) else ''
+
+    from xml.sax.saxutils import escape as xml_escape
+    def pdf_text(val):
+        return xml_escape(str(val or ''))
+
     right_table_data = [
         [Paragraph("Invoice No :", normal), Paragraph(f"<b>{inv_no}</b>", normal), Paragraph("Dated :", normal), Paragraph(f"<b>{inv_date}</b>", normal)],
         [Paragraph("Vendor Code :", normal), Paragraph("", normal), Paragraph("Terms of Payment :", normal), Paragraph(f"<b>{terms}</b>", normal)],
         [Paragraph("Supplier Ref :", normal), Paragraph("", normal), Paragraph("Other Ref :", normal), Paragraph("", normal)],
         [Paragraph("Buyer's PO No :", normal), Paragraph(f"<b>{po_no}</b>", normal), Paragraph("Dated :", normal), Paragraph(f"<b>{po_date_str}</b>", normal)],
-        [Paragraph("Despatch Through :", normal), Paragraph("By Hand", normal), Paragraph("Destination :", normal), Paragraph("", normal)],
-        [Paragraph("Shipping Address :", normal), Paragraph("", normal), Paragraph("", normal), Paragraph("", normal)],
+        [Paragraph("Despatch Through :", normal), Paragraph(pdf_text(despatch_through_val), normal), Paragraph("Destination :", normal), Paragraph(pdf_text(destination_val), normal)],
+        [Paragraph("Shipping Address :", normal), Paragraph(pdf_text(shipping_addr_val), normal), Paragraph("", normal), Paragraph("", normal)],
     ]
 
     headers = [
         Paragraph("<b>S.No</b>", center_bold),
-        Paragraph("<b>Part No</b>", center_bold),
+        Paragraph("<b>Product</b>", center_bold),
         Paragraph("<b>Description</b>", center_bold),
         Paragraph("<b>HSN/SAC</b>", center_bold),
         Paragraph("<b>Qty</b>", center_bold),
@@ -6251,21 +6373,86 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         else:
             qty = p.quantity_delivered if p.quantity_delivered > 0 else p.quantity_ordered
         rate = p.mes_rate_per_unit if (p.mes_rate_per_unit and p.mes_rate_per_unit > 0) else (p.rate_per_unit or Decimal('0.00'))
+        if custom_data and custom_data.get(f'rate_{p.id}'):
+            try:
+                rate = Decimal(str(custom_data.get(f'rate_{p.id}'))).quantize(Decimal('0.01'))
+            except Exception:
+                pass
         line_total = Decimal(qty) * rate
 
         total_qty += qty
         subtotal += line_total
 
-        hsn = _get_hsn_code(p)
-        uom = _get_uom(p.product_name).upper()
+        hsn = custom_data.get(f'hsn_{p.id}', '').strip() if (custom_data and custom_data.get(f'hsn_{p.id}')) else _get_hsn_code(p)
+        uom = custom_data.get(f'unit_{p.id}', '').strip().upper() if (custom_data and custom_data.get(f'unit_{p.id}')) else _get_uom(p.product_name).upper()
 
-        desc_text = f"<b>{p.product_name}</b>"
-        if p.remarks:
-            desc_text += f"<br/>{p.remarks}"
+        from xml.sax.saxutils import escape as xml_escape
+        def pdf_text(val):
+            return xml_escape(str(val or ''))
+
+        raw_specs = getattr(p, 'product_specifications', None)
+        prod_type_val = custom_data.get(f'product_type_{p.id}', '').strip() if (custom_data and custom_data.get(f'product_type_{p.id}')) else p.product_type
+        if not raw_specs or not prod_type_val:
+            if dpr.quotation_number:
+                from rfq.models import RFQQuotation
+                q_nums = [qn.strip() for qn in dpr.quotation_number.split(',') if qn.strip()]
+                for qn in q_nums:
+                    q_rec = RFQQuotation.objects.filter(quotation_number__icontains=qn).first()
+                    if q_rec and q_rec.products_snapshot:
+                        for snap in q_rec.products_snapshot:
+                            if (snap.get('product_name', '').strip().lower() == p.product_name.strip().lower()
+                                    or (p.product_type and snap.get('product_type', '').strip().lower() == p.product_type.strip().lower())):
+                                if not raw_specs:
+                                    raw_specs = snap.get('product_specifications')
+                                if not prod_type_val:
+                                    prod_type_val = snap.get('product_type')
+                                break
+                    if raw_specs and prod_type_val:
+                        break
+            if not raw_specs and dpr.customer:
+                from rfq.models import RFQProduct
+                rfq_p = RFQProduct.objects.filter(
+                    rfq__customer=dpr.customer,
+                    product_name__icontains=p.product_name
+                ).order_by('-id').first()
+                if rfq_p:
+                    if not raw_specs and rfq_p.product_specifications:
+                        raw_specs = rfq_p.product_specifications
+                    if not prod_type_val and rfq_p.product_type:
+                        prod_type_val = rfq_p.product_type
+
+        if not prod_type_val:
+            prod_type_val = 'P0011'
+
+        custom_desc_text = custom_data.get(f'description_{p.id}', '').strip() if custom_data else ''
+        if custom_desc_text:
+            lines = [l.strip() for l in custom_desc_text.split('\n') if l.strip()]
+            escaped_desc = []
+            for i, line in enumerate(lines):
+                if i == 0 and not line.startswith('<b>'):
+                    escaped_desc.append(f"<b>{pdf_text(line)}</b>")
+                elif line.startswith('<b>') and line.endswith('</b>'):
+                    escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+                else:
+                    escaped_desc.append(pdf_text(line))
+            desc_text = '<br/>'.join(escaped_desc)
+        else:
+            desc_lines = _format_product_description_lines(
+                p.product_name,
+                raw_specs,
+                p.remarks
+            )
+            escaped_desc = []
+            for line in desc_lines:
+                if line.startswith('<b>') and line.endswith('</b>'):
+                    escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+                else:
+                    escaped_desc.append(pdf_text(line))
+            desc_text = '<br/>'.join(escaped_desc)
 
         row = [
             Paragraph(str(idx), center_align),
-            Paragraph(dpr.serial_number or "", center_align),
+            Paragraph(pdf_text(prod_type_val), center_align),
             Paragraph(desc_text, normal),
             Paragraph(hsn, center_align),
             Paragraph(str(qty), center_align),
@@ -6349,7 +6536,7 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
     t_style = [
         ('BOX', (0,0), (-1,-1), 1, colors.black),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('TOPPADDING', (0,0), (-1,-1), 3),
         ('BOTTOMPADDING', (0,0), (-1,-1), 3),
         ('LEFTPADDING', (0,0), (-1,-1), 2),
@@ -6623,7 +6810,7 @@ def upload_customer_address_attachment(request, product_id):
 
 @role_required('ADMIN', 'PURCHASE', 'SALES', 'ACCOUNTS')
 def customer_invoice_modal_data(request, product_id):
-    """Return JSON data for the Generate Invoice modal popup showing only the selected product."""
+    """Return JSON data for the Generate Invoice modal popup showing editable invoice fields."""
     from products.models import CustomerProduct
     try:
         target_product = CustomerProduct.objects.select_related('dpr', 'dpr__customer').get(pk=product_id)
@@ -6631,24 +6818,163 @@ def customer_invoice_modal_data(request, product_id):
         return JsonResponse({'status': 'error', 'message': 'Product not found'}, status=404)
 
     dpr = target_product.dpr
+    customer = dpr.customer
     all_dpr_products = list(CustomerProduct.objects.filter(dpr=dpr))
     all_dpr_products_count = len(all_dpr_products)
 
-    remaining_qty = max(target_product.quantity_ordered - (target_product.quantity_delivered or 0), 0)
-    data = [{
-        'id': target_product.id,
-        'product_name': target_product.product_name,
-        'quantity_ordered': target_product.quantity_ordered,
-        'quantity_delivered': target_product.quantity_delivered or 0,
-        'remaining_qty': remaining_qty,
-        'invoice_qty': remaining_qty,
-        'status': target_product.status or '',
-    }]
+    raw_terms = str(customer.payment_terms).strip() if (customer and customer.payment_terms) else ''
+    if raw_terms.isdigit():
+        terms = f"{raw_terms} Week{'s' if raw_terms != '1' else ''}"
+    elif raw_terms:
+        terms = raw_terms
+    else:
+        terms = '30 Days Against Invoice'
+
+    data = []
+    for prod in all_dpr_products:
+        raw_specs = getattr(prod, 'product_specifications', None)
+        prod_type_val = prod.product_type
+        if not raw_specs or not prod_type_val:
+            if dpr.quotation_number:
+                from rfq.models import RFQQuotation
+                q_nums = [qn.strip() for qn in dpr.quotation_number.split(',') if qn.strip()]
+                for qn in q_nums:
+                    q_rec = RFQQuotation.objects.filter(quotation_number__icontains=qn).first()
+                    if q_rec and q_rec.products_snapshot:
+                        for snap in q_rec.products_snapshot:
+                            if (snap.get('product_name', '').strip().lower() == prod.product_name.strip().lower()
+                                    or (prod.product_type and snap.get('product_type', '').strip().lower() == prod.product_type.strip().lower())):
+                                if not raw_specs:
+                                    raw_specs = snap.get('product_specifications')
+                                if not prod_type_val:
+                                    prod_type_val = snap.get('product_type')
+                                break
+                    if raw_specs and prod_type_val:
+                        break
+            if not raw_specs and dpr.customer:
+                from rfq.models import RFQProduct
+                rfq_p = RFQProduct.objects.filter(
+                    rfq__customer=dpr.customer,
+                    product_name__icontains=prod.product_name
+                ).order_by('-id').first()
+                if rfq_p:
+                    if not raw_specs and rfq_p.product_specifications:
+                        raw_specs = rfq_p.product_specifications
+                    if not prod_type_val and rfq_p.product_type:
+                        prod_type_val = rfq_p.product_type
+
+        if not prod_type_val:
+            prod_type_val = 'P0011'
+
+        desc_lines = _format_product_description_lines(
+            prod.product_name,
+            raw_specs,
+            prod.remarks
+        )
+        plain_desc_lines = []
+        for l in desc_lines:
+            clean_l = re.sub(r'<\/?b>', '', l).strip()
+            if clean_l:
+                plain_desc_lines.append(clean_l)
+        formatted_desc_text = '\n'.join(plain_desc_lines)
+
+        rem_qty = max(prod.quantity_ordered - (prod.quantity_delivered or 0), 0)
+        prod_rate = prod.mes_rate_per_unit if (prod.mes_rate_per_unit and prod.mes_rate_per_unit > 0) else (prod.rate_per_unit or Decimal('0.00'))
+
+        sps = list(prod.supplierproduct_set.all())
+        supplier_qty_ordered = sum(sp.quantity for sp in sps)
+        supplier_qty_received = sum(sp.quantity_received for sp in sps)
+
+        if not sps:
+            material_received = False
+            material_status_label = 'The product was not received from the supplier'
+        elif all(sp.status == 'delivered' for sp in sps) or (supplier_qty_ordered > 0 and supplier_qty_received >= supplier_qty_ordered):
+            material_received = True
+            material_status_label = 'Received from supplier'
+        elif any(sp.status == 'partially_delivered' or sp.quantity_received > 0 for sp in sps):
+            material_received = True
+            material_status_label = f'Partially received ({supplier_qty_received}/{supplier_qty_ordered})'
+        else:
+            material_received = False
+            material_status_label = 'The product was not received from the supplier'
+
+        data.append({
+            'id': prod.id,
+            'product_name': prod.product_name,
+            'product_type': prod_type_val,
+            'description': formatted_desc_text,
+            'hsn_code': _get_hsn_code(prod),
+            'unit': _get_uom(prod.product_name).upper(),
+            'rate': f"{prod_rate:.2f}",
+            'quantity_ordered': prod.quantity_ordered,
+            'quantity_delivered': prod.quantity_delivered or 0,
+            'remaining_qty': rem_qty,
+            'invoice_qty': rem_qty,
+            'supplier_qty_ordered': supplier_qty_ordered,
+            'supplier_qty_received': supplier_qty_received,
+            'material_received': material_received,
+            'material_status_label': material_status_label,
+            'status': prod.status or '',
+            'is_target': (prod.id == target_product.id),
+        })
+
+    existing_invoices = list(target_product.invoices.all().order_by('id'))
+    count = len(existing_invoices) + 1
+    inv_no_val = (target_product.invoice_dc_number or '').strip()
+    match = re.search(r'(\d+)', inv_no_val) if inv_no_val else None
+    if match:
+        base_no = f"MES-F{int(match.group(1)):04d}"
+    elif inv_no_val:
+        base_no = inv_no_val
+    else:
+        base_no = f"MES-F{target_product.id:04d}"
+
+    target_rem_qty = max(target_product.quantity_ordered - (target_product.quantity_delivered or 0), 0)
+    if count == 1 and target_rem_qty >= target_product.quantity_ordered:
+        inv_no = base_no
+    else:
+        inv_no = f"{base_no}-{count}"
+
+    first_email = re.split(r'[,;\s]+', customer.email)[0].strip() if (customer and customer.email) else ''
+    cust_atten = first_email.split('@')[0] if (first_email and '@' in first_email) else (customer.customer_name if customer else "Mr.Nizamuddeen S")
+
+    is_sez_customer = (getattr(customer, 'is_sez', 'No') or 'No').strip().upper() == 'YES' if customer else False
+    state_code_clean = (customer.state_code or '').strip().upper() if customer else ''
+    gstin_clean = (customer.gstin or '').strip().upper() if customer else ''
+    region_clean = (customer.region or '').strip().lower() if customer else ''
+
+    if is_sez_customer:
+        tax_mode = 'sez'
+    else:
+        if state_code_clean:
+            is_tamilnadu = (state_code_clean == '33' or state_code_clean in ('TN', 'TAMIL NADU', 'TAMILNADU'))
+        elif gstin_clean and len(gstin_clean) >= 2 and gstin_clean[:2].isdigit():
+            is_tamilnadu = (gstin_clean[:2] == '33')
+        else:
+            is_tamilnadu = (region_clean in ('chennai', 'hosur', 'tamil nadu', 'tamilnadu') or 'tamil' in region_clean)
+        tax_mode = 'tn' if is_tamilnadu else 'igst'
 
     return JsonResponse({
         'status': 'success',
         'dpr_serial': dpr.serial_number,
-        'customer_name': dpr.customer.customer_name if dpr.customer else '',
+        'customer_name': customer.customer_name if customer else '',
+        'customer_address': customer.address or '' if customer else '',
+        'customer_region': customer.region or '' if customer else '',
+        'customer_phone': customer.phone_number or '' if customer else '',
+        'customer_email': customer.email or '' if customer else '',
+        'customer_gstin': customer.gstin or '-' if customer else '-',
+        'customer_atten': cust_atten,
+        'invoice_no': inv_no,
+        'invoice_date': timezone.localdate().strftime('%d/%m/%Y'),
+        'invoice_date_iso': timezone.localdate().strftime('%Y-%m-%d'),
+        'po_number': dpr.po_number or dpr.serial_number or '',
+        'po_date': dpr.po_date.strftime('%d/%m/%Y') if dpr.po_date else '',
+        'po_date_iso': dpr.po_date.strftime('%Y-%m-%d') if dpr.po_date else '',
+        'terms_of_payment': terms,
+        'despatch_through': 'By Hand',
+        'destination': customer.region or '' if customer else '',
+        'shipping_address': customer.address or '' if customer else '',
+        'tax_mode': tax_mode,
         'total_dpr_products_count': all_dpr_products_count,
         'products': data,
     })
@@ -6668,9 +6994,13 @@ def generate_customer_invoice(request, product_id, invoice_id=None):
 
     selected_product_ids = None
     custom_qtys = {}
+    custom_data = {}
     new_invoice_id = invoice_id
 
     if request.method == 'POST':
+        for k in request.POST:
+            custom_data[k] = request.POST.get(k)
+
         raw_selected = request.POST.getlist('selected_products')
         if raw_selected:
             selected_product_ids = [int(pid) for pid in raw_selected if str(pid).isdigit()]
@@ -6724,7 +7054,7 @@ def generate_customer_invoice(request, product_id, invoice_id=None):
                     if p.id == target_product.id:
                         new_invoice_id = created_inv.id
 
-    pdf_buffer = _build_customer_invoice_pdf(product_id, invoice_id=new_invoice_id, selected_product_ids=selected_product_ids, custom_qtys=custom_qtys)
+    pdf_buffer = _build_customer_invoice_pdf(product_id, invoice_id=new_invoice_id, selected_product_ids=selected_product_ids, custom_qtys=custom_qtys, custom_data=custom_data)
     if not pdf_buffer:
         raise Http404("Product not found")
 
