@@ -422,11 +422,11 @@ def _match_email_to_rfq(subject, body, from_str, to_str, in_reply_to=None, refer
     return None
 
 
-def sync_rfq_inbox(rfq=None, mail=None, scan_limit=500):
+def sync_rfq_inbox(rfq=None, mail=None, scan_limit=300):
     """
     Connects to IMAP server, fetches inbox headers in a single fast batch,
-    and matches reply/quote emails to open RFQs across the system.
-    If scan_limit is None or 0, scans all emails in the inbox.
+    matches them in memory against RFQs, and downloads full messages ONLY for new matching RFQ emails.
+    Returns (synced_count, error_message).
     """
     imap_host = getattr(settings, 'EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
     imap_port = int(getattr(settings, 'EMAIL_IMAP_PORT', 993))
@@ -454,10 +454,8 @@ def sync_rfq_inbox(rfq=None, mail=None, scan_limit=500):
             return 0, None
 
         msg_nums = data[0].split()
-        if scan_limit and isinstance(scan_limit, int) and scan_limit > 0:
-            recent_nums = msg_nums[-scan_limit:]
-        else:
-            recent_nums = msg_nums
+        limit_val = scan_limit if (scan_limit and isinstance(scan_limit, int) and scan_limit > 0) else 300
+        recent_nums = msg_nums[-limit_val:]
         if not recent_nums:
             return 0, None
 
@@ -646,15 +644,8 @@ def sync_rfq_inbox(rfq=None, mail=None, scan_limit=500):
             if not matched_rfq:
                 continue
 
-            sent_at = timezone.now()
-            if cand['date_str']:
-                try:
-                    dt = parsedate_to_datetime(cand['date_str'])
-                    if timezone.is_naive(dt):
-                        dt = timezone.make_aware(dt)
-                    sent_at = dt
-                except Exception:
-                    pass
+            from email_classifier.services.imap_reader import _parse_date
+            sent_at = _parse_date(cand.get('date_str'))
 
             has_attachments = False
             attachment_names = []

@@ -9,16 +9,61 @@ from django.conf import settings
 from django.utils import timezone
 
 
+import datetime
+from email.utils import parsedate_to_datetime, parsedate_tz, mktime_tz
+
+
 def _parse_date(date_str):
     if not date_str:
         return timezone.now()
+
+    raw = str(date_str).strip()
+    # Strip comments in parentheses, e.g. "Mon, 31 Aug 2026 15:48:46 +0530 (IST)" -> "Mon, 31 Aug 2026 15:48:46 +0530"
+    clean = re.sub(r'\s*\([^)]*\)', '', raw).strip()
+
+    # 1. Standard library parsedate_to_datetime on cleaned string
     try:
-        dt = parsedate_to_datetime(date_str)
-        if dt is None:
-            return timezone.now()
-        return dt
+        dt = parsedate_to_datetime(clean)
+        if dt is not None:
+            if timezone.is_naive(dt):
+                dt = timezone.make_aware(dt, timezone.get_current_timezone())
+            return dt
     except Exception:
-        return timezone.now()
+        pass
+
+    # 2. Try raw uncleaned string
+    try:
+        dt = parsedate_to_datetime(raw)
+        if dt is not None:
+            if timezone.is_naive(dt):
+                dt = timezone.make_aware(dt, timezone.get_current_timezone())
+            return dt
+    except Exception:
+        pass
+
+    # 3. Try parsedate_tz
+    try:
+        t = parsedate_tz(clean) or parsedate_tz(raw)
+        if t:
+            stamp = mktime_tz(t)
+            dt = datetime.datetime.fromtimestamp(stamp, datetime.timezone.utc)
+            return dt
+    except Exception:
+        pass
+
+    # 4. Fallback regex match for "DD Month YYYY HH:MM:SS"
+    try:
+        m = re.search(r'(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?', clean)
+        if m:
+            day, month_str, year, hr, mn, sec = m.groups()
+            sec = sec or '00'
+            dt_str = f"{day} {month_str} {year} {hr}:{mn}:{sec}"
+            dt_naive = datetime.datetime.strptime(dt_str, '%d %b %Y %H:%M:%S')
+            return timezone.make_aware(dt_naive, timezone.utc)
+    except Exception:
+        pass
+
+    return timezone.now()
 
 
 def _decode(value):
@@ -119,8 +164,9 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
         except Exception:
             pass
 
-        # 2. Skip emails already stored in DB
+        # 2. Skip emails already stored in DB (newest-first)
         if headers_info:
+            headers_info.sort(key=lambda x: x['date'] or timezone.now(), reverse=True)
             uids_in_batch = [h['uid'] for h in headers_info]
             existing_uids = set(EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True))
             new_headers = [h for h in headers_info if h['uid'] not in existing_uids]
