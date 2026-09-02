@@ -1236,12 +1236,21 @@ function buildQuotationEmailBody(rfq, selectedItems) {
 }
 
 function ensureSupplierPriceSelection(row, rfq) {
-    const checkboxes = row.querySelectorAll('.rfq-quotation-product:not(:disabled)');
+    const allCheckboxes = row.querySelectorAll('.rfq-quotation-product:not(:disabled)');
+    const anyChecked = Array.from(allCheckboxes).some(cb => cb.checked);
+
+    // Only if user has NOT checked any checkbox, default to checking all
+    if (!anyChecked) {
+        allCheckboxes.forEach(cb => {
+            cb.checked = true;
+        });
+    }
+
+    const selectedCheckboxes = row.querySelectorAll('.rfq-quotation-product:checked');
     let hasUnselectedMultiSupplier = false;
     const unselectedProductNames = [];
 
-    checkboxes.forEach(cb => {
-        cb.checked = true;
+    selectedCheckboxes.forEach(cb => {
         const productId = cb.value;
         const radios = row.querySelectorAll(`.rfq-quotation-supplier-price[data-product-id="${productId}"]`);
 
@@ -1673,8 +1682,8 @@ document.addEventListener('submit', function (e) {
 
     const deliveryWeeks = document.getElementById('deliveryWeeksInput')?.value || '';
     const installationCharge = document.getElementById('installationChargeInput')?.value || '';
-
     const isReplyMode = form.dataset.mode === 'reply';
+    const hasSentEmail = form.dataset.hasSentEmail === 'true';
 
     // Hide prepare quotation modal
     const modalEl = document.getElementById('prepareQuotationModal');
@@ -1700,7 +1709,8 @@ document.addEventListener('submit', function (e) {
     emailForm.reset();
     document.getElementById('quotationEmailRfqId').value = rfq.id;
     document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
-    document.getElementById('quotationEmailSubject').value = `Quotation for ${rfq.rfq_no || 'RFQ'}`;
+    const quoteNo = (rfq.quotation_no && rfq.quotation_no !== '-') ? rfq.quotation_no : (rfq.default_quotation_no || rfq.rfq_no || 'RFQ');
+    document.getElementById('quotationEmailSubject').value = `Quotation for ${quoteNo}`;
     document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, {
         productIds: productIds,
         supplierPriceIds: supplierPriceIds.filter(Boolean)
@@ -1746,7 +1756,6 @@ document.addEventListener('submit', function (e) {
         productInputs.appendChild(icInput);
     }
 
-    const hasSentEmail = form.dataset.hasSentEmail === 'true';
     const note = document.getElementById('quotationAutoAttachmentNote');
     note.textContent = hasSentEmail
         ? `Revised quotation PDF for ${productIds.length} product(s) with entered MES rates will be generated and attached automatically upon sending.`

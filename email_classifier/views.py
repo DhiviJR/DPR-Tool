@@ -558,28 +558,39 @@ def _simplify_product_title(text):
         return ''
     t = text.strip(' "\'#*>-_\t\r\n')
 
-    dia_match = re.search(r'(?i)(?:dia|Ø|size|size\s*:)\s*[Øø]?\s*(\d+(?:\.\d+)?)', t)
-    dia_str = f" Ø{dia_match.group(1)}mm" if dia_match else ""
-
-    if re.search(r'(?i)\bcarbide\s+air\s+plug\b|\bcarbide\s+air\s+plug\s+gauge\b', t):
+    if re.search(r'(?i)\bcarbide\s+air\s+plug\b|\bcarbide\s+air\s+plug\s+gauge\b|\bcarbide\s+apg\b', t):
         return "Carbide Air Plug Gauge"
-    if re.search(r'(?i)\bair\s+ring\s+gauge\b|\barg\b', t):
+    if re.search(r'(?i)\bcarbide\s+air\s+ring\b|\bcarbide\s+air\s+ring\s+gauge\b|\bcarbide\s+arg\b', t):
+        return "Carbide Air Ring Gauge"
+    if re.search(r'(?i)\bcarbide\s+air\s+(?:caliper|snap)\b', t):
+        return "Carbide Air Caliper Gauge"
+    if re.search(r'(?i)\bair\s+ring\s+gauge\b|\bair\s+ring\b|\barg\b', t):
         return "Air Ring Gauge"
-    if re.search(r'(?i)\bair\s+plug\s+gauge\b|\bapg\b', t):
+    if re.search(r'(?i)\bair\s+plug\s+gauge\b|\bair\s+plug\b|\bapg\b', t):
         return "Air Plug Gauge"
-    if re.search(r'(?i)\bthread\s+plug\s+gauge\b|\btpg\b', t):
+    if re.search(r'(?i)\bair\s+(?:caliper|snap)\s*gauge\b|\bair\s+(?:caliper|snap)\b', t):
+        return "Air Caliper Gauge"
+    if re.search(r'(?i)\bair\s+gauge\b', t):
+        if re.search(r'(?i)\b(air\s+ring|(?<!setting\s)ring\s+gauge|od|outer|setting\s+plug)\b', t):
+            return "Air Ring Gauge"
+        return "Air Plug Gauge"
+    if re.search(r'(?i)\bmaster\s+setting\s+ring\b|\bsetting\s+rings?\b|\bmaster\s+rings?\b', t):
+        return "Master Setting Ring"
+    if re.search(r'(?i)\bmaster\s+setting\s+plug\b|\bsetting\s+plugs?\b', t):
+        return "Master Setting Plug"
+    if re.search(r'(?i)\bthread\s+plug\s+gauge\b|\bthread\s+plug\b|\btpg\b', t):
         return "Thread Plug Gauge"
-    if re.search(r'(?i)\bthread\s+ring\s+gauge\b|\btrg\b', t):
+    if re.search(r'(?i)\bthread\s+ring\s+gauge\b|\bthread\s+ring\b|\btrg\b', t):
         return "Thread Ring Gauge"
-    if re.search(r'(?i)\bplain\s+plug\s+gauge\b|\bppg\b', t):
+    if re.search(r'(?i)\bplain\s+plug\s+gauge\b|\bplain\s+plug\b|\bppg\b', t):
         return "Plain Plug Gauge"
-    if re.search(r'(?i)\bplain\s+ring\s+gauge\b|\bprg\b', t):
+    if re.search(r'(?i)\bplain\s+ring\s+gauge\b|\bplain\s+ring\b|\bprg\b', t):
         return "Plain Ring Gauge"
     if re.search(r'(?i)\bmulti[- ]gauge\b', t):
         return "Multi-Gauge"
     if re.search(r'(?i)\bcomparator\s+stand\b', t):
         return "Comparator Stand"
-    if re.search(r'(?i)\bair\s+(?:gauge\s+)?unit\b', t):
+    if re.search(r'(?i)\bair\s+(?:gauge\s+)?unit\b|\bair\s+electronic\s+unit\b', t):
         return "Air Gauge Unit"
     if re.search(r'(?i)\bspc\s+(?:gauge|unit)\b|\bspc\b', t):
         return "SPC Gauge"
@@ -597,7 +608,7 @@ def _simplify_product_title(text):
         return ''
 
     # Only return string if line explicitly matches a known gauge product term and is short
-    if any(kw in clean_lower for kw in ('air plug', 'air ring', 'thread plug', 'thread ring', 'plug gauge', 'ring gauge', 'multi-gauge', 'spc gauge', 'lvdt gauge', 'comparator stand')) and len(clean_t) <= 45:
+    if any(kw in clean_lower for kw in ('air plug', 'air ring', 'air gauge', 'thread plug', 'thread ring', 'plug gauge', 'ring gauge', 'multi-gauge', 'spc gauge', 'lvdt gauge', 'comparator stand')) and len(clean_t) <= 45:
         return clean_t[:50].strip()
 
     return ''
@@ -610,10 +621,10 @@ def _clean_extracted_size(raw_size):
     s = re.sub(r'^(?:[Øø\?]|dia|diameter|size[:\s]*)\s*', '', s, flags=re.I).strip()
     if re.match(r'^\d{4,}$', s):
         return ''
-    if re.match(r'^(?:600\d{3}|635\d{3}|[6-9]\d{9}|\d{8,})$', s):
-        return ''
     if not any(c.isdigit() for c in s):
         return ''
+    if s.count('(') > s.count(')'):
+        s = s + ')' * (s.count('(') - s.count(')'))
     if re.match(r'^\d+(?:\.\d+)?$', s):
         try:
             num_val = float(s)
@@ -864,10 +875,18 @@ def _extract_all_products(subject, body):
         title = _simplify_product_title(line_clean)
         if title:
             ptype = 'APG'
-            if 'Air Ring' in title or 'arg' in line_lower:
+            if 'Carbide Air Plug' in title:
+                ptype = 'Carbide APG'
+            elif 'Carbide Air Ring' in title:
+                ptype = 'Carbide ARG'
+            elif 'Carbide Air Caliper' in title or 'Air Caliper' in title:
+                ptype = 'Carbide Air Caliper'
+            elif 'Air Ring' in title or 'arg' in line_lower:
                 ptype = 'ARG'
             elif 'Air Plug' in title or 'apg' in line_lower:
                 ptype = 'APG'
+            elif 'Master Setting Ring' in title:
+                ptype = 'Master Setting Rings'
             elif 'Thread Plug' in title or 'tpg' in line_lower:
                 ptype = 'TPG'
             elif 'Thread Ring' in title or 'trg' in line_lower:
@@ -940,8 +959,9 @@ def _group_duplicate_products(items):
 
         p_rate = str(item.get('rate') or item.get('rate_per_unit') or '').strip()
         p_remarks = (item.get('remarks') or item.get('product_remarks') or '').strip()
+        p_size = str((item.get('product_specifications') or {}).get('Size') or '').strip().lower()
 
-        key = (p_name.lower(), p_type.lower(), p_rate)
+        key = (p_name.lower(), p_type.lower(), p_size, p_rate)
 
         qty = item.get('quantity') or 1
         try:
@@ -1117,6 +1137,9 @@ def add_rfq_from_email(request, record_id):
             request.session[f'email_products_{record.id}'] = products_json
             if len(products_json) < 1800:
                 params_dict['products_json'] = products_json
+        else:
+            request.session.pop('email_prefill_products_json', None)
+            request.session.pop(f'email_products_{record.id}', None)
 
         rfq_url = f"{url}?{urlencode(params_dict)}"
 
@@ -1135,6 +1158,9 @@ def add_rfq_from_email(request, record_id):
         if products_json:
             request.session['email_prefill_products_json'] = products_json
             request.session[f'email_products_{record.id}'] = products_json
+        else:
+            request.session.pop('email_prefill_products_json', None)
+            request.session.pop(f'email_products_{record.id}', None)
 
         # Build the Add Customer URL (pre-filled with email data)
         add_cust_url = reverse('customer_details')

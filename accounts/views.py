@@ -503,9 +503,10 @@ def _format_product_description_lines(product_name, specs_dict, remarks=None):
     return lines
 
 
-def _serialize_quotation_products(products):
+def _serialize_quotation_products(products, custom_terms=None):
     serialized = []
     for product in products:
+        p_terms = custom_terms if custom_terms is not None else getattr(product, 'custom_terms', None)
         serialized.append({
             'product_id': product.id,
             'product_name': product.product_name,
@@ -519,6 +520,7 @@ def _serialize_quotation_products(products):
             'selected_supplier_name': getattr(product, 'selected_supplier_name', ''),
             'delivery_weeks': getattr(product, 'delivery_weeks', '') or '',
             'installation_charge': getattr(product, 'installation_charge', '') or '',
+            'custom_terms': p_terms if p_terms else [],
         })
     return serialized
 
@@ -546,6 +548,7 @@ def _deserialize_quotation_products(products_snapshot):
             selected_supplier_name=item.get('selected_supplier_name', ''),
             delivery_weeks=item.get('delivery_weeks', ''),
             installation_charge=item.get('installation_charge', ''),
+            custom_terms=item.get('custom_terms', []),
         ))
     return deserialized
 
@@ -714,7 +717,86 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
 
     return quotation_products, [product.id for product in products]
 
-def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
+def _get_default_rfq_quotation_terms(rfq, products):
+    from datetime import timedelta
+    customer = rfq.customer
+    valid_till = (timezone.localdate() + timedelta(days=60)).strftime('%d/%m/%Y')
+    
+    has_sapg = False
+    has_carbide = False
+    has_steel = False
+    has_tpg_spares = False
+    has_amc_service = False
+    delivery_weeks = None
+
+    for p in products:
+        pt = (getattr(p, 'product_type', '') or '').strip().lower()
+        if pt in ('sapg', 'sarg', 'multi-gauge', 'multi gauge'):
+            has_sapg = True
+            p_weeks = getattr(p, 'delivery_weeks', None)
+            if p_weeks:
+                delivery_weeks = p_weeks
+        elif pt in ('apg carbide', 'arg carbide') or 'carbide' in pt:
+            has_carbide = True
+        elif pt in ('apg steel', 'arg steel', 'apg', 'arg') or 'steel' in pt or 'apg' in pt or 'arg' in pt:
+            has_steel = True
+        elif any(x in pt for x in ('tpg', 'trg', 'ppg', 'prg', 'spares')):
+            has_tpg_spares = True
+        elif any(x in pt for x in ('amc', 'service')):
+            has_amc_service = True
+
+    if has_sapg:
+        weeks_val = str(delivery_weeks or '3').strip()
+        delivery_str = f'Delivery : {weeks_val} Weeks'
+    elif has_carbide:
+        delivery_str = 'Delivery : 4 to 5 weeks'
+    elif has_steel:
+        delivery_str = 'Delivery : 3 to 4 weeks'
+    elif has_tpg_spares:
+        delivery_str = 'Delivery : 2 weeks'
+    elif has_amc_service:
+        delivery_str = 'Delivery : 1 to 2 weeks'
+    else:
+        delivery_str = 'Delivery : 3 Weeks'
+
+    has_air_or_multi = False
+    for p in products:
+        pt = (getattr(p, 'product_type', '') or '').strip().lower()
+        if pt in ('unit std air', 'unit spc air', 'multi-gauge', 'multi gauge'):
+            has_air_or_multi = True
+            break
+
+    installation_charge_val = None
+    for p in products:
+        val = getattr(p, 'installation_charge', None)
+        if val:
+            installation_charge_val = str(val).strip()
+            break
+
+    if has_air_or_multi and installation_charge_val:
+        installation_str = f'Installation Charge : Rs. {installation_charge_val}'
+    else:
+        installation_str = 'Installation Charge : Nil'
+
+    terms = [
+        delivery_str,
+        f"Payment : {customer.payment_terms} Week{'s' if str(customer.payment_terms) != '1' else ''}" if getattr(customer, 'payment_terms', None) else 'Payment : 30 Days Against Invoice',
+        'Goods & Service Tax(GST) : 18% Extra as Applicable',
+        'Dispatch Mode : NIL' if has_amc_service else 'Dispatch Mode : By Courier',
+        'Packing & Forwarding : 2%',
+        installation_str,
+        'Discount : Negotiable',
+        f'Quotation Validity : This offer is Valid till {valid_till}',
+        f'Purchase Order : Purchase Order must be send to {settings.DEFAULT_FROM_EMAIL}',
+        'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
+        'Force Majeure: The Company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
+        'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
+        'Jurisdiction: All disputes arising out of or in connection with this Quotation shall be settled by arbitration in Chennai, India. in accordance with the Indian Arbitration & Conciliation Act rules. The decision shall be final and binding on both parties.',
+    ]
+    return terms
+
+
+def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
     from xml.sax.saxutils import escape as xml_escape
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -729,7 +811,6 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         TableStyle,
     )
     from reportlab.pdfgen import canvas
-    from datetime import timedelta
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -989,86 +1070,27 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
     story.append(product_table)
     story.append(Spacer(1, 8))
 
-
+    # 7. Terms & Conditions
     story.append(Paragraph('<b><u>Our Terms & Conditions</u></b>', terms_title_style))
     story.append(Spacer(1, 4))
     
-    # Calculate quotation validity date (60 days from today)
-    valid_till = (timezone.localdate() + timedelta(days=60)).strftime('%d/%m/%Y')
-    
-    has_sapg = False
-    has_carbide = False
-    has_steel = False
-    has_tpg_spares = False
-    has_amc_service = False
-    delivery_weeks = None
+    if not custom_terms and products:
+        for p in products:
+            p_terms = getattr(p, 'custom_terms', None)
+            if p_terms:
+                custom_terms = p_terms
+                break
 
-    for p in products:
-        pt = (getattr(p, 'product_type', '') or '').strip().lower()
-        if pt in ('sapg', 'sarg', 'multi-gauge', 'multi gauge'):
-            has_sapg = True
-            p_weeks = getattr(p, 'delivery_weeks', None)
-            if p_weeks:
-                delivery_weeks = p_weeks
-        elif pt in ('apg carbide', 'arg carbide') or 'carbide' in pt:
-            has_carbide = True
-        elif pt in ('apg steel', 'arg steel', 'apg', 'arg') or 'steel' in pt or 'apg' in pt or 'arg' in pt:
-            has_steel = True
-        elif any(x in pt for x in ('tpg', 'trg', 'ppg', 'prg', 'spares')):
-            has_tpg_spares = True
-        elif any(x in pt for x in ('amc', 'service')):
-            has_amc_service = True
-
-    if has_sapg:
-        weeks_val = str(delivery_weeks or '3').strip()
-        delivery_str = f'Delivery : {weeks_val} Weeks'
-    elif has_carbide:
-        delivery_str = 'Delivery : 4 to 5 weeks'
-    elif has_steel:
-        delivery_str = 'Delivery : 3 to 4 weeks'
-    elif has_tpg_spares:
-        delivery_str = 'Delivery : 2 weeks'
-    elif has_amc_service:
-        delivery_str = 'Delivery : 1 to 2 weeks'
+    if custom_terms and isinstance(custom_terms, (list, tuple)) and len(custom_terms) > 0:
+        terms = [str(t).strip() for t in custom_terms if str(t).strip()]
+    elif custom_terms and isinstance(custom_terms, str) and custom_terms.strip():
+        terms = [line.strip() for line in custom_terms.splitlines() if line.strip()]
     else:
-        delivery_str = 'Delivery : 3 Weeks'
+        terms = _get_default_rfq_quotation_terms(rfq, products)
 
-    has_air_or_multi = False
-    for p in products:
-        pt = (getattr(p, 'product_type', '') or '').strip().lower()
-        if pt in ('unit std air', 'unit spc air', 'multi-gauge', 'multi gauge'):
-            has_air_or_multi = True
-            break
-
-    installation_charge_val = None
-    for p in products:
-        val = getattr(p, 'installation_charge', None)
-        if val:
-            installation_charge_val = str(val).strip()
-            break
-
-    if has_air_or_multi and installation_charge_val:
-        installation_str = f'Installation Charge : Rs. {installation_charge_val}'
-    else:
-        installation_str = 'Installation Charge : Nil'
-
-    terms = [
-        delivery_str,
-        f"Payment : {customer.payment_terms} Week{'s' if str(customer.payment_terms) != '1' else ''}" if customer.payment_terms else 'Payment : 30 Days Against Invoice',
-        'Goods & Service Tax(GST) : 18% Extra as Applicable',
-        'Dispatch Mode : NIL' if has_amc_service else 'Dispatch Mode : By Courier',
-        'Packing & Forwarding : 2%',
-        installation_str,
-       'Discount : Negotiable',
-        f'Quotation Validity : This offer is Valid till {valid_till}',
-        f'Purchase Order : Purchase Order must be send to {settings.DEFAULT_FROM_EMAIL}',
-        'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
-        'Force Majeure: The Company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
-        'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
-        'Jurisdiction: All disputes arising out of or in connection with this Quotation shall be settled by arbitration in Chennai, India. in accordance with the Indian Arbitration & Conciliation Act rules. The decision shall be final and binding on both parties.',
-    ]
     for index, term in enumerate(terms, start=1):
-        story.append(Paragraph(f'{index}. {term}', small))
+        clean_term = re.sub(r'^\d+[\.\)]\s*', '', term).strip()
+        story.append(Paragraph(f'{index}. {clean_term}', small))
 
     doc.build(story, canvasmaker=NumberedCanvas)
     buffer.seek(0)
@@ -4219,9 +4241,15 @@ def rfq_details(request):
                         quotation_product_ids_to_mark,
                         email_sent=False
                     )
+                    quotation_terms = [t.strip() for t in request.POST.getlist('quotation_terms[]') if t.strip()] or [t.strip() for t in request.POST.getlist('quotation_terms') if t.strip()]
+                    if not quotation_terms:
+                        single_terms = request.POST.get('quotation_terms', '').strip()
+                        if single_terms:
+                            quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
+
                     if quotation_record is not None:
                         # Update the existing unsent quotation record with the newly entered quotation products snapshot
-                        quotation_record.products_snapshot = _serialize_quotation_products(quotation_products)
+                        quotation_record.products_snapshot = _serialize_quotation_products(quotation_products, custom_terms=quotation_terms)
                         quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
                     else:
                         quotation_record = _create_rfq_quotation_record(
@@ -4230,8 +4258,11 @@ def rfq_details(request):
                             quotation_product_ids_to_mark,
                             email_sent=False
                         )
+                        if quotation_terms:
+                            quotation_record.products_snapshot = _serialize_quotation_products(quotation_products, custom_terms=quotation_terms)
+                            quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
                     quote_no = quotation_record.quotation_number
-                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no)
+                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no, custom_terms=quotation_terms)
                     filename = f"{quote_no.replace('/', '_')}.pdf"
                     attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
                 if quotation_attachment:
@@ -4382,11 +4413,13 @@ def rfq_details(request):
             'id': rfq.id,
             'rfq_no': rfq.rfq_no,
             'quotation_no': rfq.quotation_no_display,
+            'default_quotation_no': latest_quotation.quotation_number if latest_quotation else _get_mes_quote_no(rfq),
             'mail_date': rfq.mail_date.strftime('%Y-%m-%d') if rfq.mail_date else '',
             'customer_id': rfq.customer_id,
             'customer_name': rfq.customer.customer_name,
             'customer_region': rfq.customer.region or '',
             'customer_email': rfq.customer.email or '',
+            'customer_payment_terms': getattr(rfq.customer, 'payment_terms', '') or '',
             'enquiry_details': rfq.enquiry_details,
             'remarks': rfq.remarks or '',
             'attachment_url': rfq.attachment.url if rfq.attachment else '',
@@ -4430,7 +4463,11 @@ def rfq_details(request):
     next_rfq_id = (last_rfq.id + 1) if last_rfq else 1
     next_rfq_no = f"RFQ-{timezone.now().year}-{next_rfq_id:04d}"
 
-    email_prefill_products_json = request.session.get('email_prefill_products_json', '')
+    from_email_id = request.GET.get('from_email_id', '').strip()
+    if from_email_id and from_email_id.isdigit():
+        email_prefill_products_json = request.session.pop(f'email_products_{from_email_id}', None) or request.session.pop('email_prefill_products_json', '')
+    else:
+        email_prefill_products_json = request.session.get('email_prefill_products_json', '')
 
     return render(request, 'rfq_details.html', {
         'rfqs': rfqs_to_display,
@@ -4492,7 +4529,13 @@ def rfq_quotation_download(request, rfq_id):
                 products = list(rfq.products.all())
             quote_no = _get_mes_quote_no(rfq)
 
-        pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+        quotation_terms = [t.strip() for t in request.GET.getlist('quotation_terms[]') if t.strip()] or [t.strip() for t in request.GET.getlist('quotation_terms') if t.strip()]
+        if not quotation_terms:
+            single_terms = request.GET.get('quotation_terms', '').strip()
+            if single_terms:
+                quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
+
+        pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
         filename = f"{quote_no.replace('/', '_')}.pdf"
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
         response['Content-Disposition'] = f'inline; filename="{filename}"'
@@ -5435,7 +5478,6 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         f'<b>PO NO</b> : {effective_po_no}',
         f'<b>DATE</b> : {po_date_str}',
         f'<b>PO Validity</b> : {po_validity_str}',
-        f'<b>Quotation No</b> : {pdf_text(dpr.quotation_number or "-")}',
     ]
     meta_para = Paragraph('<br/>'.join(meta_lines), normal_style)
 
@@ -5478,7 +5520,6 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         Paragraph('<b>QTY</b>', center_bold_style),
         Paragraph('<b>UOM</b>', center_bold_style),
         Paragraph('<b>RATE</b>', center_bold_style),
-        Paragraph('<b>DISC %</b>', center_bold_style),
         Paragraph('<b>TOTAL</b>', center_bold_style),
     ]
     prod_data = [prod_header]
@@ -5530,11 +5571,10 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
             Paragraph(str(qty), center_style),
             Paragraph(uom, center_style),
             Paragraph(f'{rate:,.2f}', right_style),
-            Paragraph('NILL', center_style),
             Paragraph(f'{line_total:,.2f}', right_style),
         ])
 
-    prod_table = Table(prod_data, colWidths=[12 * mm, 68 * mm, 22 * mm, 12 * mm, 12 * mm, 20 * mm, 14 * mm, 20 * mm])
+    prod_table = Table(prod_data, colWidths=[12 * mm, 82 * mm, 22 * mm, 12 * mm, 12 * mm, 20 * mm, 20 * mm])
     prod_table.setStyle(TableStyle([
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -7046,8 +7086,14 @@ def send_rfq_email_reply(request, rfq_id):
                     products = list(rfq.products.all())
                 quote_no = _get_mes_quote_no(rfq)
 
+        quotation_terms = [t.strip() for t in request.POST.getlist('quotation_terms[]') if t.strip()] or [t.strip() for t in request.POST.getlist('quotation_terms') if t.strip()]
+        if not quotation_terms:
+            single_terms = request.POST.get('quotation_terms', '').strip()
+            if single_terms:
+                quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
+
         if products:
-            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
             filename = f"{quote_no.replace('/', '_')}.pdf"
             attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
     except Exception as e:
@@ -7936,3 +7982,498 @@ def send_supplier_invoice_email(request):
     })
 
 
+import json
+
+def parse_numeric_size(size_str):
+    if not size_str:
+        return None
+    match = re.search(r'(\d+(?:\.\d+)?)', str(size_str))
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def calculate_suggested_price(supplier_id, product_type, specs_dict):
+    if not supplier_id or not isinstance(specs_dict, dict):
+        return {'success': False, 'message': 'Invalid parameters provided.'}
+
+    # Find active datasheet matching supplier and product_type
+    datasheet = SupplierDatasheet.objects.filter(
+        supplier_id=supplier_id,
+        product_type=product_type,
+        is_active=True
+    ).first()
+
+    if not datasheet:
+        datasheet = SupplierDatasheet.objects.filter(
+            supplier_id=supplier_id,
+            is_active=True
+        ).first()
+
+def calculate_suggested_price(supplier_id, product_type=None, specs_dict=None, use_sr_price=False, size_override=None, selected_addon_ids=None, selected_ext_id=None, selected_dc_id=None):
+    if not supplier_id:
+        return {'success': False, 'message': 'Supplier ID is required.'}
+
+    specs_dict = specs_dict or {}
+
+    datasheet = SupplierDatasheet.objects.filter(
+        supplier_id=supplier_id,
+        product_type=product_type,
+        is_active=True
+    ).first()
+
+    if not datasheet:
+        datasheet = SupplierDatasheet.objects.filter(
+            supplier_id=supplier_id,
+            is_active=True
+        ).first()
+
+    if not datasheet:
+        return {'success': False, 'message': 'No active datasheet rate card found for this supplier.'}
+
+    if size_override is not None and str(size_override).strip():
+        try:
+            size_val = float(size_override)
+        except (ValueError, TypeError):
+            size_val = parse_numeric_size(specs_dict.get('Size') or specs_dict.get('Nominal Diameter'))
+    else:
+        size_val = parse_numeric_size(specs_dict.get('Size') or specs_dict.get('Nominal Diameter'))
+
+    if size_val is None:
+        return {'success': False, 'message': 'No valid numeric dimension/size found in parameters.'}
+
+    # Match price range
+    matching_ranges = []
+    for pr in datasheet.price_ranges.all():
+        min_d = float(pr.min_diameter)
+        max_d = float(pr.max_diameter) if pr.max_diameter is not None else None
+        if size_val >= min_d and (max_d is None or size_val <= max_d):
+            matching_ranges.append(pr)
+
+    if not matching_ranges:
+        return {'success': False, 'message': f'No price range matching dimension {size_val}mm in datasheet.'}
+
+    matched_range = matching_ranges[0]
+    category_spec = (specs_dict.get('Category') or specs_dict.get('Product Name') or '').lower()
+    for pr in matching_ranges:
+        if pr.category_name and (pr.category_name.lower() in category_spec or category_spec in pr.category_name.lower()):
+            matched_range = pr
+            break
+
+    if use_sr_price and matched_range.setting_ring_price and matched_range.setting_ring_price > Decimal('0'):
+        base_price = Decimal(str(matched_range.setting_ring_price))
+        rate_kind_str = "Setting Ring Rate"
+    else:
+        base_price = Decimal(str(matched_range.price))
+        rate_kind_str = "Air Plug Gauge Rate" if (product_type == 'APG' or not product_type) else "Base Rate"
+
+    total_price = base_price
+    range_lbl = f"{matched_range.min_diameter}-{matched_range.max_diameter or 'above'}mm"
+    breakdown_parts = [f"{rate_kind_str} ({range_lbl}): ₹{base_price:.2f}"]
+
+    # Extension selection
+    if selected_ext_id:
+        try:
+            ext_obj = datasheet.extensions.get(pk=selected_ext_id)
+            ext_p = Decimal(str(ext_obj.price))
+            total_price += ext_p
+            to_s_str = f"{ext_obj.to_size}mm" if ext_obj.to_size else "above"
+            breakdown_parts.append(f"Extension ({ext_obj.from_size}-{to_s_str}): ₹{ext_p:.2f}")
+        except Exception:
+            pass
+
+    # Depth collar selection
+    if selected_dc_id:
+        try:
+            dc_obj = datasheet.depth_collars.get(pk=selected_dc_id)
+            dc_p = Decimal(str(dc_obj.price))
+            total_price += dc_p
+            to_s_str = f"{dc_obj.to_size}mm" if dc_obj.to_size else "above"
+            breakdown_parts.append(f"Depth Collar ({dc_obj.from_size}-{to_s_str}): ₹{dc_p:.2f}")
+        except Exception:
+            pass
+
+    # Evaluate add-ons
+    all_addons = list(datasheet.addons.all())
+    if selected_addon_ids is not None:
+        addons_to_eval = [a for a in all_addons if str(a.id) in [str(x) for x in selected_addon_ids]]
+    else:
+        addons_to_eval = all_addons
+
+    for addon in addons_to_eval:
+        matched = False
+        if selected_addon_ids is not None:
+            matched = True
+        else:
+            a_name_lower = (addon.addon_name or '').lower()
+            a_spec_val = (addon.spec_value or '').strip().lower()
+
+            if 'air jet' in a_name_lower or 'jet' in a_name_lower:
+                rfq_jets = str(specs_dict.get('No. of jets') or specs_dict.get('Jets') or specs_dict.get('Air jet') or '').strip().lower()
+                if a_spec_val and (a_spec_val == rfq_jets or a_spec_val in rfq_jets):
+                    matched = True
+                elif not a_spec_val and rfq_jets and rfq_jets not in ('1', '2'):
+                    matched = True
+            else:
+                for k, v in specs_dict.items():
+                    k_low, v_low = str(k).lower(), str(v).lower()
+                    if (a_name_lower in k_low or a_name_lower in v_low) and v_low not in ('no', 'false', 'none', ''):
+                        matched = True
+                        break
+
+        if matched:
+            lbl = f"{addon.addon_name}" + (f" ({addon.spec_value} jets)" if addon.spec_value else "")
+            if addon.adjustment_type == 'PERCENTAGE':
+                adj = (base_price * Decimal(str(addon.adjustment_value)) / Decimal('100.00')).quantize(Decimal('0.01'))
+                total_price += adj
+                breakdown_parts.append(f"{lbl} (+{addon.adjustment_value}%): ₹{adj:.2f}")
+            else:
+                adj = Decimal(str(addon.adjustment_value))
+                total_price += adj
+                breakdown_parts.append(f"{lbl} (+₹{adj:.2f}): ₹{adj:.2f}")
+
+    return {
+        'success': True,
+        'suggested_price': float(total_price),
+        'base_price': float(base_price),
+        'datasheet_id': datasheet.id,
+        'datasheet_title': datasheet.title or f"{datasheet.supplier.supplier_name} - {datasheet.product_type or 'Rate Card'}",
+        'breakdown': " | ".join(breakdown_parts),
+        'extensions': [{'id': e.id, 'from_size': str(e.from_size), 'to_size': str(e.to_size) if e.to_size else '', 'price': str(e.price)} for e in datasheet.extensions.all()],
+        'depth_collars': [{'id': dc.id, 'from_size': str(dc.from_size), 'to_size': str(dc.to_size) if dc.to_size else '', 'price': str(dc.price)} for dc in datasheet.depth_collars.all()],
+        'addons': [{'id': a.id, 'addon_name': a.addon_name, 'spec_value': a.spec_value or '', 'adjustment_type': a.adjustment_type, 'adjustment_value': str(a.adjustment_value)} for a in datasheet.addons.all()]
+    }
+
+
+@role_required('ADMIN', 'SALES')
+def suggest_supplier_price(request):
+    supplier_id = request.GET.get('supplier_id')
+    product_type = request.GET.get('product_type', '').strip()
+    specs_json = request.GET.get('specs', '{}')
+    use_sr_price = request.GET.get('use_sr_price') == 'true'
+    size_override = request.GET.get('size_mm')
+    selected_ext_id = request.GET.get('extension_id')
+    selected_dc_id = request.GET.get('depth_collar_id')
+
+    selected_addon_ids = request.GET.getlist('addon_ids[]') if 'addon_ids[]' in request.GET else None
+
+    try:
+        specs_dict = json.loads(specs_json) if isinstance(specs_json, str) else specs_json
+    except Exception:
+        specs_dict = {}
+
+    result = calculate_suggested_price(
+        supplier_id=supplier_id,
+        product_type=product_type,
+        specs_dict=specs_dict,
+        use_sr_price=use_sr_price,
+        size_override=size_override,
+        selected_addon_ids=selected_addon_ids,
+        selected_ext_id=selected_ext_id,
+        selected_dc_id=selected_dc_id
+    )
+    return JsonResponse(result)
+
+
+def validate_price_ranges(ranges_data):
+    """
+    ranges_data is a list of tuples: (min_d, max_d, price, sr_price)
+    Returns (is_valid, error_message)
+    """
+    if not ranges_data:
+        return True, ""
+
+    for i, (min_d, max_d, price, sr_price) in enumerate(ranges_data, start=1):
+        if min_d < Decimal('0'):
+            return False, f"Row #{i}: Above size ({min_d} mm) cannot be negative."
+        if max_d is not None and max_d <= min_d:
+            return False, f"Row #{i}: Up to size ({max_d} mm) must be greater than Above size ({min_d} mm)."
+
+    sorted_ranges = sorted(ranges_data, key=lambda r: (r[0], r[1] if r[1] is not None else Decimal('999999999')))
+
+    for i in range(len(sorted_ranges) - 1):
+        curr_min, curr_max, _, _ = sorted_ranges[i]
+        next_min, next_max, _, _ = sorted_ranges[i + 1]
+
+        if curr_min == next_min:
+            return False, f"Duplicate starting bound ({curr_min} mm) found. Duplicate or overlapping ranges are not allowed."
+
+        if curr_max is None:
+            return False, f"Range starting at {curr_min} mm is open-ended (no 'Up to' size). Remove subsequent range or set an 'Up to' limit for {curr_min} mm."
+        elif next_min < curr_max:
+            curr_max_str = f"{curr_max}" if curr_max is not None else "above"
+            next_max_str = f"{next_max}" if next_max is not None else "above"
+            return False, f"Overlapping ranges detected: [{curr_min} to {curr_max_str} mm] and [{next_min} to {next_max_str} mm]. Next range must start at or above {curr_max} mm."
+
+    return True, ""
+
+
+@role_required('ADMIN', 'SALES')
+def save_supplier_datasheet(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+    datasheet_id = request.POST.get('datasheet_id')
+    supplier_id = request.POST.get('supplier_id')
+    product_type = request.POST.get('product_type', '').strip()
+    title = request.POST.get('title', '').strip()
+    description = request.POST.get('description', '').strip()
+
+    if not supplier_id:
+        return JsonResponse({'status': 'error', 'message': 'Supplier is required.'}, status=400)
+
+    if not product_type:
+        return JsonResponse({'status': 'error', 'message': 'Product Type is required.'}, status=400)
+
+    try:
+        supplier = Supplier.objects.get(pk=supplier_id)
+    except Supplier.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Supplier not found.'}, status=404)
+
+    # Parse and validate range arrays first
+    min_diams = request.POST.getlist('range_min_diameter[]')
+    max_diams = request.POST.getlist('range_max_diameter[]')
+    prices = request.POST.getlist('range_price[]')
+    sr_prices = request.POST.getlist('range_sr_price[]')
+    categories = request.POST.getlist('range_category[]')
+
+    parsed_ranges = []
+    for i in range(max(len(min_diams), len(prices))):
+        min_d_raw = min_diams[i] if i < len(min_diams) else '0'
+        max_d_raw = max_diams[i] if i < len(max_diams) else ''
+        price_raw = prices[i] if i < len(prices) else '0'
+        sr_price_raw = sr_prices[i] if i < len(sr_prices) else '0'
+
+        min_d = Decimal(min_d_raw) if min_d_raw.strip() else Decimal('0.00')
+        max_d = Decimal(max_d_raw) if max_d_raw.strip() else None
+        price = Decimal(price_raw) if price_raw.strip() else Decimal('0.00')
+        sr_price = Decimal(sr_price_raw) if sr_price_raw.strip() else Decimal('0.00')
+        parsed_ranges.append((min_d, max_d, price, sr_price))
+
+    is_valid, err_msg = validate_price_ranges(parsed_ranges)
+    if not is_valid:
+        return JsonResponse({'status': 'error', 'message': err_msg}, status=400)
+
+    if not title:
+        title = f"{supplier.supplier_name} - {product_type or 'General'} Rate Card"
+
+    with transaction.atomic():
+        if datasheet_id and datasheet_id.isdigit():
+            datasheet = SupplierDatasheet.objects.get(pk=int(datasheet_id))
+            datasheet.supplier = supplier
+            datasheet.product_type = product_type or None
+            datasheet.title = title
+            datasheet.description = description or None
+            datasheet.save()
+            datasheet.price_ranges.all().delete()
+            datasheet.extensions.all().delete()
+            datasheet.depth_collars.all().delete()
+            datasheet.addons.all().delete()
+            datasheet.modifiers.all().delete()
+            datasheet.accessories.all().delete()
+        else:
+            datasheet = SupplierDatasheet.objects.create(
+                supplier=supplier,
+                product_type=product_type or None,
+                title=title,
+                description=description or None
+            )
+
+        for i, (min_d, max_d, price, sr_price) in enumerate(parsed_ranges):
+            cat_name = categories[i].strip() if i < len(categories) and categories[i].strip() else "Base Rate"
+            DatasheetPriceRange.objects.create(
+                datasheet=datasheet,
+                category_name=cat_name,
+                min_diameter=min_d,
+                max_diameter=max_d,
+                price=price,
+                setting_ring_price=sr_price
+            )
+
+        # Parse extension arrays (from_size, to_size, price)
+        ext_from_sizes = request.POST.getlist('extension_from_size[]')
+        ext_to_sizes = request.POST.getlist('extension_to_size[]')
+        ext_prices = request.POST.getlist('extension_price[]')
+
+        for i, from_s_raw in enumerate(ext_from_sizes):
+            if not from_s_raw.strip():
+                continue
+            to_s_raw = ext_to_sizes[i] if i < len(ext_to_sizes) else ''
+            p_raw = ext_prices[i] if i < len(ext_prices) else '0'
+
+            f_size = Decimal(from_s_raw.strip())
+            t_size = Decimal(to_s_raw.strip()) if to_s_raw.strip() else None
+            ext_p = Decimal(p_raw.strip()) if p_raw.strip() else Decimal('0.00')
+
+            DatasheetExtensionRate.objects.create(
+                datasheet=datasheet,
+                from_size=f_size,
+                to_size=t_size,
+                price=ext_p
+            )
+
+        # Parse depth collar arrays (from_size, to_size, price)
+        dc_from_sizes = request.POST.getlist('depth_collar_from_size[]')
+        dc_to_sizes = request.POST.getlist('depth_collar_to_size[]')
+        dc_prices = request.POST.getlist('depth_collar_price[]')
+
+        for i, from_s_raw in enumerate(dc_from_sizes):
+            if not from_s_raw.strip():
+                continue
+            to_s_raw = dc_to_sizes[i] if i < len(dc_to_sizes) else ''
+            p_raw = dc_prices[i] if i < len(dc_prices) else '0'
+
+            f_size = Decimal(from_s_raw.strip())
+            t_size = Decimal(to_s_raw.strip()) if to_s_raw.strip() else None
+            dc_p = Decimal(p_raw.strip()) if p_raw.strip() else Decimal('0.00')
+
+            DatasheetDepthCollarRate.objects.create(
+                datasheet=datasheet,
+                from_size=f_size,
+                to_size=t_size,
+                price=dc_p
+            )
+
+        # Parse add-on arrays (addon_name, spec_val, adj_type, adj_val)
+        addon_names = request.POST.getlist('addon_name[]')
+        addon_spec_vals = request.POST.getlist('addon_spec_val[]')
+        addon_adj_types = request.POST.getlist('addon_adj_type[]')
+        addon_adj_vals = request.POST.getlist('addon_adj_val[]')
+
+        for i, a_name in enumerate(addon_names):
+            if not a_name.strip():
+                continue
+            s_val = addon_spec_vals[i].strip() if i < len(addon_spec_vals) else ''
+            a_type = addon_adj_types[i].strip() if i < len(addon_adj_types) else 'FIXED'
+            a_val_raw = addon_adj_vals[i] if i < len(addon_adj_vals) else '0'
+
+            DatasheetAddonRate.objects.create(
+                datasheet=datasheet,
+                addon_name=a_name.strip(),
+                spec_value=s_val or None,
+                adjustment_type=a_type,
+                adjustment_value=Decimal(a_val_raw) if a_val_raw.strip() else Decimal('0.00')
+            )
+
+        # Parse accessory arrays (product_code, item_name, size_range_label, unit_rate)
+        acc_codes = request.POST.getlist('accessory_product_code[]')
+        acc_names = request.POST.getlist('accessory_item_name[]')
+        acc_labels = request.POST.getlist('accessory_size_label[]')
+        acc_rates = request.POST.getlist('accessory_unit_rate[]')
+
+        for i, acc_n in enumerate(acc_names):
+            if not acc_n.strip():
+                continue
+            p_code = acc_codes[i].strip() if i < len(acc_codes) else ''
+            s_label = acc_labels[i].strip() if i < len(acc_labels) else ''
+            u_rate_raw = acc_rates[i] if i < len(acc_rates) else '0'
+
+            DatasheetAccessoryRate.objects.create(
+                datasheet=datasheet,
+                product_code=p_code or None,
+                item_name=acc_n.strip(),
+                size_range_label=s_label or None,
+                unit_rate=Decimal(u_rate_raw) if u_rate_raw.strip() else Decimal('0.00')
+            )
+
+    return JsonResponse({'status': 'ok', 'message': 'Supplier rate card saved successfully!'})
+
+
+@role_required('ADMIN', 'SALES')
+def get_supplier_datasheet(request, datasheet_id):
+    try:
+        datasheet = SupplierDatasheet.objects.prefetch_related('price_ranges', 'extensions', 'depth_collars', 'addons', 'accessories').get(pk=datasheet_id)
+    except SupplierDatasheet.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Datasheet not found.'}, status=404)
+
+    return JsonResponse({
+        'status': 'ok',
+        'datasheet': {
+            'id': datasheet.id,
+            'supplier_id': datasheet.supplier_id,
+            'product_type': datasheet.product_type or '',
+            'title': datasheet.title,
+            'description': datasheet.description or '',
+            'price_ranges': [
+                {
+                    'category_name': pr.category_name,
+                    'min_diameter': str(pr.min_diameter),
+                    'max_diameter': str(pr.max_diameter) if pr.max_diameter is not None else '',
+                    'price': str(pr.price),
+                    'setting_ring_price': str(pr.setting_ring_price or '0.00'),
+                }
+                for pr in datasheet.price_ranges.all()
+            ],
+            'extensions': [
+                {
+                    'from_size': str(e.from_size),
+                    'to_size': str(e.to_size) if e.to_size is not None else '',
+                    'price': str(e.price),
+                }
+                for e in datasheet.extensions.all()
+            ],
+            'depth_collars': [
+                {
+                    'from_size': str(dc.from_size),
+                    'to_size': str(dc.to_size) if dc.to_size is not None else '',
+                    'price': str(dc.price),
+                }
+                for dc in datasheet.depth_collars.all()
+            ],
+            'addons': [
+                {
+                    'addon_name': a.addon_name,
+                    'spec_value': a.spec_value or '',
+                    'adjustment_type': a.adjustment_type,
+                    'adjustment_value': str(a.adjustment_value),
+                }
+                for a in datasheet.addons.all()
+            ],
+            'modifiers': [
+                {
+                    'modifier_name': m.modifier_name,
+                    'spec_key': m.spec_key,
+                    'spec_value_match': m.spec_value_match,
+                    'adjustment_type': m.adjustment_type,
+                    'adjustment_value': str(m.adjustment_value),
+                }
+                for m in datasheet.modifiers.all()
+            ],
+            'accessories': [
+                {
+                    'product_code': a.product_code or '',
+                    'item_name': a.item_name,
+                    'size_range_label': a.size_range_label or '',
+                    'unit_rate': str(a.unit_rate),
+                }
+                for a in datasheet.accessories.all()
+            ]
+        }
+    })
+
+
+@role_required('ADMIN', 'SALES')
+def supplier_rate_cards(request):
+    supplier_datasheets = SupplierDatasheet.objects.select_related('supplier').prefetch_related('price_ranges', 'modifiers', 'accessories').filter(is_active=True)
+    suppliers = Supplier.objects.order_by('supplier_name')
+
+    return render(request, 'supplier_rate_cards.html', {
+        'supplier_datasheets': supplier_datasheets,
+        'suppliers': suppliers,
+        'product_type_choices': CustomerProduct.PRODUCT_TYPE_CHOICES,
+    })
+
+
+@role_required('ADMIN', 'SALES')
+def delete_supplier_datasheet(request, datasheet_id):
+    if request.method == 'POST':
+        try:
+            datasheet = SupplierDatasheet.objects.get(pk=datasheet_id)
+            datasheet.delete()
+            messages.success(request, 'Supplier rate card deleted successfully.')
+        except SupplierDatasheet.DoesNotExist:
+            messages.error(request, 'Rate card not found.')
+    return redirect('supplier_rate_cards')
