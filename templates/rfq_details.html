@@ -398,175 +398,8 @@
                 </div>
 
                 <form id="productParamsForm" novalidate>
-                    <div class="row g-3">
-                        <!-- Size -->
-                        <div class="col-md-4" id="grp_param_size">
-                            <label class="form-label small fw-semibold">Size <span class="text-danger">*</span></label>
-                            <input type="text" id="param_size" class="form-control form-control-sm" placeholder="e.g. 10.00 mm">
-                        </div>
-
-                        <!-- Material -->
-                        <div class="col-md-4" id="grp_param_material">
-                            <label class="form-label small fw-semibold">Material <span class="text-danger">*</span></label>
-                            <select id="param_material" class="form-select form-select-sm">
-                                <option value="">Select Material</option>
-                                <option value="Steel">Steel</option>
-                                <option value="Carbide">Carbide</option>
-                                <option value="D2">D2</option>
-                                <option value="OHNS">OHNS</option>
-                            </select>
-                        </div>
-
-                        <!-- Measuring Land (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_measuring_load">
-                            <label class="form-label small fw-semibold">Measuring Land <span class="text-danger">*</span></label>
-                            <input type="text" id="param_measuring_load" class="form-control form-control-sm" placeholder="e.g. Standard">
-                        </div>
-
-                        <!-- Type of ID (APG only) -->
-                        <div class="col-md-4" id="grp_type_of_id">
-                            <label class="form-label small fw-semibold">Type of ID <span class="text-danger">*</span></label>
-                            <select id="param_type_of_id" class="form-select form-select-sm">
-                                <option value="">Select Type</option>
-                                <option value="Blind">Blind</option>
-                                <option value="Through">Through</option>
-                            </select>
-                        </div>
-
-                        <!-- Type of OD (ARG only) -->
-                        <div class="col-md-4 d-none" id="grp_type_of_od">
-                            <label class="form-label small fw-semibold">Type of OD <span class="text-danger">*</span></label>
-                            <select id="param_type_of_od" class="form-select form-select-sm">
-                                <option value="">Select Type</option>
-                                <option value="Plain">Plain</option>
-                                <option value="Stepper">Stepper</option>
-                            </select>
-                        </div>
-
-                        <!-- Depth Collar (APG only) -->
-                        <div class="col-md-4" id="grp_depth_collar">
-                            <label class="form-label small fw-semibold">Depth Collar <span class="text-danger">*</span></label>
-                            <select id="param_depth_collar" class="form-select form-select-sm">
-                                <option value="">Select</option>
-                                <option value="Yes">Yes</option>
-                                <option value="No">No</option>
-                            </select>
-                        </div>
-
-                        <!-- Extension (APG only) -->
-                        <div class="col-md-4" id="grp_extension">
-                            <label class="form-label small fw-semibold">Extension <span class="text-danger">*</span></label>
-                            <input type="text" id="param_extension" class="form-control form-control-sm" placeholder="e.g. 50 mm">
-                        </div>
-
-                        <!-- Jet from Face (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_jet_from_face">
-                            <label class="form-label small fw-semibold">Jet from Face <span class="text-danger">*</span></label>
-                            <input type="text" id="param_jet_from_face" class="form-control form-control-sm" placeholder="e.g. 3 mm">
-                        </div>
-
-                        <!-- No. of Jets (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_no_of_jets">
-                            <label class="form-label small fw-semibold">No. of Jets <span class="text-danger">*</span></label>
-                            <input type="text" id="param_no_of_jets" class="form-control form-control-sm" placeholder="e.g. 2">
-                        </div>
-
-                        <!-- Module (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_module">
-                            <label class="form-label small fw-semibold">Module <span class="text-danger">*</span></label>
-                            <select id="param_module" class="form-select form-select-sm">
-                                <option value="">Select Module</option>
-                                <option value="1A">1A</option>
-                                <option value="2A">2A</option>
-                                <option value="1.5 mm">1.5 mm</option>
-                                <option value="1 mm">1 mm</option>
-                            </select>
-                        </div>
-
-                        <!-- Gauge Type (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_gauge_type">
-                            <label class="form-label small fw-semibold">Gauge Type <span class="text-danger">*</span></label>
-                            <select id="param_gauge_type" class="form-select form-select-sm">
-                                <option value="">Select Gauge Type</option>
-                                <option value="Hand held">Hand held</option>
-                                <option value="Unit mount">Unit mount</option>
-                                <option value="Bench mount">Bench mount</option>
-                            </select>
-                        </div>
-
-                        <!-- Bench Mount Details (APG/ARG - conditional) -->
-                        <div class="col-md-4 d-none apg-arg-field" id="grp_bench_mount_details">
-                            <label class="form-label small fw-semibold">Bench Mount Details <span class="text-danger">*</span></label>
-                            <input type="text" id="param_bench_mount_details" class="form-control form-control-sm" placeholder="Enter Bench Mount details">
-                        </div>
-
-                        <!-- Pull / Chopper (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_pull_chopper">
-                            <label class="form-label small fw-semibold">Pull / Chopper</label>
-                            <select id="param_pull_chopper" class="form-select form-select-sm">
-                                <option value="">Select Option</option>
-                                <option value="Yes">Yes</option>
-                                <option value="No">No</option>
-                            </select>
-                        </div>
-
-                        <!-- Packaging MABC (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_packaging_mabc">
-                            <label class="form-label small fw-semibold">Packaging (MABC)</label>
-                            <select id="param_packaging_mabc" class="form-select form-select-sm">
-                                <option value="">Select Packaging</option>
-                                <option value="MABC: Required">MABC: Required</option>
-                                <option value="MABC: Not required">MABC: Not required</option>
-                            </select>
-                        </div>
-
-                        <!-- Unit Fields -->
-                        <div class="col-md-6 d-none unit-air-field" id="grp_unit_product_name">
-                            <label class="form-label small fw-semibold">Product Name <span class="text-danger">*</span></label>
-                            <input type="text" id="param_unit_product_name" class="form-control form-control-sm" placeholder="e.g. unit Std Air">
-                        </div>
-
-                        <div class="col-md-6 d-none unit-air-field" id="grp_unit_principle">
-                            <label class="form-label small fw-semibold">Unit Principle <span class="text-danger">*</span></label>
-                            <input type="text" id="param_unit_principle" class="form-control form-control-sm" placeholder="e.g. Electronic Piezo">
-                        </div>
-
-                        <div class="col-md-6 d-none unit-air-field" id="grp_unit_display">
-                            <label class="form-label small fw-semibold">Display <span class="text-danger">*</span></label>
-                            <input type="text" id="param_unit_display" class="form-control form-control-sm" placeholder="e.g. Tri Color (RYG)">
-                        </div>
-
-                        <div class="col-md-6 d-none unit-air-field" id="grp_unit_module">
-                            <label class="form-label small fw-semibold">Module <span class="text-danger">*</span></label>
-                            <input type="text" id="param_unit_module" class="form-control form-control-sm" placeholder="e.g. Module 1A">
-                        </div>
-
-                        <div class="col-md-6 d-none unit-air-field" id="grp_unit_least_count">
-                            <label class="form-label small fw-semibold">Least Count <span class="text-danger">*</span></label>
-                            <input type="text" id="param_unit_least_count" class="form-control form-control-sm" placeholder="e.g. 0.0001, 0.0005, 0.0001">
-                        </div>
-
-                        <div class="col-12 d-none unit-air-field" id="grp_unit_features">
-                            <label class="form-label small fw-semibold">Features & Accessories <span class="text-danger">*</span></label>
-                            <textarea id="param_unit_features" class="form-control form-control-sm" rows="2" placeholder="List accessories and features"></textarea>
-                        </div>
-
-                        <div class="col-12 d-none" id="grp_unit_additional_features">
-                            <label class="form-label small fw-semibold">Additional Features <span class="text-danger">*</span></label>
-                            <textarea id="param_unit_additional_features" class="form-control form-control-sm" rows="2" placeholder="e.g. SPC, Live Run Chart, Data Storage"></textarea>
-                        </div>
-
-                        <!-- Engraving Details -->
-                        <div class="col-md-6" id="grp_engraving_details">
-                            <label class="form-label small fw-semibold">Engraving Details <span class="text-danger">*</span></label>
-                            <input type="text" id="param_engraving_details" class="form-control form-control-sm" placeholder="e.g. Marking text">
-                        </div>
-
-                        <!-- Remarks -->
-                        <div class="col-12" id="grp_remarks">
-                            <label class="form-label small fw-semibold">Specification Remarks <span class="text-danger">*</span></label>
-                            <textarea id="param_remarks" class="form-control form-control-sm" rows="2" placeholder="Additional specifications or remarks"></textarea>
-                        </div>
+                    <div class="row g-3" id="dynamicParamsContainer">
+                        <!-- Dynamically generated specification fields from Product Type Master -->
                     </div>
                 </form>
             </div>
@@ -1319,12 +1152,15 @@
 </div>
 
 {{ rfq_payloads|json_script:"rfq-data" }}
+{{ product_types_specs_data|json_script:"product-types-specs-data" }}
 {% endblock %}
 
 {% block extra_js %}
 <script src="{% static 'js/po-table-tools.js' %}?v=3"></script>
 <script>
 const rfqData = JSON.parse(document.getElementById('rfq-data').textContent);
+const initialProductTypeSpecs = JSON.parse(document.getElementById('product-types-specs-data')?.textContent || '{}');
+const allProductTypeSpecs = { ...initialProductTypeSpecs };
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
     return String(str)
@@ -2329,7 +2165,7 @@ function getRfqProductTypeOptions(selectedValue = '') {
     return `
         <option value="">Select Type</option>
         {% for value, label in product_type_choices %}
-        <option value="{{ value }}" ${selectedValue === '{{ value }}' ? 'selected' : ''}>{{ label }}</option>
+        <option value="{{ value }}" ${(selectedValue === '{{ value }}' || selectedValue === '{{ label|escapejs }}') ? 'selected' : ''}>{{ label }}</option>
         {% endfor %}
     `;
 }
@@ -3869,7 +3705,7 @@ document.getElementById('emailReplyForm')?.addEventListener('submit', function(e
 });
 
 // ============================================================
-// Product Specification Parameters Manager
+// Product Specification Parameters Manager (Dynamic)
 // ============================================================
 let activeParamRow = null;
 
@@ -3884,17 +3720,64 @@ function getParamCategoryFromType(prodType) {
     if (pt.includes('SPC AIR') || pt.includes('UNIT SPC AIR')) return 'UNIT_SPC_AIR';
     if (pt.includes('STD LVDT') || pt.includes('UNIT STD LVDT')) return 'UNIT_STD_LVDT';
     if (pt.includes('UNIT STD AIR') || pt.includes('STD AIR') || pt.includes('UNIT') || pt.includes('AIR UNIT')) return 'UNIT_STD_AIR';
-    return 'APG'; // Air Plug Gauge or default
+    return 'APG';
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+function getProductTypeData(prodType) {
+    if (!prodType) return null;
+    const key = String(prodType).trim().toUpperCase();
+    if (allProductTypeSpecs[key]) return allProductTypeSpecs[key];
+
+    // Search by exact code or name
+    for (const [k, pt] of Object.entries(allProductTypeSpecs)) {
+        if (pt.code && pt.code.toUpperCase() === key) return pt;
+        if (pt.name && pt.name.toUpperCase() === key) return pt;
+    }
+    // Search by partial match
+    for (const [k, pt] of Object.entries(allProductTypeSpecs)) {
+        if (pt.code && (key.includes(pt.code.toUpperCase()) || pt.code.toUpperCase().includes(key))) return pt;
+        if (pt.name && (key.includes(pt.name.toUpperCase()) || pt.name.toUpperCase().includes(key))) return pt;
+    }
+    return null;
+}
+
+function updateParamFieldDependencies() {
+    const container = document.getElementById('dynamicParamsContainer');
+    if (!container) return;
+
+    const groups = container.querySelectorAll('.param-field-group');
+    groups.forEach(grp => {
+        const depField = (grp.dataset.dependsField || '').trim();
+        const depVal = (grp.dataset.dependsValue || '').trim();
+        if (!depField) return;
+
+        const allCtrls = container.querySelectorAll('.dynamic-param-control');
+        let ctrl = null;
+        for (const c of allCtrls) {
+            const cKey = (c.dataset.key || '').trim().toLowerCase();
+            const cLabel = (c.dataset.label || '').trim().toLowerCase();
+            const dTarget = depField.toLowerCase();
+            if (cKey === dTarget || cLabel === dTarget) {
+                ctrl = c;
+                break;
+            }
+        }
+
+        if (ctrl) {
+            const currentVal = (ctrl.value || '').trim().toLowerCase();
+            const targetVal = depVal.toLowerCase();
+            const isMatch = (currentVal === targetVal);
+            if (isMatch) {
+                grp.classList.remove('d-none');
+            } else {
+                grp.classList.add('d-none');
+                const innerControl = grp.querySelector('.dynamic-param-control');
+                if (innerControl) {
+                    innerControl.classList.remove('is-invalid');
+                }
+            }
+        }
+    });
 }
 
 function isProductSpecComplete(row) {
@@ -3914,33 +3797,27 @@ function isProductSpecComplete(row) {
             return false;
         }
 
-        const category = getParamCategoryFromType(prodType);
-        const isUnit = (category === 'UNIT_STD_AIR' || category === 'UNIT_SPC_AIR' || category === 'UNIT_STD_LVDT' || category === 'UNIT_SPC_LVDT');
-
-        const hasVal = (key) => specs[key] !== undefined && specs[key] !== null && String(specs[key]).trim() !== '';
-
-        if (isUnit) {
-            if (!hasVal("Product Name") || !hasVal("Display") || !hasVal("Engraving details") || !hasVal("Remarks")) return false;
-            if (category === 'UNIT_STD_LVDT') {
-                if (!hasVal("Additional Features")) return false;
-            } else if (category === 'UNIT_SPC_AIR' || category === 'UNIT_SPC_LVDT') {
-                if (!hasVal("Features & Accessories") || !hasVal("Additional Features") || !hasVal("Module") || !hasVal("Least Count")) return false;
-            } else { // UNIT_STD_AIR
-                if (!hasVal("Features & Accessories") || !hasVal("Unit Principle") || !hasVal("Module") || !hasVal("Least Count")) return false;
-            }
-        } else {
-            if (!hasVal("Size") || !hasVal("Material") || !hasVal("Engraving details") || !hasVal("Remarks")) return false;
-            if (category !== 'TRG' && category !== 'TPR' && category !== 'TPG' && category !== 'WEAR_CHECK_PLUG' && category !== 'WEAR_CHECK_RING') {
-                if ((!hasVal("Measuring land") && !hasVal("Measuring load")) || !hasVal("Jet from face") || !hasVal("No. of jets") || !hasVal("Module") || !hasVal("Gauge Type")) return false;
-                if (category === 'ARG') {
-                    if (!hasVal("Type of OD")) return false;
-                } else { // APG
-                    if (!hasVal("Type of ID") || !hasVal("Depth collar") || !hasVal("Extension")) return false;
+        const ptData = getProductTypeData(prodType);
+        if (ptData && ptData.fields && ptData.fields.length > 0) {
+            for (const f of ptData.fields) {
+                if (f.is_required) {
+                    if (f.depends_on_field && f.depends_on_value) {
+                        const triggerVal = specs[f.depends_on_field] || specs[f.depends_on_field.toLowerCase()] || '';
+                        if (String(triggerVal).trim().toLowerCase() !== String(f.depends_on_value).trim().toLowerCase()) {
+                            continue; // Dependency not met, skip requirement
+                        }
+                    }
+                    const val = specs[f.key] !== undefined ? specs[f.key] : (specs[f.label] !== undefined ? specs[f.label] : '');
+                    if (val === undefined || val === null || String(val).trim() === '') {
+                        return false;
+                    }
                 }
-                if (specs["Gauge Type"] === 'Bench mount' && !hasVal("Bench mount details")) return false;
             }
+            return true;
         }
-        return true;
+
+        // Fallback if no schema loaded
+        return Object.values(specs).some(v => v && String(v).trim() !== '');
     } catch (e) {
         return false;
     }
@@ -3952,6 +3829,16 @@ function updateSpecPreview(row) {
     const previewEl = row.querySelector('.rfq-spec-preview');
     if (!specInput || !previewEl) return;
 
+    const typeSelect = row.querySelector('[name="product_type[]"]');
+    const prodType = typeSelect ? typeSelect.value : '';
+    const ptData = getProductTypeData(prodType);
+    const labelMap = {};
+    if (ptData && ptData.fields) {
+        ptData.fields.forEach(f => {
+            if (f.key && f.label) labelMap[f.key] = f.label;
+        });
+    }
+
     let text = '';
     if (specInput.value && specInput.value.trim() !== '' && specInput.value.trim() !== '{}') {
         try {
@@ -3959,7 +3846,8 @@ function updateSpecPreview(row) {
             const items = [];
             for (const [k, v] of Object.entries(obj)) {
                 if (v && String(v).trim()) {
-                    items.push(`${k}: ${v}`);
+                    const displayLabel = labelMap[k] || k;
+                    items.push(`${escapeHtml(displayLabel)}: ${escapeHtml(v)}`);
                 }
             }
             if (items.length > 0) {
@@ -3972,233 +3860,213 @@ function updateSpecPreview(row) {
         } catch(e) {}
     }
     if (!text) {
-        text = '<span class="text-danger small"><i class="bi bi-exclamation-circle me-1"></i>Parameters required</span>';
+        text = '<span class="text-danger small"><i class="bi bi-exclamation-triangle-fill me-1"></i>Parameters required</span>';
     }
     previewEl.innerHTML = text;
 }
 
-function openProductParamsModal(row) {
-    activeParamRow = row;
-    const typeSelect = row.querySelector('[name="product_type[]"]');
-    const prodType = typeSelect ? typeSelect.value : '';
-    const category = getParamCategoryFromType(prodType);
+function renderDynamicParamsFields(ptData, row) {
+    const container = document.getElementById('dynamicParamsContainer');
+    if (!container) return;
+    container.innerHTML = '';
 
-    const modalCategoryTitle = document.getElementById('modalParamCategoryTitle');
-    const modalTypeBadge = document.getElementById('modalParamTypeBadge');
-    
-    const categoryTitles = {
-        'WEAR_CHECK_PLUG': 'Wear Check Plug',
-        'WEAR_CHECK_RING': 'Wear Check Ring',
-        'TRG': 'Thread Ring Gauge',
-        'TPR': 'TPR',
-        'TPG': 'Thread Plug Gauge',
-        'PRG': 'Plain Ring Gauge',
-        'PPG': 'Plain Plug Gauge',
-        'ARG': 'Air Ring Gauge',
-        'APG': 'Air Plug Gauge',
-        'UNIT_STD_AIR': 'unit Std Air',
-        'UNIT_SPC_AIR': 'unit SPC Air',
-        'UNIT_STD_LVDT': 'unit Std lvdt',
-        'UNIT_SPC_LVDT': 'unit SPC lvdt'
-    };
-    if (modalCategoryTitle) modalCategoryTitle.textContent = categoryTitles[category] || prodType || 'Gauge';
-    if (modalTypeBadge) modalTypeBadge.textContent = categoryTitles[category] || category;
-
-    // Toggle field visibility depending on category
-    const apgArgFields = document.querySelectorAll('.apg-arg-field');
-    const unitAirFields = document.querySelectorAll('.unit-air-field');
-    const grpId = document.getElementById('grp_type_of_id');
-    const grpOd = document.getElementById('grp_type_of_od');
-    const grpCollar = document.getElementById('grp_depth_collar');
-    const grpExt = document.getElementById('grp_extension');
-    const sizeCol = document.getElementById('grp_param_size');
-    const matCol = document.getElementById('grp_param_material');
-
-    const isUnitCategory = (category === 'UNIT_STD_AIR' || category === 'UNIT_SPC_AIR' || category === 'UNIT_STD_LVDT' || category === 'UNIT_SPC_LVDT');
-
-    if (isUnitCategory) {
-        apgArgFields.forEach(el => el.classList.add('d-none'));
-        grpId?.classList.add('d-none');
-        grpOd?.classList.add('d-none');
-        grpCollar?.classList.add('d-none');
-        grpExt?.classList.add('d-none');
-        sizeCol?.classList.add('d-none');
-        matCol?.classList.add('d-none');
-
-        const prodNameGrp = document.getElementById('grp_unit_product_name');
-        const displayGrp = document.getElementById('grp_unit_display');
-        const moduleGrp = document.getElementById('grp_unit_module');
-        const leastCountGrp = document.getElementById('grp_unit_least_count');
-        const featuresGrp = document.getElementById('grp_unit_features');
-        const addFeatGrp = document.getElementById('grp_unit_additional_features');
-        const principleGrp = document.getElementById('grp_unit_principle');
-
-        prodNameGrp?.classList.remove('d-none');
-        displayGrp?.classList.remove('d-none');
-
-        if (category === 'UNIT_STD_LVDT') {
-            moduleGrp?.classList.add('d-none');
-            leastCountGrp?.classList.add('d-none');
-            featuresGrp?.classList.add('d-none');
-            principleGrp?.classList.add('d-none');
-            addFeatGrp?.classList.remove('d-none');
-        } else if (category === 'UNIT_SPC_AIR' || category === 'UNIT_SPC_LVDT') {
-            moduleGrp?.classList.remove('d-none');
-            leastCountGrp?.classList.remove('d-none');
-            featuresGrp?.classList.remove('d-none');
-            principleGrp?.classList.add('d-none');
-            addFeatGrp?.classList.remove('d-none');
-        } else { // UNIT_STD_AIR
-            moduleGrp?.classList.remove('d-none');
-            leastCountGrp?.classList.remove('d-none');
-            featuresGrp?.classList.remove('d-none');
-            principleGrp?.classList.remove('d-none');
-            addFeatGrp?.classList.add('d-none');
-        }
-    } else {
-        unitAirFields.forEach(el => el.classList.add('d-none'));
-        document.getElementById('grp_unit_additional_features')?.classList.add('d-none');
-        if (category === 'TRG' || category === 'TPR' || category === 'TPG' || category === 'WEAR_CHECK_PLUG' || category === 'WEAR_CHECK_RING') {
-            apgArgFields.forEach(el => el.classList.add('d-none'));
-            grpId?.classList.add('d-none');
-            grpOd?.classList.add('d-none');
-            grpCollar?.classList.add('d-none');
-            grpExt?.classList.add('d-none');
-            if (sizeCol) { sizeCol.classList.remove('d-none'); sizeCol.className = 'col-md-6'; }
-            if (matCol) { matCol.classList.remove('d-none'); matCol.className = 'col-md-6'; }
-        } else {
-            apgArgFields.forEach(el => el.classList.remove('d-none'));
-            if (sizeCol) { sizeCol.classList.remove('d-none'); sizeCol.className = 'col-md-4'; }
-            if (matCol) { matCol.classList.remove('d-none'); matCol.className = 'col-md-4'; }
-
-            if (category === 'ARG') {
-                grpId?.classList.add('d-none');
-                grpOd?.classList.remove('d-none');
-                grpCollar?.classList.add('d-none');
-                grpExt?.classList.add('d-none');
-            } else {
-                grpId?.classList.remove('d-none');
-                grpOd?.classList.add('d-none');
-                grpCollar?.classList.remove('d-none');
-                grpExt?.classList.remove('d-none');
-            }
-        }
-    }
-
-    // Clear form inputs and error alerts
-    const form = document.getElementById('productParamsForm');
-    if (form) {
-        form.reset();
-        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-    }
-    const modalAlertContainer = document.getElementById('paramsModalAlertContainer');
-    if (modalAlertContainer) modalAlertContainer.innerHTML = '';
-    document.getElementById('grp_bench_mount_details')?.classList.add('d-none');
-
-    // Populate if existing specs
-    const specInput = row.querySelector('.rfq-product-spec-input');
-    let hasExistingSpecs = false;
-
+    const specInput = row ? row.querySelector('.rfq-product-spec-input') : null;
+    let existingSpecs = {};
     if (specInput && specInput.value) {
         try {
-            const data = JSON.parse(specInput.value);
-            if (data && Object.keys(data).length > 0) {
-                hasExistingSpecs = true;
-                if (data["Engraving details"]) document.getElementById('param_engraving_details').value = data["Engraving details"];
-                if (data["Remarks"]) document.getElementById('param_remarks').value = data["Remarks"];
-
-                if (isUnitCategory) {
-                    if (data["Product Name"]) document.getElementById('param_unit_product_name').value = data["Product Name"];
-                    if (data["Display"]) document.getElementById('param_unit_display').value = data["Display"];
-                    if (data["Additional Features"]) document.getElementById('param_unit_additional_features').value = data["Additional Features"];
-                    if (data["Features & Accessories"]) document.getElementById('param_unit_features').value = data["Features & Accessories"];
-                    if (data["Unit Principle"]) document.getElementById('param_unit_principle').value = data["Unit Principle"];
-                    if (data["Module"]) document.getElementById('param_unit_module').value = data["Module"];
-                    if (data["Least Count"]) document.getElementById('param_unit_least_count').value = data["Least Count"];
-                } else {
-                    if (data["Size"]) document.getElementById('param_size').value = data["Size"];
-                    if (data["Material"]) document.getElementById('param_material').value = data["Material"];
-
-                    if (category !== 'TRG' && category !== 'TPR' && category !== 'TPG' && category !== 'WEAR_CHECK_PLUG' && category !== 'WEAR_CHECK_RING') {
-                        if (data["Measuring land"]) document.getElementById('param_measuring_load').value = data["Measuring land"];
-                        else if (data["Measuring load"]) document.getElementById('param_measuring_load').value = data["Measuring load"];
-                        if (data["Type of ID"]) document.getElementById('param_type_of_id').value = data["Type of ID"];
-                        if (data["Type of OD"]) document.getElementById('param_type_of_od').value = data["Type of OD"];
-                        if (data["Depth collar"]) document.getElementById('param_depth_collar').value = data["Depth collar"];
-                        if (data["Extension"]) document.getElementById('param_extension').value = data["Extension"];
-                        if (data["Jet from face"]) document.getElementById('param_jet_from_face').value = data["Jet from face"];
-                        if (data["No. of jets"]) document.getElementById('param_no_of_jets').value = data["No. of jets"];
-                        if (data["Module"]) document.getElementById('param_module').value = data["Module"];
-                        if (data["Gauge Type"]) {
-                            document.getElementById('param_gauge_type').value = data["Gauge Type"];
-                            if (data["Gauge Type"] === 'Bench mount') {
-                                document.getElementById('grp_bench_mount_details')?.classList.remove('d-none');
-                            }
-                        }
-                        if (data["Bench mount details"]) document.getElementById('param_bench_mount_details').value = data["Bench mount details"];
-                    }
-                }
-            }
+            const parsed = JSON.parse(specInput.value);
+            if (parsed && typeof parsed === 'object') existingSpecs = parsed;
         } catch(e) {}
     }
 
-    if (category === 'UNIT_STD_LVDT' && !hasExistingSpecs) {
-        document.getElementById('param_unit_product_name').value = 'unit Std lvdt';
-        document.getElementById('param_unit_display').value = 'Tri Color (RYG)';
-    } else if ((category === 'UNIT_SPC_AIR' || category === 'UNIT_SPC_LVDT') && !hasExistingSpecs) {
-        document.getElementById('param_unit_product_name').value = (category === 'UNIT_SPC_LVDT') ? 'unit SPC lvdt' : 'SPC based Air Unit – 8 Channel';
-        document.getElementById('param_unit_display').value = 'GUC';
-        document.getElementById('param_unit_module').value = 'Module 1A';
-        document.getElementById('param_unit_least_count').value = '0.0001, 0.0001';
-        document.getElementById('param_unit_features').value = 'Least Count - 0.0001, 0.0001 /RS232 / Programs/ Calibration Error / O-R Option';
-        document.getElementById('param_unit_additional_features').value = 'a. SPC, b. Live Run Chart, c. Data Storage (8GB) and Re-check, d. Key Board enabling, e. Operator Shift details, f. Relay Output';
-    } else if (category === 'UNIT_STD_AIR' && !hasExistingSpecs) {
-        document.getElementById('param_unit_product_name').value = 'unit Std Air';
-        document.getElementById('param_unit_principle').value = 'Electronic Piezo';
-        document.getElementById('param_unit_display').value = 'Tri Color (RYG)';
-        document.getElementById('param_unit_module').value = 'Module 1A';
-        document.getElementById('param_unit_least_count').value = '0.0001, 0.0005, 0.0001';
-        document.getElementById('param_unit_features').value = 'Least Count 0.0001, 0.0005, 0.0001 / RS232 / Programs/ Calibration Error / O-R Option/ Air Dryer and Draining Filter / Hand Held Adapter/Unit Cover';
+    const fields = (ptData && ptData.fields && ptData.fields.length > 0) ? ptData.fields : [];
+
+    if (fields.length === 0) {
+        container.innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-info py-2 mb-2 small">
+                    <i class="bi bi-info-circle me-1"></i>No custom spec fields configured in Product Type Master for this type. You can enter general specifications below:
+                </div>
+            </div>
+            <div class="col-md-6 param-field-group" data-key="Engraving details" data-label="Engraving Details" data-required="false">
+                <label class="form-label small fw-semibold">Engraving Details</label>
+                <input type="text" class="form-control form-control-sm dynamic-param-control" data-key="Engraving details" data-label="Engraving Details" placeholder="e.g. Marking text" value="${escapeHtml(existingSpecs['Engraving details'] || '')}">
+            </div>
+            <div class="col-md-6 param-field-group" data-key="Remarks" data-label="Specification Remarks" data-required="true">
+                <label class="form-label small fw-semibold">Specification Remarks <span class="text-danger">*</span></label>
+                <textarea class="form-control form-control-sm dynamic-param-control" rows="2" data-key="Remarks" data-label="Specification Remarks" placeholder="Additional specifications or remarks">${escapeHtml(existingSpecs['Remarks'] || existingSpecs['Specification'] || '')}</textarea>
+            </div>
+        `;
+        return;
     }
+
+    function getFieldValue(f) {
+        if (existingSpecs[f.key] !== undefined && existingSpecs[f.key] !== null) return existingSpecs[f.key];
+        if (existingSpecs[f.label] !== undefined && existingSpecs[f.label] !== null) return existingSpecs[f.label];
+        const lowerKey = (f.key || '').toLowerCase();
+        const lowerLabel = (f.label || '').toLowerCase();
+        for (const [k, v] of Object.entries(existingSpecs)) {
+            if (k.toLowerCase() === lowerKey || k.toLowerCase() === lowerLabel) return v;
+        }
+        return '';
+    }
+
+    const htmlParts = [];
+    fields.forEach(f => {
+        const val = getFieldValue(f);
+        let colClass = 'col-md-4';
+        if (f.type === 'textarea') {
+            colClass = 'col-12';
+        } else if (fields.length <= 4) {
+            colClass = 'col-md-6';
+        } else if (f.label && f.label.length > 25) {
+            colClass = 'col-md-6';
+        }
+
+        let controlHtml = '';
+        if (f.type === 'select') {
+            const options = Array.isArray(f.options) ? f.options : ((f.options_str || '').split(',').map(s => s.trim()).filter(Boolean));
+            controlHtml = `
+                <select class="form-select form-select-sm dynamic-param-control"
+                        data-key="${escapeHtml(f.key)}"
+                        data-label="${escapeHtml(f.label)}">
+                    <option value="">Select ${escapeHtml(f.label)}</option>
+                    ${options.map(opt => `<option value="${escapeHtml(opt)}" ${String(val).toLowerCase() === String(opt).toLowerCase() ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+                </select>
+            `;
+        } else if (f.type === 'boolean') {
+            controlHtml = `
+                <select class="form-select form-select-sm dynamic-param-control"
+                        data-key="${escapeHtml(f.key)}"
+                        data-label="${escapeHtml(f.label)}">
+                    <option value="">Select</option>
+                    <option value="Yes" ${String(val).toLowerCase() === 'yes' ? 'selected' : ''}>Yes</option>
+                    <option value="No" ${String(val).toLowerCase() === 'no' ? 'selected' : ''}>No</option>
+                </select>
+            `;
+        } else if (f.type === 'textarea') {
+            controlHtml = `
+                <textarea class="form-control form-control-sm dynamic-param-control"
+                          rows="2"
+                          data-key="${escapeHtml(f.key)}"
+                          data-label="${escapeHtml(f.label)}"
+                          placeholder="${escapeHtml(f.placeholder || '')}">${escapeHtml(val)}</textarea>
+            `;
+        } else if (f.type === 'number') {
+            controlHtml = `
+                <input type="number" step="any"
+                       class="form-control form-control-sm dynamic-param-control"
+                       data-key="${escapeHtml(f.key)}"
+                       data-label="${escapeHtml(f.label)}"
+                       placeholder="${escapeHtml(f.placeholder || '')}"
+                       value="${escapeHtml(val)}">
+            `;
+        } else {
+            controlHtml = `
+                <input type="text"
+                       class="form-control form-control-sm dynamic-param-control"
+                       data-key="${escapeHtml(f.key)}"
+                       data-label="${escapeHtml(f.label)}"
+                       placeholder="${escapeHtml(f.placeholder || '')}"
+                       value="${escapeHtml(val)}">
+            `;
+        }
+
+        htmlParts.push(`
+            <div class="${colClass} param-field-group"
+                 id="param_grp_${escapeHtml(f.id || f.key)}"
+                 data-key="${escapeHtml(f.key)}"
+                 data-label="${escapeHtml(f.label)}"
+                 data-required="${f.is_required ? 'true' : 'false'}"
+                 data-depends-field="${escapeHtml(f.depends_on_field || '')}"
+                 data-depends-value="${escapeHtml(f.depends_on_value || '')}">
+                <label class="form-label small fw-semibold">
+                    ${escapeHtml(f.label)} ${f.is_required ? '<span class="text-danger">*</span>' : ''}
+                </label>
+                ${controlHtml}
+            </div>
+        `);
+    });
+
+    container.innerHTML = htmlParts.join('');
+    updateParamFieldDependencies();
+}
+
+async function openProductParamsModal(row) {
+    activeParamRow = row;
+    const typeSelect = row ? row.querySelector('[name="product_type[]"]') : null;
+    const prodType = typeSelect ? typeSelect.value : '';
+
+    const modalCategoryTitle = document.getElementById('modalParamCategoryTitle');
+    const modalTypeBadge = document.getElementById('modalParamTypeBadge');
+    const modalAlertContainer = document.getElementById('paramsModalAlertContainer');
+    const container = document.getElementById('dynamicParamsContainer');
+    if (modalAlertContainer) modalAlertContainer.innerHTML = '';
+
+    if (!prodType) {
+        if (modalCategoryTitle) modalCategoryTitle.textContent = 'Product';
+        if (modalTypeBadge) modalTypeBadge.textContent = 'None';
+        if (container) {
+            container.innerHTML = `
+                <div class="col-12 text-center py-4 text-muted">
+                    <i class="bi bi-exclamation-circle text-warning fs-3 d-block mb-2"></i>
+                    Please select a Product Type for this row before configuring parameters.
+                </div>
+            `;
+        }
+        const modalEl = document.getElementById('productParamsModal');
+        if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        return;
+    }
+
+    let ptData = getProductTypeData(prodType);
+
+    // Fetch fresh specs from API so any newly created fields or renamed fields are reflected immediately!
+    try {
+        const resp = await fetch(`/api/product-types/${encodeURIComponent(prodType)}/specs/`);
+        if (resp.ok) {
+            const apiData = await resp.json();
+            if (apiData && apiData.status === 'ok') {
+                allProductTypeSpecs[apiData.code.toUpperCase()] = apiData;
+                if (apiData.name) allProductTypeSpecs[apiData.name.toUpperCase()] = apiData;
+                ptData = apiData;
+            }
+        }
+    } catch(err) {
+        // Fallback to embedded data
+    }
+
+    if (modalCategoryTitle) modalCategoryTitle.textContent = ptData ? (ptData.name || prodType) : prodType;
+    if (modalTypeBadge) modalTypeBadge.textContent = ptData ? (ptData.code || prodType) : prodType;
+
+    renderDynamicParamsFields(ptData, row);
 
     const modalEl = document.getElementById('productParamsModal');
     if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
 }
 
-document.getElementById('param_gauge_type')?.addEventListener('change', function() {
-    const grpBench = document.getElementById('grp_bench_mount_details');
-    const benchInput = document.getElementById('param_bench_mount_details');
-    if (this.value === 'Bench mount') {
-        grpBench?.classList.remove('d-none');
-    } else {
-        grpBench?.classList.add('d-none');
-        if (benchInput) {
-            benchInput.value = '';
-            benchInput.classList.remove('is-invalid');
-        }
-    }
-});
-
-// Clear invalid state on input / change
+// Live clear invalid state and update dependencies
 document.getElementById('productParamsForm')?.addEventListener('input', function(e) {
-    if (e.target && e.target.value && e.target.value.trim() !== '') {
+    if (e.target && e.target.classList.contains('dynamic-param-control')) {
         e.target.classList.remove('is-invalid');
         const hasInvalid = document.querySelector('#productParamsForm .is-invalid');
         if (!hasInvalid) {
             const container = document.getElementById('paramsModalAlertContainer');
             if (container) container.innerHTML = '';
         }
+        updateParamFieldDependencies();
     }
 });
 
 document.getElementById('productParamsForm')?.addEventListener('change', function(e) {
-    if (e.target && e.target.value && e.target.value.trim() !== '') {
+    if (e.target && e.target.classList.contains('dynamic-param-control')) {
         e.target.classList.remove('is-invalid');
         const hasInvalid = document.querySelector('#productParamsForm .is-invalid');
         if (!hasInvalid) {
             const container = document.getElementById('paramsModalAlertContainer');
             if (container) container.innerHTML = '';
         }
+        updateParamFieldDependencies();
     }
 });
 
@@ -4206,40 +4074,33 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
     if (!activeParamRow) return;
 
     const modalAlertContainer = document.getElementById('paramsModalAlertContainer');
-    const form = document.getElementById('productParamsForm');
-    if (!form) return;
+    const container = document.getElementById('dynamicParamsContainer');
+    if (!container) return;
 
-    const typeSelect = activeParamRow.querySelector('[name="product_type[]"]');
-    const prodType = typeSelect ? typeSelect.value : document.getElementById('modalParamTypeBadge').textContent;
-    const category = getParamCategoryFromType(prodType);
-    const isUnitCategory = (category === 'UNIT_STD_AIR' || category === 'UNIT_SPC_AIR' || category === 'UNIT_STD_LVDT' || category === 'UNIT_SPC_LVDT');
-
-    // Validate all visible parameter fields
     const missingFields = [];
     let firstInvalidEl = null;
 
-    const fieldGroups = form.querySelectorAll('.row > div');
-    fieldGroups.forEach(grp => {
-        // Skip hidden groups
+    const groups = container.querySelectorAll('.param-field-group');
+    groups.forEach(grp => {
         if (grp.classList.contains('d-none') || grp.offsetParent === null) {
-            const control = grp.querySelector('input, select, textarea');
-            if (control) control.classList.remove('is-invalid');
+            const ctrl = grp.querySelector('.dynamic-param-control');
+            if (ctrl) ctrl.classList.remove('is-invalid');
             return;
         }
 
-        const control = grp.querySelector('input, select, textarea');
-        if (!control) return;
+        const ctrl = grp.querySelector('.dynamic-param-control');
+        if (!ctrl) return;
 
-        const val = (control.value || '').trim();
-        const label = grp.querySelector('label');
-        const labelText = label ? label.textContent.replace('*', '').trim() : 'Field';
+        const isRequired = grp.dataset.required === 'true';
+        const val = (ctrl.value || '').trim();
+        const label = grp.dataset.label || grp.dataset.key || 'Field';
 
-        if (!val) {
-            control.classList.add('is-invalid');
-            missingFields.push(labelText);
-            if (!firstInvalidEl) firstInvalidEl = control;
+        if (isRequired && !val) {
+            ctrl.classList.add('is-invalid');
+            missingFields.push(label);
+            if (!firstInvalidEl) firstInvalidEl = ctrl;
         } else {
-            control.classList.remove('is-invalid');
+            ctrl.classList.remove('is-invalid');
         }
     });
 
@@ -4264,53 +4125,16 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
     if (modalAlertContainer) modalAlertContainer.innerHTML = '';
 
     const specs = {};
-
-    if (isUnitCategory) {
-        specs["Product Name"] = document.getElementById('param_unit_product_name').value.trim();
-        specs["Display"] = document.getElementById('param_unit_display').value;
-
-        if (category === 'UNIT_STD_LVDT') {
-            specs["Additional Features"] = document.getElementById('param_unit_additional_features').value.trim();
-        } else if (category === 'UNIT_SPC_AIR' || category === 'UNIT_SPC_LVDT') {
-            specs["Features & Accessories"] = document.getElementById('param_unit_features').value.trim();
-            specs["Additional Features"] = document.getElementById('param_unit_additional_features').value.trim();
-            specs["Module"] = document.getElementById('param_unit_module').value;
-            specs["Least Count"] = document.getElementById('param_unit_least_count').value;
-        } else { // UNIT_STD_AIR
-            specs["Features & Accessories"] = document.getElementById('param_unit_features').value.trim();
-            specs["Unit Principle"] = document.getElementById('param_unit_principle').value;
-            specs["Module"] = document.getElementById('param_unit_module').value;
-            specs["Least Count"] = document.getElementById('param_unit_least_count').value;
+    groups.forEach(grp => {
+        if (grp.classList.contains('d-none') || grp.offsetParent === null) return;
+        const ctrl = grp.querySelector('.dynamic-param-control');
+        if (!ctrl) return;
+        const key = ctrl.dataset.key || ctrl.dataset.label;
+        const val = (ctrl.value || '').trim();
+        if (val) {
+            specs[key] = val;
         }
-    } else {
-        specs["Size"] = document.getElementById('param_size').value.trim();
-        specs["Material"] = document.getElementById('param_material').value;
-
-        if (category !== 'TRG' && category !== 'TPR' && category !== 'TPG' && category !== 'WEAR_CHECK_PLUG' && category !== 'WEAR_CHECK_RING') {
-            specs["Measuring land"] = document.getElementById('param_measuring_load').value.trim();
-
-            if (category === 'ARG') {
-                specs["Type of OD"] = document.getElementById('param_type_of_od').value;
-            } else {
-                specs["Type of ID"] = document.getElementById('param_type_of_id').value;
-                specs["Depth collar"] = document.getElementById('param_depth_collar').value;
-                specs["Extension"] = document.getElementById('param_extension').value.trim();
-            }
-
-            specs["Jet from face"] = document.getElementById('param_jet_from_face').value.trim();
-            specs["No. of jets"] = document.getElementById('param_no_of_jets').value.trim();
-            specs["Module"] = document.getElementById('param_module').value;
-
-            const gType = document.getElementById('param_gauge_type').value;
-            specs["Gauge Type"] = gType;
-            if (gType === 'Bench mount') {
-                specs["Bench mount details"] = document.getElementById('param_bench_mount_details').value.trim();
-            }
-        }
-    }
-
-    specs["Engraving details"] = document.getElementById('param_engraving_details').value.trim();
-    specs["Remarks"] = document.getElementById('param_remarks').value.trim();
+    });
 
     const hiddenInput = activeParamRow.querySelector('.rfq-product-spec-input');
     if (hiddenInput) {

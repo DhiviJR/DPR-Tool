@@ -1866,15 +1866,26 @@ def dpr_products(request, dpr_id):
 @login_required
 def get_product_type_specs_api(request, code):
     code_clean = (code or '').strip()
+    pt = None
     try:
         if code_clean.isdigit():
-            pt = ProductType.objects.get(pk=int(code_clean))
-        else:
-            pt = ProductType.objects.get(code__iexact=code_clean)
-    except ProductType.DoesNotExist:
-        pt = ProductType.objects.filter(name__icontains=code_clean).first()
+            pt = ProductType.objects.filter(pk=int(code_clean)).first()
         if not pt:
-            return JsonResponse({'status': 'error', 'message': f'Product type "{code}" not found.'}, status=404)
+            pt = ProductType.objects.filter(code__iexact=code_clean).first()
+        if not pt:
+            pt = ProductType.objects.filter(name__iexact=code_clean).first()
+        if not pt:
+            pt = ProductType.objects.filter(name__icontains=code_clean).first()
+        if not pt:
+            for existing_pt in ProductType.objects.filter(is_active=True):
+                if existing_pt.code.lower() in code_clean.lower() or existing_pt.name.lower() in code_clean.lower():
+                    pt = existing_pt
+                    break
+    except Exception:
+        pass
+
+    if not pt:
+        return JsonResponse({'status': 'error', 'message': f'Product type "{code}" not found.'}, status=404)
 
     fields = pt.spec_fields.all().order_by('sort_order', 'id')
     field_list = []
@@ -1882,7 +1893,7 @@ def get_product_type_specs_api(request, code):
         field_list.append({
             'id': f.id,
             'label': f.field_label,
-            'key': f.field_key,
+            'key': f.field_key or f.field_label,
             'type': f.field_type,
             'options': [opt.strip() for opt in (f.select_options or '').split(',') if opt.strip()],
             'options_str': f.select_options or '',
@@ -1919,6 +1930,14 @@ def get_all_product_types_api(request):
             'default_delivery_weeks': pt.default_delivery_weeks,
         })
     return JsonResponse({'status': 'ok', 'product_types': data})
+
+
+def _resequence_product_type_fields(product_type):
+    fields = list(product_type.spec_fields.all().order_by('sort_order', 'id'))
+    for idx, f in enumerate(fields, start=1):
+        if f.sort_order != idx:
+            f.sort_order = idx
+            f.save(update_fields=['sort_order'])
 
 
 @role_required('ADMIN', 'PURCHASE')
@@ -1978,12 +1997,16 @@ def product_type_master(request):
             depends_on_value = request.POST.get('depends_on_value', '').strip()
             sort_order_raw = request.POST.get('sort_order', '0').strip()
 
+            pt = get_object_or_404(ProductType, pk=int(pt_id))
+
             try:
                 sort_order = int(sort_order_raw)
             except ValueError:
                 sort_order = 0
 
-            pt = get_object_or_404(ProductType, pk=int(pt_id))
+            if sort_order <= 0:
+                max_order = pt.spec_fields.aggregate(models.Max('sort_order'))['sort_order__max'] or 0
+                sort_order = max_order + 1
 
             if field_id and field_id.isdigit():
                 f = get_object_or_404(ProductTypeSpecField, pk=int(field_id), product_type=pt)
@@ -2012,15 +2035,18 @@ def product_type_master(request):
                     sort_order=sort_order
                 )
                 messages.success(request, f'Field "{field_label}" added to {pt.code}.')
+            _resequence_product_type_fields(pt)
             return redirect('product_type_master')
 
         elif action == 'delete_spec_field':
             field_id = request.POST.get('field_id')
             if field_id and field_id.isdigit():
                 f = get_object_or_404(ProductTypeSpecField, pk=int(field_id))
-                pt_name = f.product_type.code
+                pt = f.product_type
+                pt_name = pt.code
                 label = f.field_label
                 f.delete()
+                _resequence_product_type_fields(pt)
                 messages.success(request, f'Field "{label}" deleted from {pt_name}.')
             return redirect('product_type_master')
 
@@ -2034,6 +2060,11 @@ def product_type_master(request):
             return redirect('product_type_master')
 
     product_types = ProductType.objects.prefetch_related('spec_fields').order_by('name')
+    for pt in product_types:
+        fields = list(pt.spec_fields.all())
+        needs_resequence = any(f.sort_order != idx for idx, f in enumerate(fields, start=1))
+        if needs_resequence:
+            _resequence_product_type_fields(pt)
     return render(request, 'product_type_master.html', {'product_types': product_types})
 
 
@@ -4758,11 +4789,49 @@ def rfq_details(request):
     else:
         email_prefill_products_json = request.session.get('email_prefill_products_json', '')
 
+    active_pts = list(ProductType.objects.filter(is_active=True).prefetch_related('spec_fields').order_by('name'))
+    existing_codes = {pt.code for pt in active_pts}
+    product_type_choices = [(pt.code, pt.name if pt.name else pt.code) for pt in active_pts]
+    for code, label in CustomerProduct.PRODUCT_TYPE_CHOICES:
+        if code not in existing_codes:
+            product_type_choices.append((code, label))
+
+    product_types_specs_data = {}
+    for pt in active_pts:
+        fields = []
+        for f in pt.spec_fields.all().order_by('sort_order', 'id'):
+            fields.append({
+                'id': f.id,
+                'label': f.field_label,
+                'key': f.field_key or f.field_label,
+                'type': f.field_type,
+                'options': [opt.strip() for opt in (f.select_options or '').split(',') if opt.strip()],
+                'options_str': f.select_options or '',
+                'is_required': f.is_required,
+                'placeholder': f.placeholder or '',
+                'depends_on_field': f.depends_on_field or '',
+                'depends_on_value': f.depends_on_value or '',
+                'sort_order': f.sort_order,
+            })
+        pt_dict = {
+            'id': pt.id,
+            'name': pt.name,
+            'code': pt.code,
+            'category': pt.category or '',
+            'hsn_code': pt.hsn_code,
+            'default_delivery_weeks': pt.default_delivery_weeks,
+            'fields': fields,
+        }
+        product_types_specs_data[pt.code.upper()] = pt_dict
+        if pt.name:
+            product_types_specs_data[pt.name.upper()] = pt_dict
+
     return render(request, 'rfq_details.html', {
         'rfqs': rfqs_to_display,
         'customers': customers,
         'suppliers': suppliers,
-        'product_type_choices': CustomerProduct.PRODUCT_TYPE_CHOICES,
+        'product_type_choices': product_type_choices,
+        'product_types_specs_data': product_types_specs_data,
         'rfq_payloads': rfq_payloads,
         'default_supplier_email_subject': _get_default_supplier_email_subject(),
         'default_supplier_email_body': _get_default_supplier_email_body(),

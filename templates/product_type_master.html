@@ -60,7 +60,8 @@
                     <button type="button" class="btn btn-sm btn-outline-success add-field-btn"
                             data-pt-id="{{ pt.id }}"
                             data-pt-code="{{ pt.code }}"
-                            data-pt-name="{{ pt.name }}">
+                            data-pt-name="{{ pt.name }}"
+                            data-next-order="{{ pt.spec_fields.count|add:1 }}">
                         <i class="bi bi-plus-circle me-1"></i>Add Spec Field
                     </button>
 
@@ -93,7 +94,7 @@
                         <tbody>
                             {% for f in pt.spec_fields.all %}
                             <tr>
-                                <td class="text-center fw-bold small">{{ f.sort_order }}</td>
+                                <td class="text-center fw-bold small">{{ forloop.counter }}</td>
                                 <td class="fw-semibold text-primary">{{ f.field_label }}</td>
                                 <td><code>{{ f.field_key }}</code></td>
                                 <td>
@@ -343,7 +344,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('field_placeholder').value = '';
             document.getElementById('field_depends_field').value = '';
             document.getElementById('field_depends_value').value = '';
-            document.getElementById('field_sort_order').value = '1';
+            document.getElementById('field_sort_order').value = this.dataset.nextOrder || '1';
             fieldModal.show();
         });
     });
