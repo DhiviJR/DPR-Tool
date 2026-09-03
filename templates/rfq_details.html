@@ -3874,6 +3874,8 @@ let activeParamRow = null;
 
 function getParamCategoryFromType(prodType) {
     const pt = (prodType || '').toUpperCase().trim();
+    if (pt.includes('WEAR CHECK RING') || pt === 'WEAR CHECK RING' || pt === 'TPR') return 'TPR';
+    if (pt.includes('WEAR CHECK PLUG') || pt === 'WEAR CHECK PLUG') return 'TPG';
     if (pt.includes('TRG') || pt.includes('THREAD RING') || pt.includes('PRG') || pt.includes('PLAIN RING')) return 'TRG';
     if (pt.includes('TPG') || pt.includes('THREAD PLUG') || pt.includes('PPG') || pt.includes('PLAIN PLUG') || pt.includes('PIN')) return 'TPG';
     if (pt.includes('ARG') || pt === 'SARG') return 'ARG';
@@ -3917,7 +3919,7 @@ function isProductSpecComplete(row) {
             }
         } else {
             if (!hasVal("Size") || !hasVal("Material") || !hasVal("Engraving details") || !hasVal("Remarks")) return false;
-            if (category !== 'TRG' && category !== 'TPG') {
+            if (category !== 'TRG' && category !== 'TPR' && category !== 'TPG') {
                 if ((!hasVal("Measuring land") && !hasVal("Measuring load")) || !hasVal("Jet from face") || !hasVal("No. of jets") || !hasVal("Module") || !hasVal("Gauge Type")) return false;
                 if (category === 'ARG') {
                     if (!hasVal("Type of OD")) return false;
@@ -3975,6 +3977,7 @@ function openProductParamsModal(row) {
     
     const categoryTitles = {
         'TRG': 'Thread Ring Gauge',
+        'TPR': 'TPR',
         'TPG': 'Thread Plug Gauge',
         'PRG': 'Plain Ring Gauge',
         'PPG': 'Plain Plug Gauge',
@@ -4042,7 +4045,7 @@ function openProductParamsModal(row) {
     } else {
         unitAirFields.forEach(el => el.classList.add('d-none'));
         document.getElementById('grp_unit_additional_features')?.classList.add('d-none');
-        if (category === 'TRG' || category === 'TPG') {
+        if (category === 'TRG' || category === 'TPR' || category === 'TPG') {
             apgArgFields.forEach(el => el.classList.add('d-none'));
             grpId?.classList.add('d-none');
             grpOd?.classList.add('d-none');
@@ -4103,7 +4106,7 @@ function openProductParamsModal(row) {
                     if (data["Size"]) document.getElementById('param_size').value = data["Size"];
                     if (data["Material"]) document.getElementById('param_material').value = data["Material"];
 
-                    if (category !== 'TRG' && category !== 'TPG') {
+                    if (category !== 'TRG' && category !== 'TPR' && category !== 'TPG') {
                         if (data["Measuring land"]) document.getElementById('param_measuring_load').value = data["Measuring land"];
                         else if (data["Measuring load"]) document.getElementById('param_measuring_load').value = data["Measuring load"];
                         if (data["Type of ID"]) document.getElementById('param_type_of_id').value = data["Type of ID"];
@@ -4270,7 +4273,7 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
         specs["Size"] = document.getElementById('param_size').value.trim();
         specs["Material"] = document.getElementById('param_material').value;
 
-        if (category !== 'TRG' && category !== 'TPG') {
+        if (category !== 'TRG' && category !== 'TPR' && category !== 'TPG') {
             specs["Measuring land"] = document.getElementById('param_measuring_load').value.trim();
 
             if (category === 'ARG') {

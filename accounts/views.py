@@ -169,6 +169,9 @@ def _get_hsn_code(product):
         'strg': '90173029',
         'ppg': '90173021',
         'prg': '90173022',
+        'wear check plug': '90173021',
+        'wear check ring': '90173022',
+        'tpr': '90173022',
         'sppg': '90173029',
         'sprg': '90173029',
     }
@@ -765,7 +768,7 @@ def _get_default_rfq_quotation_terms(rfq, products):
             has_carbide = True
         elif pt in ('apg steel', 'arg steel', 'apg', 'arg') or 'steel' in pt or 'apg' in pt or 'arg' in pt:
             has_steel = True
-        elif any(x in pt for x in ('tpg', 'trg', 'ppg', 'prg', 'spares')):
+        elif any(x in pt for x in ('tpg', 'trg', 'tpr', 'ppg', 'prg', 'spares', 'wear check ring', 'wear check plug')):
             has_tpg_spares = True
         elif any(x in pt for x in ('amc', 'service')):
             has_amc_service = True

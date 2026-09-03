@@ -23,6 +23,8 @@ class CustomerProduct(models.Model):
         ('TRG', 'TRG'),
         ('PPG', 'PPG'),
         ('PRG', 'PRG'),
+        ('Wear Check Plug', 'Wear Check Plug'),
+        ('Wear Check Ring', 'Wear Check Ring'),
     )
     STATUS_CHOICES = (
         ('delivered', 'Delivered'),

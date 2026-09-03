@@ -378,6 +378,8 @@
                                     <option value="PRG" {% if p.product_type == 'PRG' %}selected{% endif %}>PRG</option>
                                     <option value="SPPG" {% if p.product_type == 'SPPG' %}selected{% endif %}>SPPG</option>
                                     <option value="SPRG" {% if p.product_type == 'SPRG' %}selected{% endif %}>SPRG</option>
+                                    <option value="Wear Check Plug" {% if p.product_type == 'Wear Check Plug' %}selected{% endif %}>Wear Check Plug</option>
+                                    <option value="Wear Check Ring" {% if p.product_type == 'Wear Check Ring' %}selected{% endif %}>Wear Check Ring</option>
                                 </select>
                             </td>
                             <td>
@@ -460,6 +462,8 @@
                                     <option value="PRG">PRG</option>
                                     <option value="SPPG">SPPG</option>
                                     <option value="SPRG">SPRG</option>
+                                    <option value="Wear Check Plug">Wear Check Plug</option>
+                                    <option value="Wear Check Ring">Wear Check Ring</option>
                                 </select>
                             </td>
                             <td>
@@ -604,7 +608,8 @@ if (poInputEl) {
 const productTypesList = [
     "APG", "ARG",
     "Multi-Gauge", "unit Std Air", "unit SPC Air", "unit Std lvdt", "unit SPC lvdt",
-    "AMC", "Service", "Spares", "TPG", "TRG", "STPG", "STRG", "PPG", "PRG", "SPPG", "SPRG"
+    "AMC", "Service", "Spares", "TPG", "TRG", "STPG", "STRG", "PPG", "PRG", "SPPG", "SPRG",
+    "Wear Check Plug", "Wear Check Ring"
 ];
 
 function generateProductRow(index, p = {}) {
