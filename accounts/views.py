@@ -4346,9 +4346,14 @@ def rfq_details(request):
                         quotation_product_ids_to_mark,
                         email_sent=False
                     )
-                    quotation_terms = [t.strip() for t in request.POST.getlist('quotation_terms[]') if t.strip()] or [t.strip() for t in request.POST.getlist('quotation_terms') if t.strip()]
+                    quotation_terms = (
+                        [t.strip() for t in request.POST.getlist('quotation_terms[]') if t.strip()] or
+                        [t.strip() for t in request.POST.getlist('quotation_terms') if t.strip()] or
+                        [t.strip() for t in request.POST.getlist('custom_terms[]') if t.strip()] or
+                        [t.strip() for t in request.POST.getlist('custom_terms') if t.strip()]
+                    )
                     if not quotation_terms:
-                        single_terms = request.POST.get('quotation_terms', '').strip()
+                        single_terms = request.POST.get('quotation_terms', '').strip() or request.POST.get('custom_terms', '').strip()
                         if single_terms:
                             quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
 

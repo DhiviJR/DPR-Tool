@@ -232,6 +232,8 @@ window.escapeHtml = function(value) {
         const form = e.target;
         if (form.target === '_blank') return;
         if (e.defaultPrevented) return;
+        if (form.dataset && (form.dataset.noLoader === 'true' || form.dataset.skipLoader === 'true')) return;
+        if (form.id === 'prepareQuotationForm') return;
         if (form.checkValidity && !form.checkValidity()) return;
 
         showLoading();
