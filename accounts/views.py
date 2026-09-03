@@ -602,6 +602,11 @@ def _determine_quotation_number_for_preview(rfq, products):
         return latest.quotation_number if latest else _get_mes_quote_no(rfq)
 
     product_ids = [p.id for p in products if hasattr(p, 'id') and p.id]
+    if product_ids:
+        matching_quotation = _find_latest_matching_quotation(rfq, product_ids, email_sent=False)
+        if matching_quotation:
+            return matching_quotation.quotation_number
+
     overlapping_quotation = _find_latest_overlapping_quotation(rfq, product_ids) if product_ids else None
 
     if overlapping_quotation:
@@ -1100,17 +1105,16 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
                 custom_terms = p_terms
                 break
 
-if custom_terms and isinstance(custom_terms, (list, tuple)) and len(custom_terms) > 0:
-    terms = [str(t).strip() for t in custom_terms if str(t).strip()]
-elif custom_terms and isinstance(custom_terms, str) and custom_terms.strip():
-    terms = [line.strip() for line in custom_terms.splitlines() if line.strip()]
-
+    if custom_terms and isinstance(custom_terms, (list, tuple)) and len(custom_terms) > 0:
+        terms = [str(t).strip() for t in custom_terms if str(t).strip()]
+    elif custom_terms and isinstance(custom_terms, str) and custom_terms.strip():
+        terms = [line.strip() for line in custom_terms.splitlines() if line.strip()]
     else:
         terms = _get_default_rfq_quotation_terms(rfq, products)
 
-for index, term in enumerate(terms, start=1):
-    clean_term = re.sub(r'^\d+[\.\)]\s*', '', term).strip()
-    story.append(Paragraph(pdf_text(f'{index}. {clean_term}'), small))
+    for index, term in enumerate(terms, start=1):
+        clean_term = re.sub(r'^\d+[\.\)]\s*', '', term).strip()
+        story.append(Paragraph(pdf_text(f'{index}. {clean_term}'), small))
 
 
     doc.build(story, canvasmaker=NumberedCanvas)
@@ -4363,7 +4367,7 @@ def rfq_details(request):
                             quotation_record.products_snapshot = _serialize_quotation_products(quotation_products, custom_terms=quotation_terms)
                             quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
                     quote_no = quotation_record.quotation_number
-pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no, custom_terms=quotation_terms)
+                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no, custom_terms=quotation_terms)
 
                     filename = f"{quote_no.replace('/', '_')}.pdf"
                     attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
@@ -4511,6 +4515,7 @@ pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no
     rfq_payloads = []
     for rfq in rfqs_to_display:
         row_class = rfq.row_class
+        latest_quotation = rfq.quotations.order_by('-created_at', '-id').first()
         rfq_payloads.append({
             'id': rfq.id,
             'rfq_no': rfq.rfq_no,
@@ -4631,15 +4636,15 @@ def rfq_quotation_download(request, rfq_id):
                 products = list(rfq.products.all())
             quote_no = _determine_quotation_number_for_preview(rfq, products)
 
-quotation_terms = [t.strip() for t in request.GET.getlist('quotation_terms[]') if t.strip()] or [t.strip() for t in request.GET.getlist('quotation_terms') if t.strip()]
-if not quotation_terms:
-    single_terms = request.GET.get('quotation_terms', '').strip()
-    if single_terms:
-        quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
-if not quotation_terms:
-    quotation_terms = request.GET.getlist('custom_terms') or request.POST.getlist('custom_terms')
+        quotation_terms = [t.strip() for t in request.GET.getlist('quotation_terms[]') if t.strip()] or [t.strip() for t in request.GET.getlist('quotation_terms') if t.strip()]
+        if not quotation_terms:
+            single_terms = request.GET.get('quotation_terms', '').strip()
+            if single_terms:
+                quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
+        if not quotation_terms:
+            quotation_terms = request.GET.getlist('custom_terms') or request.POST.getlist('custom_terms')
 
-pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
+        pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
 
         filename = f"{quote_no.replace('/', '_')}.pdf"
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
@@ -5330,7 +5335,7 @@ def get_customer_quotations(request):
                     'rfq_no': rfq.rfq_no,
                     'quotation_number': quotation.quotation_number,
                     'revision_number': quotation.revision_number,
-                    'preview_url': f'/rfq/{rfq.id}/quotation/download/?quotation_id={quotation.id}' if not rfq.attachment else rfq.attachment.url,
+                    'preview_url': f'/rfq/{rfq.id}/quotation/download/?quotation_id={quotation.id}',
                     'status_label': 'Prepared - Email not sent' if prepared_not_emailed else 'Email sent',
                     'prepared_not_emailed': prepared_not_emailed,
                     'products': products_list,
@@ -5363,7 +5368,7 @@ def get_customer_quotations(request):
             'rfq_no': rfq.rfq_no,
             'quotation_number': quote_no,
             'revision_number': 0,
-            'preview_url': f'/rfq/{rfq.id}/quotation/download/' if not rfq.attachment else rfq.attachment.url,
+            'preview_url': f'/rfq/{rfq.id}/quotation/download/',
             'status_label': 'Prepared - Email not sent' if has_prepared_not_emailed else 'Email sent',
             'prepared_not_emailed': has_prepared_not_emailed,
             'products': products_list,
@@ -7430,7 +7435,7 @@ def send_rfq_email_reply(request, rfq_id):
                 delivery_weeks=delivery_weeks,
                 installation_charge=installation_charge
             )
-            quote_no = _get_mes_quote_no(rfq)
+            quote_no = _determine_quotation_number_for_preview(rfq, products)
         else:
             latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
             if latest_quotation and latest_quotation.products_snapshot:
@@ -7449,7 +7454,7 @@ def send_rfq_email_reply(request, rfq_id):
                 quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
 
         if products:
-pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
+            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
 
             filename = f"{quote_no.replace('/', '_')}.pdf"
             attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
