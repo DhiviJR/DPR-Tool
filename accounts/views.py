@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from .models import CustomUser
@@ -12,7 +12,7 @@ from django.core.validators import validate_email
 from customers.models import Customer
 from suppliers.models import Supplier
 from dpr.models import DPR
-from products.models import CustomerProduct, SupplierProduct
+from products.models import CustomerProduct, SupplierProduct, ProductType, ProductTypeSpecField
 from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation, RFQEmailMessage
 from .email_services import send_threaded_rfq_email, sync_rfq_inbox, check_customer_email_match
 from django.http import HttpResponse, JsonResponse, Http404
@@ -1861,6 +1861,180 @@ def dpr_products(request, dpr_id):
         for p in products
     ]
     return JsonResponse({'dpr_serial': dpr.serial_number, 'products': data})
+
+
+@login_required
+def get_product_type_specs_api(request, code):
+    code_clean = (code or '').strip()
+    try:
+        if code_clean.isdigit():
+            pt = ProductType.objects.get(pk=int(code_clean))
+        else:
+            pt = ProductType.objects.get(code__iexact=code_clean)
+    except ProductType.DoesNotExist:
+        pt = ProductType.objects.filter(name__icontains=code_clean).first()
+        if not pt:
+            return JsonResponse({'status': 'error', 'message': f'Product type "{code}" not found.'}, status=404)
+
+    fields = pt.spec_fields.all().order_by('sort_order', 'id')
+    field_list = []
+    for f in fields:
+        field_list.append({
+            'id': f.id,
+            'label': f.field_label,
+            'key': f.field_key,
+            'type': f.field_type,
+            'options': [opt.strip() for opt in (f.select_options or '').split(',') if opt.strip()],
+            'options_str': f.select_options or '',
+            'is_required': f.is_required,
+            'placeholder': f.placeholder or '',
+            'depends_on_field': f.depends_on_field or '',
+            'depends_on_value': f.depends_on_value or '',
+            'sort_order': f.sort_order,
+        })
+
+    return JsonResponse({
+        'status': 'ok',
+        'id': pt.id,
+        'name': pt.name,
+        'code': pt.code,
+        'category': pt.category or '',
+        'hsn_code': pt.hsn_code,
+        'default_delivery_weeks': pt.default_delivery_weeks,
+        'fields': field_list,
+    })
+
+
+@login_required
+def get_all_product_types_api(request):
+    pts = ProductType.objects.filter(is_active=True).order_by('name')
+    data = []
+    for pt in pts:
+        data.append({
+            'id': pt.id,
+            'name': pt.name,
+            'code': pt.code,
+            'category': pt.category or '',
+            'hsn_code': pt.hsn_code,
+            'default_delivery_weeks': pt.default_delivery_weeks,
+        })
+    return JsonResponse({'status': 'ok', 'product_types': data})
+
+
+@role_required('ADMIN', 'PURCHASE')
+def product_type_master(request):
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'save_product_type':
+            pt_id = request.POST.get('pt_id')
+            name = request.POST.get('name', '').strip()
+            code = request.POST.get('code', '').strip()
+            category = request.POST.get('category', '').strip()
+            hsn_code = request.POST.get('hsn_code', '90173029').strip()
+            delivery_weeks_raw = request.POST.get('default_delivery_weeks', '3').strip()
+
+            try:
+                delivery_weeks = int(delivery_weeks_raw)
+            except ValueError:
+                delivery_weeks = 3
+
+            if not name or not code:
+                messages.error(request, 'Product Type Name and Code are required.')
+                return redirect('product_type_master')
+
+            if pt_id and pt_id.isdigit():
+                pt = get_object_or_404(ProductType, pk=int(pt_id))
+                pt.name = name
+                pt.code = code
+                pt.category = category or None
+                pt.hsn_code = hsn_code
+                pt.default_delivery_weeks = delivery_weeks
+                pt.save()
+                messages.success(request, f'Product type "{pt.name}" updated successfully.')
+            else:
+                if ProductType.objects.filter(code__iexact=code).exists():
+                    messages.error(request, f'Product type code "{code}" already exists.')
+                    return redirect('product_type_master')
+                pt = ProductType.objects.create(
+                    name=name,
+                    code=code,
+                    category=category or None,
+                    hsn_code=hsn_code,
+                    default_delivery_weeks=delivery_weeks
+                )
+                messages.success(request, f'Product type "{pt.name}" created successfully.')
+            return redirect('product_type_master')
+
+        elif action == 'save_spec_field':
+            pt_id = request.POST.get('pt_id')
+            field_id = request.POST.get('field_id')
+            field_label = request.POST.get('field_label', '').strip()
+            field_key = request.POST.get('field_key', '').strip() or field_label
+            field_type = request.POST.get('field_type', 'text').strip()
+            select_options = request.POST.get('select_options', '').strip()
+            is_required = request.POST.get('is_required') == '1'
+            placeholder = request.POST.get('placeholder', '').strip()
+            depends_on_field = request.POST.get('depends_on_field', '').strip()
+            depends_on_value = request.POST.get('depends_on_value', '').strip()
+            sort_order_raw = request.POST.get('sort_order', '0').strip()
+
+            try:
+                sort_order = int(sort_order_raw)
+            except ValueError:
+                sort_order = 0
+
+            pt = get_object_or_404(ProductType, pk=int(pt_id))
+
+            if field_id and field_id.isdigit():
+                f = get_object_or_404(ProductTypeSpecField, pk=int(field_id), product_type=pt)
+                f.field_label = field_label
+                f.field_key = field_key
+                f.field_type = field_type
+                f.select_options = select_options or None
+                f.is_required = is_required
+                f.placeholder = placeholder or None
+                f.depends_on_field = depends_on_field or None
+                f.depends_on_value = depends_on_value or None
+                f.sort_order = sort_order
+                f.save()
+                messages.success(request, f'Field "{f.field_label}" updated for {pt.code}.')
+            else:
+                ProductTypeSpecField.objects.create(
+                    product_type=pt,
+                    field_label=field_label,
+                    field_key=field_key,
+                    field_type=field_type,
+                    select_options=select_options or None,
+                    is_required=is_required,
+                    placeholder=placeholder or None,
+                    depends_on_field=depends_on_field or None,
+                    depends_on_value=depends_on_value or None,
+                    sort_order=sort_order
+                )
+                messages.success(request, f'Field "{field_label}" added to {pt.code}.')
+            return redirect('product_type_master')
+
+        elif action == 'delete_spec_field':
+            field_id = request.POST.get('field_id')
+            if field_id and field_id.isdigit():
+                f = get_object_or_404(ProductTypeSpecField, pk=int(field_id))
+                pt_name = f.product_type.code
+                label = f.field_label
+                f.delete()
+                messages.success(request, f'Field "{label}" deleted from {pt_name}.')
+            return redirect('product_type_master')
+
+        elif action == 'toggle_status':
+            pt_id = request.POST.get('pt_id')
+            if pt_id and pt_id.isdigit():
+                pt = get_object_or_404(ProductType, pk=int(pt_id))
+                pt.is_active = not pt.is_active
+                pt.save()
+                messages.success(request, f'Status for "{pt.name}" changed to {"Active" if pt.is_active else "Inactive"}.')
+            return redirect('product_type_master')
+
+    product_types = ProductType.objects.prefetch_related('spec_fields').order_by('name')
+    return render(request, 'product_type_master.html', {'product_types': product_types})
 
 
 @role_required('ADMIN', 'PURCHASE')

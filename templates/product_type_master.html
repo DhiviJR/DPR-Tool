@@ -1,0 +1,370 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Product Type Master & Parameter Configurator | DPR System{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h1 class="dpr-page-title mb-1">Product Type Master & Specs Configurator</h1>
+        <p class="dpr-page-subtitle mb-0">Manage product types, billing HSN codes, delivery lead times, and dynamic parameter fields</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary dpr-back-btn btn-sm" id="openAddProductTypeBtn">
+            <i class="bi bi-plus-lg me-1"></i>Add Product Type
+        </button>
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary dpr-back-btn btn-sm">Dashboard</a>
+    </div>
+</div>
+
+{% if messages %}
+<div class="mb-3">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Product Types Accordion / Table -->
+<div class="row g-4">
+    {% for pt in product_types %}
+    <div class="col-12">
+        <div class="dpr-card border-0 shadow-sm">
+            <div class="card-header bg-light d-flex flex-wrap align-items-center justify-content-between py-3 px-4 gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary fs-6">{{ pt.code }}</span>
+                    <h5 class="mb-0 fw-bold text-dark">{{ pt.name }}</h5>
+                    {% if pt.category %}
+                    <span class="badge bg-secondary-subtle text-secondary border ms-2">{{ pt.category }}</span>
+                    {% endif %}
+                    {% if not pt.is_active %}
+                    <span class="badge bg-danger-subtle text-danger border ms-1">Inactive</span>
+                    {% endif %}
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted me-2">HSN: <strong>{{ pt.hsn_code }}</strong> &bull; Delivery: <strong>{{ pt.default_delivery_weeks }} Weeks</strong></span>
+                    
+                    <button type="button" class="btn btn-sm btn-outline-primary edit-pt-btn"
+                            data-pt-id="{{ pt.id }}"
+                            data-pt-name="{{ pt.name }}"
+                            data-pt-code="{{ pt.code }}"
+                            data-pt-category="{{ pt.category|default:'' }}"
+                            data-pt-hsn="{{ pt.hsn_code }}"
+                            data-pt-weeks="{{ pt.default_delivery_weeks }}">
+                        <i class="bi bi-pencil me-1"></i>Edit Type
+                    </button>
+                    
+                    <button type="button" class="btn btn-sm btn-outline-success add-field-btn"
+                            data-pt-id="{{ pt.id }}"
+                            data-pt-code="{{ pt.code }}"
+                            data-pt-name="{{ pt.name }}">
+                        <i class="bi bi-plus-circle me-1"></i>Add Spec Field
+                    </button>
+
+                    <form method="POST" action="" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="toggle_status">
+                        <input type="hidden" name="pt_id" value="{{ pt.id }}">
+                        <button type="submit" class="btn btn-sm {% if pt.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                            {% if pt.is_active %}Disable{% else %}Enable{% endif %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if pt.spec_fields.all %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr class="small text-muted">
+                                <th style="width: 60px;" class="text-center">Order</th>
+                                <th>Field Label</th>
+                                <th>Field Key</th>
+                                <th>Input Type</th>
+                                <th>Dropdown Choices</th>
+                                <th class="text-center">Mandatory</th>
+                                <th>Dependency</th>
+                                <th style="width: 110px;" class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for f in pt.spec_fields.all %}
+                            <tr>
+                                <td class="text-center fw-bold small">{{ f.sort_order }}</td>
+                                <td class="fw-semibold text-primary">{{ f.field_label }}</td>
+                                <td><code>{{ f.field_key }}</code></td>
+                                <td>
+                                    <span class="badge bg-info-subtle text-dark border">{{ f.get_field_type_display }}</span>
+                                </td>
+                                <td class="small text-muted">
+                                    {% if f.select_options %}
+                                        {{ f.select_options }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if f.is_required %}
+                                        <span class="badge bg-danger text-white">Required</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-muted border">Optional</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small">
+                                    {% if f.depends_on_field %}
+                                        <span class="text-primary fw-semibold">If {{ f.depends_on_field }} = "{{ f.depends_on_value }}"</span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-xs btn-outline-primary me-1 edit-field-btn"
+                                            data-pt-id="{{ pt.id }}"
+                                            data-field-id="{{ f.id }}"
+                                            data-field-label="{{ f.field_label }}"
+                                            data-field-key="{{ f.field_key }}"
+                                            data-field-type="{{ f.field_type }}"
+                                            data-select-options="{{ f.select_options|default:'' }}"
+                                            data-is-required="{{ f.is_required|yesno:'1,0' }}"
+                                            data-placeholder="{{ f.placeholder|default:'' }}"
+                                            data-depends-field="{{ f.depends_on_field|default:'' }}"
+                                            data-depends-value="{{ f.depends_on_value|default:'' }}"
+                                            data-sort-order="{{ f.sort_order }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form method="POST" action="" class="d-inline" onsubmit="return confirm('Delete parameter field {{ f.field_label }}?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_spec_field">
+                                        <input type="hidden" name="field_id" value="{{ f.id }}">
+                                        <button type="submit" class="btn btn-xs btn-outline-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted small">
+                    <i class="bi bi-info-circle fs-5 d-block mb-1 text-primary"></i>
+                    No specification parameter fields configured for {{ pt.name }}. Click <strong>Add Spec Field</strong> above to define custom parameters.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12 text-center py-5 text-muted">
+        <i class="bi bi-box-seam fs-1 d-block mb-2 text-secondary"></i>
+        No Product Types configured yet. Click <strong>Add Product Type</strong> to get started.
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal: Save Product Type -->
+<div class="modal fade" id="productTypeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="productTypeModalTitle">Add Product Type</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_product_type">
+                <input type="hidden" name="pt_id" id="pt_id" value="">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Product Type Name *</label>
+                        <input type="text" name="name" id="pt_name" class="form-control" placeholder="e.g. Air Plug Gauge" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Product Type Code *</label>
+                        <input type="text" name="code" id="pt_code" class="form-control text-uppercase" placeholder="e.g. APG" required>
+                        <div class="form-text">Unique code identifier used across RFQ and POs.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Category</label>
+                        <input type="text" name="category" id="pt_category" class="form-control" placeholder="e.g. Gauge, Unit, Service">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Default HSN Code</label>
+                            <input type="text" name="hsn_code" id="pt_hsn" class="form-control" value="90173029" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Delivery (Weeks)</label>
+                            <input type="number" min="1" name="default_delivery_weeks" id="pt_weeks" class="form-control" value="3" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Save Product Type</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Save Spec Field -->
+<div class="modal fade" id="specFieldModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="specFieldModalTitle">Add Specification Parameter Field</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_spec_field">
+                <input type="hidden" name="pt_id" id="field_pt_id" value="">
+                <input type="hidden" name="field_id" id="field_id" value="">
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 mb-3 small">
+                        Configuring parameter field for Product Type: <strong id="fieldModalPtCode">APG</strong>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Field Label *</label>
+                            <input type="text" name="field_label" id="field_label" class="form-control" placeholder="e.g. Material" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Field Key (JSON property name)</label>
+                            <input type="text" name="field_key" id="field_key" class="form-control" placeholder="e.g. Material (defaults to label)">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Input Type *</label>
+                            <select name="field_type" id="field_type" class="form-select" required>
+                                <option value="text">Text Input</option>
+                                <option value="select">Dropdown Select</option>
+                                <option value="number">Number Input</option>
+                                <option value="textarea">Textarea / Notes</option>
+                                <option value="boolean">Yes / No Choice</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6" id="grp_select_options">
+                            <label class="form-label fw-semibold">Dropdown Options</label>
+                            <input type="text" name="select_options" id="select_options" class="form-control" placeholder="Comma-separated e.g. Steel, Carbide, D2">
+                            <div class="form-text">Separate choices with commas.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Placeholder Text</label>
+                            <input type="text" name="placeholder" id="field_placeholder" class="form-control" placeholder="e.g. 10.00 mm">
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Display Order</label>
+                            <input type="number" name="sort_order" id="field_sort_order" class="form-control" value="1">
+                        </div>
+
+                        <div class="col-md-3 d-flex align-items-end">
+                            <div class="form-check mb-2">
+                                <input type="checkbox" name="is_required" value="1" id="field_is_required" class="form-check-input">
+                                <label class="form-check-label fw-semibold" for="field_is_required">Mandatory Field</label>
+                            </div>
+                        </div>
+
+                        <div class="col-12 border-top pt-3">
+                            <h6 class="fw-bold mb-2 small text-muted">Conditional Visibility (Optional)</h6>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Depends on Field Key</label>
+                                    <input type="text" name="depends_on_field" id="field_depends_field" class="form-control form-control-sm" placeholder="e.g. Gauge Type">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Trigger Value</label>
+                                    <input type="text" name="depends_on_value" id="field_depends_value" class="form-control form-control-sm" placeholder="e.g. Bench mount">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check2 me-1"></i>Save Field</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ptModal = new bootstrap.Modal(document.getElementById('productTypeModal'));
+    const fieldModal = new bootstrap.Modal(document.getElementById('specFieldModal'));
+
+    document.getElementById('openAddProductTypeBtn')?.addEventListener('click', function() {
+        document.getElementById('productTypeModalTitle').textContent = 'Add Product Type';
+        document.getElementById('pt_id').value = '';
+        document.getElementById('pt_name').value = '';
+        document.getElementById('pt_code').value = '';
+        document.getElementById('pt_category').value = '';
+        document.getElementById('pt_hsn').value = '90173029';
+        document.getElementById('pt_weeks').value = '3';
+        ptModal.show();
+    });
+
+    document.querySelectorAll('.edit-pt-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.getElementById('productTypeModalTitle').textContent = 'Edit Product Type';
+            document.getElementById('pt_id').value = this.dataset.ptId;
+            document.getElementById('pt_name').value = this.dataset.ptName;
+            document.getElementById('pt_code').value = this.dataset.ptCode;
+            document.getElementById('pt_category').value = this.dataset.ptCategory;
+            document.getElementById('pt_hsn').value = this.dataset.ptHsn;
+            document.getElementById('pt_weeks').value = this.dataset.ptWeeks;
+            ptModal.show();
+        });
+    });
+
+    document.querySelectorAll('.add-field-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.getElementById('specFieldModalTitle').textContent = `Add Field to ${this.dataset.ptCode}`;
+            document.getElementById('field_pt_id').value = this.dataset.ptId;
+            document.getElementById('field_id').value = '';
+            document.getElementById('fieldModalPtCode').textContent = `${this.dataset.ptName} (${this.dataset.ptCode})`;
+            document.getElementById('field_label').value = '';
+            document.getElementById('field_key').value = '';
+            document.getElementById('field_type').value = 'text';
+            document.getElementById('select_options').value = '';
+            document.getElementById('field_is_required').checked = false;
+            document.getElementById('field_placeholder').value = '';
+            document.getElementById('field_depends_field').value = '';
+            document.getElementById('field_depends_value').value = '';
+            document.getElementById('field_sort_order').value = '1';
+            fieldModal.show();
+        });
+    });
+
+    document.querySelectorAll('.edit-field-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.getElementById('specFieldModalTitle').textContent = `Edit Field (${this.dataset.fieldLabel})`;
+            document.getElementById('field_pt_id').value = this.dataset.ptId;
+            document.getElementById('field_id').value = this.dataset.fieldId;
+            document.getElementById('field_label').value = this.dataset.fieldLabel;
+            document.getElementById('field_key').value = this.dataset.fieldKey;
+            document.getElementById('field_type').value = this.dataset.fieldType;
+            document.getElementById('select_options').value = this.dataset.selectOptions;
+            document.getElementById('field_is_required').checked = (this.dataset.isRequired === '1');
+            document.getElementById('field_placeholder').value = this.dataset.placeholder;
+            document.getElementById('field_depends_field').value = this.dataset.dependsField;
+            document.getElementById('field_depends_value').value = this.dataset.dependsValue;
+            document.getElementById('field_sort_order').value = this.dataset.sortOrder;
+            fieldModal.show();
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -3,6 +3,48 @@ from dpr.models import DPR
 from suppliers.models import Supplier
 
 
+class ProductType(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=50, unique=True)
+    category = models.CharField(max_length=50, blank=True, null=True)
+    hsn_code = models.CharField(max_length=20, default="90173029")
+    default_delivery_weeks = models.IntegerField(default=3)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class ProductTypeSpecField(models.Model):
+    FIELD_TYPE_CHOICES = (
+        ('text', 'Text Input'),
+        ('select', 'Dropdown Select'),
+        ('number', 'Number Input'),
+        ('textarea', 'Textarea / Notes'),
+        ('boolean', 'Yes / No Choice'),
+    )
+    product_type = models.ForeignKey(ProductType, on_delete=models.CASCADE, related_name='spec_fields')
+    field_label = models.CharField(max_length=100)
+    field_key = models.CharField(max_length=100)
+    field_type = models.CharField(max_length=20, choices=FIELD_TYPE_CHOICES, default='text')
+    select_options = models.TextField(blank=True, null=True, help_text="Comma-separated options for dropdown, e.g. Steel, Carbide, D2")
+    is_required = models.BooleanField(default=False)
+    placeholder = models.CharField(max_length=150, blank=True, null=True)
+    depends_on_field = models.CharField(max_length=100, blank=True, null=True, help_text="Field key this depends on")
+    depends_on_value = models.CharField(max_length=100, blank=True, null=True, help_text="Value that triggers visibility")
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+
+    def __str__(self):
+        return f"{self.product_type.code} - {self.field_label}"
+
+
 class CustomerProduct(models.Model):
     PRODUCT_TYPE_CHOICES = (
         ('APG', 'APG'),
