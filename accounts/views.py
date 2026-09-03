@@ -593,6 +593,26 @@ def _next_revision_number_for_quote_base(rfq, base_quote_no):
     return latest_revision + 1
 
 
+def _determine_quotation_number_for_preview(rfq, products):
+    if not products:
+        latest = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at', '-id').first()
+        return latest.quotation_number if latest else _get_mes_quote_no(rfq)
+
+    product_ids = [p.id for p in products if hasattr(p, 'id') and p.id]
+    overlapping_quotation = _find_latest_overlapping_quotation(rfq, product_ids) if product_ids else None
+
+    if overlapping_quotation:
+        base_quote_no = _quote_number_base(overlapping_quotation.quotation_number)
+        revision_number = _next_revision_number_for_quote_base(rfq, base_quote_no)
+        return _format_mes_quote_no(rfq, revision_number, base_quote_no=base_quote_no)
+
+    latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at', '-id').first()
+    if latest_quotation:
+        return latest_quotation.quotation_number
+
+    return _get_mes_quote_no(rfq)
+
+
 def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False):
     overlapping_quotation = _find_latest_overlapping_quotation(rfq, product_ids)
 
@@ -714,7 +734,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
 
     return quotation_products, [product.id for product in products]
 
-def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
+def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
     from xml.sax.saxutils import escape as xml_escape
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -1019,7 +1039,10 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
         elif any(x in pt for x in ('amc', 'service')):
             has_amc_service = True
 
-    if has_sapg:
+    if delivery_weeks and str(delivery_weeks).strip():
+        weeks_val = str(delivery_weeks).strip()
+        delivery_str = f'Delivery : {weeks_val} Weeks'
+    elif has_sapg:
         weeks_val = str(delivery_weeks or '3').strip()
         delivery_str = f'Delivery : {weeks_val} Weeks'
     elif has_carbide:
@@ -1047,28 +1070,37 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None):
             installation_charge_val = str(val).strip()
             break
 
-    if has_air_or_multi and installation_charge_val:
+    if installation_charge_val and installation_charge_val not in ('0', '0.00', 'None', ''):
+        installation_str = f'Installation Charge : Rs. {installation_charge_val}'
+    elif has_air_or_multi and installation_charge_val:
         installation_str = f'Installation Charge : Rs. {installation_charge_val}'
     else:
         installation_str = 'Installation Charge : Nil'
 
-    terms = [
-        delivery_str,
-        f"Payment : {customer.payment_terms} Week{'s' if str(customer.payment_terms) != '1' else ''}" if customer.payment_terms else 'Payment : 30 Days Against Invoice',
-        'Goods & Service Tax(GST) : 18% Extra as Applicable',
-        'Dispatch Mode : NIL' if has_amc_service else 'Dispatch Mode : By Courier',
-        'Packing & Forwarding : 2%',
-        installation_str,
-       'Discount : Negotiable',
-        f'Quotation Validity : This offer is Valid till {valid_till}',
-        f'Purchase Order : Purchase Order must be send to {settings.DEFAULT_FROM_EMAIL}',
-        'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
-        'Force Majeure: The Company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
-        'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
-        'Jurisdiction: All disputes arising out of or in connection with this Quotation shall be settled by arbitration in Chennai, India. in accordance with the Indian Arbitration & Conciliation Act rules. The decision shall be final and binding on both parties.',
-    ]
+    valid_custom_terms = [str(t).strip() for t in (custom_terms or []) if str(t).strip()]
+    if valid_custom_terms:
+        terms = valid_custom_terms
+    else:
+        terms = [
+            delivery_str,
+            f"Payment : {customer.payment_terms} Week{'s' if str(customer.payment_terms) != '1' else ''}" if customer.payment_terms else 'Payment : 30 Days Against Invoice',
+            'Goods & Service Tax(GST) : 18% Extra as Applicable',
+            'Dispatch Mode : NIL' if has_amc_service else 'Dispatch Mode : By Courier',
+            'Packing & Forwarding : 2%',
+            installation_str,
+            'Discount : Negotiable',
+            f'Quotation Validity : This offer is Valid till {valid_till}',
+            f'Purchase Order : Purchase Order must be send to {settings.DEFAULT_FROM_EMAIL}',
+            'Cancellation: Once Order confirmed, orders cannot be cancelled or altered.',
+            'Force Majeure: The Company is not liable for delay or failure due to natural calamities, strikes, or transport issues.',
+            'Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.',
+            'Jurisdiction: All disputes arising out of or in connection with this Quotation shall be settled by arbitration in Chennai, India. in accordance with the Indian Arbitration & Conciliation Act rules. The decision shall be final and binding on both parties.',
+        ]
+
     for index, term in enumerate(terms, start=1):
-        story.append(Paragraph(f'{index}. {term}', small))
+        # Format leading number if not already present
+        term_text = term if re.match(r'^\d+\.', term) else f'{index}. {term}'
+        story.append(Paragraph(pdf_text(term_text), small))
 
     doc.build(story, canvasmaker=NumberedCanvas)
     buffer.seek(0)
@@ -4231,7 +4263,8 @@ def rfq_details(request):
                             email_sent=False
                         )
                     quote_no = quotation_record.quotation_number
-                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no)
+                    custom_terms = request.POST.getlist('custom_terms')
+                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no, custom_terms=custom_terms)
                     filename = f"{quote_no.replace('/', '_')}.pdf"
                     attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
                 if quotation_attachment:
@@ -4482,7 +4515,7 @@ def rfq_quotation_download(request, rfq_id):
                 delivery_weeks=delivery_weeks,
                 installation_charge=installation_charge
             )
-            quote_no = latest_quotation.quotation_number if latest_quotation else _get_mes_quote_no(rfq)
+            quote_no = _determine_quotation_number_for_preview(rfq, products)
         elif latest_quotation:
             products = _deserialize_quotation_products(latest_quotation.products_snapshot)
             quote_no = latest_quotation.quotation_number
@@ -4490,9 +4523,10 @@ def rfq_quotation_download(request, rfq_id):
             products, _ = _build_selected_quotation_products(rfq, [], [])
             if not products:
                 products = list(rfq.products.all())
-            quote_no = _get_mes_quote_no(rfq)
+            quote_no = _determine_quotation_number_for_preview(rfq, products)
 
-        pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+        custom_terms = request.GET.getlist('custom_terms') or request.POST.getlist('custom_terms')
+        pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=custom_terms)
         filename = f"{quote_no.replace('/', '_')}.pdf"
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
         response['Content-Disposition'] = f'inline; filename="{filename}"'
@@ -4526,7 +4560,6 @@ def rfq_quotation_download(request, rfq_id):
 
     disposition = 'inline' if request.POST.get('preview') == '1' else 'attachment'
     quotation_record = None
-    quote_no = _get_mes_quote_no(rfq)
     if disposition == 'attachment' and quotation_product_ids_to_mark:
         quotation_record = _create_rfq_quotation_record(
             rfq,
@@ -4535,8 +4568,10 @@ def rfq_quotation_download(request, rfq_id):
             email_sent=False
         )
         quote_no = quotation_record.quotation_number
+    else:
+        quote_no = _determine_quotation_number_for_preview(rfq, products)
 
-    pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+    pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=custom_terms)
     filename = f"{quote_no.replace('/', '_')}.pdf"
     response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
     if quotation_record:
@@ -7047,7 +7082,8 @@ def send_rfq_email_reply(request, rfq_id):
                 quote_no = _get_mes_quote_no(rfq)
 
         if products:
-            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+            custom_terms = request.POST.getlist('custom_terms')
+            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=custom_terms)
             filename = f"{quote_no.replace('/', '_')}.pdf"
             attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
     except Exception as e:
@@ -7071,6 +7107,21 @@ def send_rfq_email_reply(request, rfq_id):
             attachments=attachments,
             parent_message_id=parent_message_id or None
         )
+
+        if products:
+            for qp in products:
+                if hasattr(qp, 'id') and qp.id:
+                    RFQProduct.objects.filter(id=qp.id).update(
+                        rate_per_unit=qp.rate_per_unit,
+                        value=qp.value,
+                        quotation_email_sent=True,
+                        quotation_prepared=True
+                    )
+            rfq.email_sent_date = timezone.now()
+            rfq.quotation_prepared = True
+            rfq.quotation_email_sent = True
+            rfq.save(update_fields=['email_sent_date', 'quotation_prepared', 'quotation_email_sent'])
+
         return JsonResponse({
             'status': 'success',
             'message': 'Reply sent successfully!',
