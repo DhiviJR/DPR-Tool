@@ -7,6 +7,10 @@ class CustomerProduct(models.Model):
     PRODUCT_TYPE_CHOICES = (
         ('APG', 'APG'),
         ('ARG', 'ARG'),
+        ('Carbide Air Caliper', 'Carbide Air Caliper'),
+        ('Carbide APG', 'Carbide APG'),
+        ('Carbide ARG', 'Carbide ARG'),
+        ('Master Setting Rings', 'Master Setting Rings'),
         ('Multi-Gauge', 'Multi-Gauge'),
         ('unit Std Air', 'unit Std Air'),
         ('unit SPC Air', 'unit SPC Air'),

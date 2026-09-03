@@ -110,30 +110,66 @@
                         <th class="sortable" data-col="3" data-sort-type="text">PO Number <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="4" data-sort-type="text">Product Name <i class="sort-icon bi bi-arrow-down-up"></i></th>
                         <th class="sortable" data-col="5" data-sort-type="date">PO Date <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="6" data-sort-type="number">Qty Ordered <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="7" data-sort-type="number">Quantity Delivered <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="8" data-sort-type="date">PO Validity <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="9" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable" data-col="10" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
-                        <th class="sortable text-nowrap" data-col="11" data-sort-type="text" style="width: 1%; white-space: nowrap;">Delivery Status <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="6" data-sort-type="number">Ordered Quantity <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="7" data-sort-type="number">Received Quantity <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="8" data-sort-type="number">Customer Ordered Quantity <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="9" data-sort-type="number">Quantity Delivered <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="10" data-sort-type="date">PO Validity <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="11" data-sort-type="number">PO Value <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-col="12" data-sort-type="text">Action <i class="sort-icon bi bi-arrow-down-up"></i></th>
+                        <th class="sortable text-nowrap" data-col="13" data-sort-type="text" style="width: 1%; white-space: nowrap;">Delivery Status <i class="sort-icon bi bi-arrow-down-up"></i></th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for product in products %}
-                    <tr data-product-id="{{ product.id }}"
-                        data-validity-state="{{ product.validity_state }}"
-                        data-filter-state="{{ product.filter_state }}"
-                        class="{{ product.row_class }}">
+                    {% for row in products %}
+                    <tr data-product-id="{{ row.first_product_id }}"
+                        data-validity-state="{{ row.validity_state }}"
+                        data-filter-state="{{ row.filter_state }}"
+                        class="{{ row.row_class }}">
                         <td data-sort-value="{{ forloop.counter }}">{{ forloop.counter }}</td>
-                        <td data-sort-value="{{ product.dpr.serial_number|default:''|lower }}">{{ product.dpr.serial_number }}</td>
-                        <td data-sort-value="{{ product.dpr.customer.customer_name|default:''|lower }}">{{ product.dpr.customer.customer_name }}</td>
-                        <td data-sort-value="{{ product.dpr.po_number|default:''|lower }}">{{ product.dpr.po_number|default:'-' }}</td>
-                        <td data-sort-value="{{ product.display_name|default:''|lower }}">{{ product.display_name }}</td>
-                        <td data-sort-value="{{ product.dpr.po_date|date:'Y-m-d'|default:'' }}">{{ product.dpr.po_date|date:'Y-m-d'|default:'-' }}</td>
-                        <td data-sort-value="{{ product.quantity_ordered }}">{{ product.quantity_ordered }}</td>
-                        <td class="quantity-delivered-cell" data-sort-value="{{ product.quantity_delivered }}">{{ product.quantity_delivered }}</td>
-                        <td data-sort-value="{{ product.dpr.po_validity|date:'Y-m-d'|default:'' }}">{{ product.dpr.po_validity|date:'Y-m-d'|default:'-' }}</td>
-                        <td data-sort-value="{{ product.dpr.po_value|default:0 }}">{{ product.dpr.po_value|default:'-' }}</td>
+                        <td data-sort-value="{{ row.dpr.serial_number|default:''|lower }}">{{ row.dpr.serial_number }}</td>
+                        <td data-sort-value="{{ row.dpr.customer.customer_name|default:''|lower }}">{{ row.dpr.customer.customer_name }}</td>
+                        <td data-sort-value="{{ row.dpr.po_number|default:''|lower }}">{{ row.dpr.po_number|default:'-' }}</td>
+                        <td data-sort-value="{{ row.product_names_display|default:''|lower }}">
+                            <div class="d-flex flex-column gap-2 py-1">
+                                {% for p in row.products %}
+                                <div style="min-height: 24px; display: flex; align-items: center;">
+                                    <span class="fw-semibold text-dark">{{ p.product_name }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td data-sort-value="{{ row.dpr.po_date|date:'Y-m-d'|default:'' }}">{{ row.dpr.po_date|date:'Y-m-d'|default:'-' }}</td>
+                        <td data-sort-value="{{ row.total_supplier_qty_ordered }}">
+                            <div class="d-flex flex-column gap-2 py-1">
+                                {% for p in row.products %}
+                                <div style="min-height: 24px; display: flex; align-items: center; justify-content: center;">{{ p.supplier_qty_ordered }}</div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td data-sort-value="{{ row.total_supplier_qty_received }}">
+                            <div class="d-flex flex-column gap-2 py-1">
+                                {% for p in row.products %}
+                                <div style="min-height: 24px; display: flex; align-items: center; justify-content: center;">{{ p.supplier_qty_received }}</div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td data-sort-value="{{ row.total_customer_qty_ordered }}">
+                            <div class="d-flex flex-column gap-2 py-1">
+                                {% for p in row.products %}
+                                <div style="min-height: 24px; display: flex; align-items: center; justify-content: center;">{{ p.quantity_ordered }}</div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="quantity-delivered-cell" data-sort-value="{{ row.total_customer_qty_delivered }}">
+                            <div class="d-flex flex-column gap-2 py-1">
+                                {% for p in row.products %}
+                                <div style="min-height: 24px; display: flex; align-items: center; justify-content: center;">{{ p.quantity_delivered }}</div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td data-sort-value="{{ row.dpr.po_validity|date:'Y-m-d'|default:'' }}">{{ row.dpr.po_validity|date:'Y-m-d'|default:'-' }}</td>
+                        <td data-sort-value="{{ row.dpr.po_value|default:0 }}">{{ row.dpr.po_value|default:'-' }}</td>
                         <td data-sort-value="view supplier status">
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="button" class="btn btn-info btn-sm btn-supplier-status">
@@ -141,18 +177,18 @@
                                 </button>
                             </div>
                         </td>
-                        <td class="text-nowrap" style="white-space: nowrap;" data-sort-value="{% if product.status == 'delivered' %}closed{% elif product.status == 'invoice_pending' %}invoice pending{% elif product.status == 'partially_delivered' %}partially closed{% elif product.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
-                            {% if product.status == 'delivered' or product.quantity_delivered >= product.quantity_ordered %}
+                        <td class="text-nowrap" style="white-space: nowrap;" data-sort-value="{% if row.is_all_delivered %}closed{% elif row.status == 'invoice_pending' %}invoice pending{% elif row.status == 'partially_delivered' %}partially closed{% elif row.status == 'cancelled' %}cancelled{% else %}pending{% endif %}">
+                            {% if row.is_all_delivered %}
                             <div class="d-flex align-items-center justify-content-center gap-1 flex-wrap">
-                                {% if product.generated_invoices %}
-                                    {% for inv in product.generated_invoices %}
-                                    <a href="{% url 'generate_customer_invoice_pdf' product.id inv.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" style="min-width: 140px;" title="Open Generated Invoice PDF (Qty: {{ inv.quantity }})">
+                                {% if row.group_invoices %}
+                                    {% for inv in row.group_invoices %}
+                                    <a href="{% url 'generate_customer_invoice_pdf' row.first_product_id inv.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" style="min-width: 140px;" title="Open Generated Invoice PDF (Qty: {{ inv.quantity }})">
                                         <i class="bi bi-file-earmark-pdf me-1"></i>{{ inv.invoice_number }}
                                     </a>
                                     {% endfor %}
-                                {% elif product.quantity_delivered > 0 %}
-                                    <a href="{% url 'generate_customer_invoice' product.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" style="min-width: 140px;" title="Open Generated Invoice PDF">
-                                        <i class="bi bi-file-earmark-pdf me-1"></i>{{ product.generated_invoice_number }}
+                                {% elif row.total_customer_qty_delivered > 0 %}
+                                    <a href="{% url 'generate_customer_invoice' row.first_product_id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap d-inline-flex align-items-center justify-content-center" style="min-width: 140px;" title="Open Generated Invoice PDF">
+                                        <i class="bi bi-file-earmark-pdf me-1"></i>{{ row.products.0.generated_invoice_number }}
                                     </a>
                                 {% else %}
                                     <span class="text-muted small">-</span>
@@ -161,40 +197,40 @@
                             {% else %}
                             <div class="d-inline-flex align-items-center gap-1 text-nowrap">
                                 <div class="d-inline-flex flex-column gap-1">
-                                    {% if product.material_status_code == 'pending' %}
+                                    {% if not row.any_material_received %}
                                     <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="The item is not received from supplier">
-                                        <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed; pointer-events: none;" data-product-id="{{ product.id }}" disabled title="The item is not received from supplier">
+                                        <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed; pointer-events: none;" data-product-id="{{ row.first_product_id }}" disabled title="The item is not received from supplier">
                                             Generate Invoice
                                         </button>
                                     </span>
                                     {% else %}
-                                    <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a;" data-product-id="{{ product.id }}">
+                                    <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #16a34a; border-color: #16a34a;" data-product-id="{{ row.first_product_id }}">
                                         Generate Invoice
                                     </button>
                                     {% endif %}
 
-                                     <a href="{% url 'print_customer_address_pdf' product.id %}" target="_blank" class="btn btn-sm text-white text-nowrap" style="background-color: #0284c7; border-color: #0284c7;" title="View Auto-Generated Address Printout">
+                                     <a href="{% url 'print_customer_address_pdf' row.first_product_id %}" target="_blank" class="btn btn-sm text-white text-nowrap" style="background-color: #0284c7; border-color: #0284c7;" title="View Auto-Generated Address Printout">
                                          <i class="bi bi-printer me-1"></i>Address printout
                                      </a>
 
-                                    {% if product.generated_invoices %}
-                                        {% for inv in product.generated_invoices %}
-                                        <a href="{% url 'generate_customer_invoice_pdf' product.id inv.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF (Qty: {{ inv.quantity }})">
+                                    {% if row.group_invoices %}
+                                        {% for inv in row.group_invoices %}
+                                        <a href="{% url 'generate_customer_invoice_pdf' row.first_product_id inv.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF (Qty: {{ inv.quantity }})">
                                             <i class="bi bi-file-earmark-pdf me-1"></i>{{ inv.invoice_number }}
                                         </a>
                                         {% endfor %}
-                                    {% elif product.quantity_delivered > 0 %}
-                                        <a href="{% url 'generate_customer_invoice' product.id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF">
-                                            <i class="bi bi-file-earmark-pdf me-1"></i>{{ product.generated_invoice_number }}
+                                    {% elif row.total_customer_qty_delivered > 0 %}
+                                        <a href="{% url 'generate_customer_invoice' row.first_product_id %}" target="_blank" class="btn btn-sm btn-outline-primary text-nowrap" title="Open Generated Invoice PDF">
+                                            <i class="bi bi-file-earmark-pdf me-1"></i>{{ row.products.0.generated_invoice_number }}
                                         </a>
                                     {% endif %}
                                 </div>
-                                {% if product.status != 'delivered' and product.quantity_delivered < product.quantity_ordered %}
+                                {% if row.status != 'delivered' and not row.is_all_delivered %}
                                 <button type="button"
                                         class="btn btn-sm btn-outline-danger btn-cancel-customer-order"
-                                        data-product-id="{{ product.id }}"
-                                        {% if product.status == 'cancelled' %}disabled{% endif %}>
-                                    {% if product.status == 'cancelled' %}Cancelled{% else %}Cancel Order{% endif %}
+                                        data-product-id="{{ row.first_product_id }}"
+                                        {% if row.status == 'cancelled' %}disabled{% endif %}>
+                                    {% if row.status == 'cancelled' %}Cancelled{% else %}Cancel Order{% endif %}
                                 </button>
                                 {% endif %}
                             </div>
@@ -203,7 +239,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="text-center py-4 text-muted">
+                        <td colspan="14" class="text-center py-4 text-muted">
                             <i class="bi bi-inbox fs-3 d-block mb-2 text-secondary"></i>
                             No product records found.
                         </td>
@@ -387,7 +423,7 @@ function updateDeliveryStatusDropdown(selectElement, status) {
 
 function postStatusUpdate(row, selectElement, status, payload = {}) {
     const productId = row.getAttribute('data-product-id');
-    const quantityOrdered = parseInt(row.children[6].textContent || '0', 10);
+    const quantityOrdered = parseInt(row.children[8].textContent || '0', 10);
     const quantityDeliveredCell = row.querySelector('.quantity-delivered-cell');
     const formData = new FormData();
     formData.append('status', status);
@@ -433,7 +469,7 @@ function postStatusUpdate(row, selectElement, status, payload = {}) {
             quantityDeliveredCell.textContent = '0';
             quantityDeliveredCell.setAttribute('data-sort-value', '0');
         }
-        const inwardCell = row.cells[11];
+        const inwardCell = row.cells[13];
         if (inwardCell) {
             const statusLabels = {
                 delivered: 'closed',
@@ -548,7 +584,7 @@ document.addEventListener('change', function (e) {
     delete e.target.dataset.tempReset;
     const row = e.target.closest('tr[data-product-id]');
     const status = e.target.value;
-    const quantityOrdered = parseInt(row.children[6].textContent || '0', 10);
+    const quantityOrdered = parseInt(row.children[8].textContent || '0', 10);
     const currentDelivered = row.querySelector('.quantity-delivered-cell')?.textContent.trim() || '';
 
     if (status === 'partially_delivered') {
@@ -703,6 +739,102 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const generateInvoiceForm = document.getElementById('generateInvoiceForm');
 
+    let currentInvoiceData = null;
+
+    function numberToIndianWords(num) {
+        if (!num || isNaN(num) || num <= 0) return 'ZERO RUPEES ONLY.';
+        const a = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+        const b = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+        
+        function inWords(n) {
+            if (n === 0) return '';
+            if (n < 20) return a[n] + ' ';
+            if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '') + ' ';
+            if (n < 1000) return a[Math.floor(n / 100)] + ' HUNDRED ' + inWords(n % 100);
+            if (n < 100000) return inWords(Math.floor(n / 1000)) + 'THOUSAND ' + inWords(n % 1000);
+            if (n < 10000000) return inWords(Math.floor(n / 100000)) + 'LAKH ' + inWords(n % 100000);
+            return inWords(Math.floor(n / 10000000)) + 'CRORE ' + inWords(n % 10000000);
+        }
+        
+        const intPart = Math.floor(num);
+        const words = inWords(intPart).trim().replace(/\s+/g, ' ');
+        return words ? `${words} RUPEES ONLY.` : 'ZERO RUPEES ONLY.';
+    }
+
+    function calculateSheetTotals() {
+        if (!currentInvoiceData) return;
+        let subtotal = 0;
+        let totalQty = 0;
+
+        const activeRowInputs = document.querySelectorAll('input[name="selected_products"]');
+        const activeIds = Array.from(activeRowInputs).map(inp => parseInt(inp.value, 10));
+
+        currentInvoiceData.products.forEach(p => {
+            if (!activeIds.includes(p.id)) return;
+
+            const qtyInput = document.querySelector(`.sheet-live-qty[data-prod-id="${p.id}"]`);
+            const rateInput = document.querySelector(`.sheet-live-rate[data-prod-id="${p.id}"]`);
+            const qty = qtyInput ? parseFloat(qtyInput.value || 0) : 0;
+            const rate = rateInput ? parseFloat(rateInput.value || 0) : 0;
+            const lineTotal = qty * rate;
+            subtotal += lineTotal;
+            totalQty += qty;
+
+            const lineTotalEl = document.getElementById(`sheetItemTotal_${p.id}`);
+            if (lineTotalEl) {
+                lineTotalEl.textContent = `Rs. ${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+        });
+
+        const subtotalEl = document.getElementById('sheetSubTotal');
+        if (subtotalEl) {
+            subtotalEl.textContent = `Rs. ${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        const totalQtyEl = document.getElementById('sheetTotalQty');
+        if (totalQtyEl) {
+            totalQtyEl.textContent = totalQty;
+        }
+
+        let sgstAmt = 0;
+        let cgstAmt = 0;
+        let igstAmt = 0;
+
+        if (currentInvoiceData.tax_mode === 'sez') {
+            sgstAmt = 0;
+            cgstAmt = 0;
+            igstAmt = 0;
+        } else if (currentInvoiceData.tax_mode === 'tn') {
+            sgstAmt = Math.round((subtotal * 0.09) * 100) / 100;
+            cgstAmt = Math.round((subtotal * 0.09) * 100) / 100;
+            igstAmt = 0;
+        } else {
+            sgstAmt = 0;
+            cgstAmt = 0;
+            igstAmt = Math.round((subtotal * 0.18) * 100) / 100;
+        }
+
+        const sgstAmtEl = document.getElementById('sheetSgstAmt');
+        if (sgstAmtEl) sgstAmtEl.textContent = `Rs. ${sgstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        const cgstAmtEl = document.getElementById('sheetCgstAmt');
+        if (cgstAmtEl) cgstAmtEl.textContent = `Rs. ${cgstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        const igstAmtEl = document.getElementById('sheetIgstAmt');
+        if (igstAmtEl) igstAmtEl.textContent = `Rs. ${igstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        const grandTotal = subtotal + sgstAmt + cgstAmt + igstAmt;
+        const grandTotalEl = document.getElementById('sheetGrandTotal');
+        if (grandTotalEl) {
+            grandTotalEl.textContent = `Rs. ${grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        const wordsEl = document.getElementById('sheetAmountWords');
+        if (wordsEl) {
+            wordsEl.textContent = numberToIndianWords(grandTotal);
+        }
+    }
+
     document.addEventListener('click', function(e) {
         const btn = e.target.closest('.btn-generate-invoice');
         if (!btn) return;
@@ -711,14 +843,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('generateInvoiceForm');
         form.action = `/customer-product/${productId}/invoice/`;
 
-        const valError = document.getElementById('invoiceModalValidationError');
-        if (valError) valError.classList.add('d-none');
+        // Switch to Step 1 initially
+        document.getElementById('invoiceModalStep1').classList.remove('d-none');
+        document.getElementById('invoiceModalStep2').classList.add('d-none');
+        document.getElementById('generateInvoiceModalLabel').innerHTML = '<i class="bi bi-file-earmark-pdf text-success me-2"></i>Enter Quantity for Invoice';
 
-        const productsBody = document.getElementById('invoiceModalProductsBody');
+        const step1Body = document.getElementById('invoiceModalStep1Body');
         const headerInfo = document.getElementById('invoiceModalHeaderInfo');
 
-        if (productsBody) {
-            productsBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Loading products...</td></tr>';
+        if (step1Body) {
+            step1Body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Loading products...</td></tr>';
         }
         if (headerInfo) {
             headerInfo.innerHTML = 'Loading order details...';
@@ -734,6 +868,8 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
+                    currentInvoiceData = data;
+
                     let totalDelivered = 0;
                     if (data.products && data.products.length > 0) {
                         data.products.forEach(p => {
@@ -742,75 +878,285 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     if (headerInfo) {
-                        let headerText = `<strong>DPR Serial:</strong> ${data.dpr_serial} &nbsp;|&nbsp; <strong>Customer:</strong> ${data.customer_name}`;
+                        let headerText = `<strong>DPR Serial:</strong> ${data.dpr_serial} &nbsp;|&nbsp; <strong>Customer:</strong> ${data.customer_name} &nbsp;|&nbsp; <strong>Total Products in PO:</strong> ${data.products.length}`;
                         if (totalDelivered > 0) {
-                            headerText += `<div class="mt-1 text-primary fw-semibold"><i class="bi bi-info-circle-fill me-1"></i>An invoice has already been generated for ${totalDelivered} quantity.</div>`;
+                            headerText += `<div class="mt-1 text-primary fw-semibold"><i class="bi bi-info-circle-fill me-1"></i>Total ${totalDelivered} items delivered so far in this PO.</div>`;
                         }
                         headerInfo.innerHTML = headerText;
                     }
 
-                    if (productsBody) {
+                    if (step1Body) {
                         let rowsHtml = '';
                         data.products.forEach((p, idx) => {
                             const deliveredQty = p.quantity_delivered || 0;
                             const remainingQty = (p.remaining_qty !== undefined) ? p.remaining_qty : Math.max(p.quantity_ordered - deliveredQty, 0);
-                            const defaultQty = remainingQty;
-                            const alreadyInvoicedNotice = deliveredQty > 0 
-                                ? `<div class="text-muted small mt-1" style="font-size: 0.8rem;"><i class="bi bi-check-circle-fill text-success me-1"></i>An invoice has already been generated for ${deliveredQty} quantity.</div>` 
-                                : '';
+                            const isMaterialReceived = (p.material_received !== undefined) ? p.material_received : true;
+
+                            let isAvailable = remainingQty > 0;
+                            let statusNotice = '';
+
+                            if (!isMaterialReceived) {
+                                isAvailable = false;
+                                statusNotice = `<div class="text-danger small mt-1 fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>The product was not received from the supplier.</div>`;
+                            } else if (deliveredQty >= p.quantity_ordered) {
+                                isAvailable = false;
+                                statusNotice = `<div class="text-success small mt-1 fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-check-circle-fill me-1"></i>Fully delivered to customer (${deliveredQty}/${p.quantity_ordered}).</div>`;
+                            } else if (deliveredQty > 0) {
+                                statusNotice = `<div class="text-muted small mt-1" style="font-size: 0.8rem;"><i class="bi bi-info-circle text-primary me-1"></i>Partially delivered: ${deliveredQty} / ${p.quantity_ordered}</div>`;
+                            }
+
+                            const isChecked = isAvailable;
+                            const defaultQty = isAvailable ? remainingQty : 0;
+
                             rowsHtml += `
-                                <tr>
+                                <tr class="${!isAvailable ? 'table-light opacity-75' : ''}">
                                     <td class="text-center">
-                                        ${idx + 1}
-                                        <input type="hidden" name="selected_products" value="${p.id}">
+                                        <input type="checkbox" class="form-check-input step1-prod-select" data-prod-id="${p.id}" ${isChecked ? 'checked' : ''} ${!isAvailable ? 'disabled' : ''}>
                                     </td>
+                                    <td class="text-center">${idx + 1}</td>
                                     <td>
                                         <strong>${p.product_name}</strong>
-                                        ${alreadyInvoicedNotice}
+                                        ${statusNotice}
                                     </td>
                                     <td class="text-center">${p.quantity_ordered}</td>
+                                    <td class="text-center">${deliveredQty}</td>
                                     <td class="text-center">
-                                        <input type="number" name="qty_${p.id}" value="${defaultQty}" min="${remainingQty > 0 ? 1 : 0}" max="${remainingQty}" class="form-control form-control-sm text-center qty-delivered-input" style="max-width: 75px; margin: 0 auto;" data-prod-id="${p.id}" ${remainingQty <= 0 ? 'disabled' : ''}>
-                                    </td>
-                                    <td class="text-center invoice-qty-display-${p.id}">
-                                        ${defaultQty}
+                                        <input type="number" value="${defaultQty}" min="${isAvailable ? 1 : 0}" max="${remainingQty}" class="form-control form-control-sm text-center step1-qty-input" style="max-width: 80px; margin: 0 auto;" data-prod-id="${p.id}" ${!isAvailable ? 'disabled' : ''}>
                                     </td>
                                 </tr>
                             `;
                         });
-                        productsBody.innerHTML = rowsHtml;
+                        step1Body.innerHTML = rowsHtml;
+
+                        const selectAllCheck = document.getElementById('step1SelectAllCheck');
+                        if (selectAllCheck) {
+                            selectAllCheck.checked = true;
+                            selectAllCheck.onchange = function() {
+                                document.querySelectorAll('.step1-prod-select:not(:disabled)').forEach(cb => {
+                                    cb.checked = selectAllCheck.checked;
+                                    const pid = cb.getAttribute('data-prod-id');
+                                    const qInput = document.querySelector(`.step1-qty-input[data-prod-id="${pid}"]`);
+                                    if (qInput) qInput.disabled = !cb.checked;
+                                });
+                            };
+                        }
                     }
                 } else {
-                    if (productsBody) {
-                        productsBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Failed to load products.</td></tr>';
+                    if (step1Body) {
+                        step1Body.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Failed to load products.</td></tr>';
                     }
                 }
             })
             .catch(err => {
                 console.error(err);
-                if (productsBody) {
-                    productsBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Error loading products.</td></tr>';
+                if (step1Body) {
+                    step1Body.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Error loading products.</td></tr>';
                 }
             });
     });
 
-    document.addEventListener('input', function(e) {
-        if (e.target && e.target.classList.contains('qty-delivered-input')) {
-            const prodId = e.target.getAttribute('data-prod-id');
-            const displayEl = document.querySelector(`.invoice-qty-display-${prodId}`);
-            if (displayEl) {
-                displayEl.textContent = e.target.value || '0';
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.classList.contains('step1-prod-select')) {
+            const pid = e.target.getAttribute('data-prod-id');
+            const qInput = document.querySelector(`.step1-qty-input[data-prod-id="${pid}"]`);
+            if (qInput) {
+                qInput.disabled = !e.target.checked;
             }
         }
     });
 
+    document.addEventListener('input', function(e) {
+        if (e.target && (e.target.classList.contains('sheet-live-qty') || e.target.classList.contains('sheet-live-rate'))) {
+            calculateSheetTotals();
+        }
+    });
+
+    // Step 1 -> Step 2 transition
+    const btnProceedToInvoicePreview = document.getElementById('btnProceedToInvoicePreview');
+    if (btnProceedToInvoicePreview) {
+        btnProceedToInvoicePreview.addEventListener('click', function() {
+            if (!currentInvoiceData) return;
+
+            const selectedCheckboxes = document.querySelectorAll('.step1-prod-select:checked');
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select at least one material to generate the invoice.');
+                return;
+            }
+
+            const selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.getAttribute('data-prod-id'), 10));
+            const selectedProducts = currentInvoiceData.products.filter(p => selectedIds.includes(p.id));
+
+            // Helper for safe DOM text setting
+            const setText = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = val || '';
+            };
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val || '';
+            };
+
+            // Populate Sheet Header Data safely
+            setText('sheetCustAtten', currentInvoiceData.customer_atten || 'Mr.Nizamuddeen S');
+            setText('sheetCustName', currentInvoiceData.customer_name || '');
+            setText('sheetCustAddress', currentInvoiceData.customer_address || '');
+            setText('sheetCustRegion', currentInvoiceData.customer_region || '');
+            setText('sheetCustPhone', currentInvoiceData.customer_phone || '');
+            setText('sheetCustEmail', currentInvoiceData.customer_email || '');
+            setText('sheetCustGstin', currentInvoiceData.customer_gstin || '-');
+
+            setVal('sheetInvoiceNo', currentInvoiceData.invoice_no || '');
+            setVal('sheetInvoiceDate', currentInvoiceData.invoice_date || '');
+            setVal('sheetVendorCode', '');
+            setVal('sheetTerms', currentInvoiceData.terms_of_payment || '30 Days Against Invoice');
+            setVal('sheetPoNo', currentInvoiceData.po_number || '');
+            setVal('sheetPoDate', currentInvoiceData.po_date || '');
+            setVal('sheetDespatchThrough', currentInvoiceData.despatch_through || 'By Hand');
+            setVal('sheetDestination', currentInvoiceData.destination || '');
+            setVal('sheetShippingAddress', currentInvoiceData.shipping_address || '');
+
+            // Tax labels
+            if (currentInvoiceData.tax_mode === 'sez') {
+                setText('sheetSgstRate', '0%');
+                setText('sheetCgstRate', '0%');
+                setText('sheetIgstRate', '0%');
+            } else if (currentInvoiceData.tax_mode === 'tn') {
+                setText('sheetSgstRate', '9%');
+                setText('sheetCgstRate', '9%');
+                setText('sheetIgstRate', '0%');
+            } else {
+                setText('sheetSgstRate', '0%');
+                setText('sheetCgstRate', '0%');
+                setText('sheetIgstRate', '18%');
+            }
+
+            // Build Product Rows for Sheet for ONLY selectedProducts
+            const sheetProductRows = document.getElementById('sheetProductRows');
+            let rowsHtml = '';
+            selectedProducts.forEach((p, idx) => {
+                const step1Input = document.querySelector(`.step1-qty-input[data-prod-id="${p.id}"]`);
+                const chosenQty = step1Input ? (parseInt(step1Input.value, 10) || 0) : p.invoice_qty;
+                const rateNum = parseFloat(p.rate || 0);
+                const lineTotalNum = chosenQty * rateNum;
+
+                rowsHtml += `
+                    <tr>
+                        <td class="text-center align-top p-2 fw-semibold" style="border: 1px solid #000; width: 45px;">
+                            ${idx + 1}
+                            <input type="hidden" name="selected_products" value="${p.id}">
+                        </td>
+                        <td class="text-center align-top p-2 fw-bold" style="border: 1px solid #000; width: 115px; font-size: 13px;">
+                            ${p.product_type || 'P0011'}
+                            <input type="hidden" name="product_type_${p.id}" value="${p.product_type || 'P0011'}">
+                        </td>
+                        <td class="align-top p-2" style="border: 1px solid #000;">
+                            <textarea name="description_${p.id}" class="form-control form-control-sm" rows="6" style="width: 100%; border: 1px solid #ced4da; border-radius: 4px; font-family: 'Times New Roman', serif; font-size: 13px; line-height: 1.4; padding: 6px 8px; resize: vertical; background: #fff;">${p.description || p.product_name}</textarea>
+                        </td>
+                        <td class="text-center align-top p-2" style="border: 1px solid #000; width: 85px; font-size: 13px;">
+                            ${p.hsn_code || '90173029'}
+                            <input type="hidden" name="hsn_${p.id}" value="${p.hsn_code || '90173029'}">
+                        </td>
+                        <td class="text-center align-top p-2 fw-bold" style="border: 1px solid #000; width: 50px; font-size: 13px;">
+                            ${chosenQty}
+                            <input type="hidden" name="qty_${p.id}" value="${chosenQty}" class="sheet-live-qty" data-prod-id="${p.id}">
+                        </td>
+                        <td class="text-center align-top p-2" style="border: 1px solid #000; width: 55px; font-size: 13px;">
+                            ${p.unit || 'NOS'}
+                            <input type="hidden" name="unit_${p.id}" value="${p.unit || 'NOS'}">
+                        </td>
+                        <td class="text-end align-top p-2" style="border: 1px solid #000; width: 110px; font-size: 13px;">
+                            Rs. ${rateNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <input type="hidden" name="rate_${p.id}" value="${rateNum.toFixed(2)}" class="sheet-live-rate" data-prod-id="${p.id}">
+                        </td>
+                        <td class="text-end align-top p-2 fw-bold" style="border: 1px solid #000; width: 115px; font-size: 13px;" id="sheetItemTotal_${p.id}">
+                            Rs. ${lineTotalNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            sheetProductRows.innerHTML = rowsHtml;
+            calculateSheetTotals();
+
+            // Switch to Step 2
+            document.getElementById('invoiceModalStep1').classList.add('d-none');
+            document.getElementById('invoiceModalStep2').classList.remove('d-none');
+            document.getElementById('generateInvoiceModalLabel').innerHTML = '<i class="bi bi-pencil-square text-primary me-2"></i>Tax Invoice (Editable Sheet)';
+        });
+    }
+
+    // Reset to Default handler
+    function resetInvoiceModalToDefaults() {
+        if (!currentInvoiceData) return;
+
+        // Reset Header Fields
+        const invNoEl = document.getElementById('sheetInvoiceNo');
+        if (invNoEl) invNoEl.value = currentInvoiceData.invoice_no || '';
+
+        const invDateEl = document.getElementById('sheetInvoiceDate');
+        if (invDateEl) invDateEl.value = currentInvoiceData.invoice_date || '';
+
+        const vendorCodeEl = document.getElementById('sheetVendorCode');
+        if (vendorCodeEl) vendorCodeEl.value = '';
+
+        const termsEl = document.getElementById('sheetTerms');
+        if (termsEl) termsEl.value = currentInvoiceData.terms_of_payment || '30 Days Against Invoice';
+
+        const poNoEl = document.getElementById('sheetPoNo');
+        if (poNoEl) poNoEl.value = currentInvoiceData.po_number || '';
+
+        const poDateEl = document.getElementById('sheetPoDate');
+        if (poDateEl) poDateEl.value = currentInvoiceData.po_date || '';
+
+        const despEl = document.getElementById('sheetDespatchThrough');
+        if (despEl) despEl.value = currentInvoiceData.despatch_through || 'By Hand';
+
+        const destEl = document.getElementById('sheetDestination');
+        if (destEl) destEl.value = currentInvoiceData.destination || '';
+
+        const shipEl = document.getElementById('sheetShippingAddress');
+        if (shipEl) shipEl.value = currentInvoiceData.shipping_address || '';
+
+        // Reset Product Descriptions / Specs
+        if (currentInvoiceData.products && currentInvoiceData.products.length > 0) {
+            currentInvoiceData.products.forEach(p => {
+                const descTextarea = document.querySelector(`textarea[name="description_${p.id}"]`);
+                if (descTextarea) {
+                    descTextarea.value = p.description || p.product_name;
+                }
+            });
+        }
+
+        calculateSheetTotals();
+    }
+
+    const btnResetToDefault = document.getElementById('btnResetToDefault');
+    if (btnResetToDefault) {
+        btnResetToDefault.addEventListener('click', resetInvoiceModalToDefaults);
+    }
+
+    const btnResetToDefaultFooter = document.getElementById('btnResetToDefaultFooter');
+    if (btnResetToDefaultFooter) {
+        btnResetToDefaultFooter.addEventListener('click', resetInvoiceModalToDefaults);
+    }
+
+    // Step 2 -> Step 1 back button
+    const sheetBackToStep1Btn = document.getElementById('sheetBackToStep1Btn');
+    if (sheetBackToStep1Btn) {
+        sheetBackToStep1Btn.addEventListener('click', function() {
+            document.getElementById('invoiceModalStep2').classList.add('d-none');
+            document.getElementById('invoiceModalStep1').classList.remove('d-none');
+            document.getElementById('generateInvoiceModalLabel').innerHTML = '<i class="bi bi-file-earmark-pdf text-success me-2"></i>Enter Quantity for Invoice';
+        });
+    }
+
     if (generateInvoiceForm) {
         generateInvoiceForm.addEventListener('submit', function(e) {
             e.preventDefault();
-            const submitBtn = document.getElementById('submitGenerateInvoiceBtn');
+            const submitBtn = document.getElementById('sheetSubmitInvoiceBtn');
             if (submitBtn) {
                 submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating PDF...';
             }
 
             const formData = new FormData(generateInvoiceForm);
@@ -874,16 +1220,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Generate Invoice Modal -->
 <div class="modal fade" id="generateInvoiceModal" tabindex="-1" aria-labelledby="generateInvoiceModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-light">
-                <h5 class="modal-title" id="generateInvoiceModalLabel">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fs-6 fw-bold" id="generateInvoiceModalLabel">
                     <i class="bi bi-file-earmark-pdf text-success me-2"></i>Enter Quantity for Invoice
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="generateInvoiceForm" method="POST" action="" target="_blank">
-                {% csrf_token %}
+
+            <!-- STEP 1: QUANTITY SELECTION -->
+            <div id="invoiceModalStep1">
                 <div class="modal-body">
                     <div id="invoiceModalHeaderInfo" class="alert alert-info py-2 mb-3 small">
                         <!-- Filled by JS -->
@@ -892,6 +1239,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <table class="table table-bordered table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
+                                    <th style="width: 45px;" class="text-center">
+                                        <input type="checkbox" id="step1SelectAllCheck" class="form-check-input" checked title="Select / Deselect All">
+                                    </th>
                                     <th style="width: 55px;" class="text-center">S.No</th>
                                     <th>Product Name</th>
                                     <th style="width: 110px;" class="text-center">Qty Ordered</th>
@@ -899,19 +1249,179 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <th style="width: 130px;" class="text-center">Invoice Qty</th>
                                 </tr>
                             </thead>
-                            <tbody id="invoiceModalProductsBody">
+                            <tbody id="invoiceModalStep1Body">
                                 <!-- Filled by JS -->
                             </tbody>
                         </table>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer py-2">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success" id="submitGenerateInvoiceBtn">
-                        <i class="bi bi-printer me-1"></i> Generate Invoice
+                    <button type="button" class="btn btn-success" id="btnProceedToInvoicePreview">
+                        <i class="bi bi-arrow-right me-1"></i> Next: Edit Invoice
                     </button>
                 </div>
-            </form>
+            </div>
+
+            <!-- STEP 2: TAX INVOICE EDITABLE SHEET -->
+            <div id="invoiceModalStep2" class="d-none">
+                <form id="generateInvoiceForm" method="POST" action="" target="_blank">
+                    {% csrf_token %}
+                    <div class="modal-body bg-light p-3 p-md-4" style="max-height: 80vh; overflow-y: auto;">
+                        
+                        <!-- Top Toolbar / Info Bar -->
+                        <div class="card border-0 shadow-sm mb-3 bg-white">
+                            <div class="card-body py-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-primary fs-6 px-3 py-2"><i class="bi bi-file-earmark-ruled me-1"></i> Tax Invoice Editor</span>
+                                    <span class="text-muted small">| Edit invoice details & specifications below before generating the final PDF</span>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-semibold" id="btnResetToDefault">
+                                    <i class="bi bi-arrow-counterclockwise me-1 text-danger"></i> Reset to Default
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Card 1: Customer & Invoice Details -->
+                        <div class="card border shadow-sm mb-3">
+                            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                                <span class="fw-bold text-dark"><i class="bi bi-person-lines-fill text-primary me-2"></i>Customer & Invoice Header Information</span>
+                                <span class="badge bg-light text-dark border">Company: Metrology Engineering Solutions</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <!-- Customer Summary Banner -->
+                                <div class="alert alert-secondary py-2 px-3 mb-3 d-flex flex-wrap justify-content-between align-items-center small gap-2">
+                                    <div>
+                                        <strong>Customer:</strong> <span id="sheetCustName" class="fw-bold text-primary"></span>
+                                        <span class="ms-3"><strong>Atten:</strong> <span id="sheetCustAtten"></span></span>
+                                        <span class="ms-3"><strong>GSTIN:</strong> <span id="sheetCustGstin"></span></span>
+                                    </div>
+                                    <div class="text-muted">
+                                        <span id="sheetCustPhone"></span> | <span id="sheetCustEmail"></span>
+                                    </div>
+                                    <div class="w-100 text-muted border-top border-secondary-subtle pt-1 mt-1">
+                                        <i class="bi bi-geo-alt me-1"></i><span id="sheetCustAddress"></span> <span id="sheetCustRegion"></span>
+                                    </div>
+                                </div>
+
+                                <!-- Editable Invoice Header Fields Grid -->
+                                <div class="row g-2">
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Invoice No:</label>
+                                        <input type="text" name="invoice_no" id="sheetInvoiceNo" class="form-control form-control-sm fw-bold border-primary-subtle bg-white">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Invoice Date:</label>
+                                        <input type="text" name="invoice_date" id="sheetInvoiceDate" class="form-control form-control-sm fw-semibold bg-white">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Buyer's PO No:</label>
+                                        <input type="text" name="po_number" id="sheetPoNo" class="form-control form-control-sm fw-bold bg-white">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Buyer's PO Date:</label>
+                                        <input type="text" name="po_date" id="sheetPoDate" class="form-control form-control-sm bg-white">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Terms of Payment:</label>
+                                        <input type="text" name="terms_of_payment" id="sheetTerms" class="form-control form-control-sm bg-white">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Despatch Through:</label>
+                                        <input type="text" name="despatch_through" id="sheetDespatchThrough" class="form-control form-control-sm bg-white">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Destination:</label>
+                                        <input type="text" name="destination" id="sheetDestination" class="form-control form-control-sm bg-white">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Vendor Code:</label>
+                                        <input type="text" name="vendor_code" id="sheetVendorCode" class="form-control form-control-sm bg-white" placeholder="Optional">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Shipping Address:</label>
+                                        <input type="text" name="shipping_address" id="sheetShippingAddress" class="form-control form-control-sm bg-white" placeholder="Optional shipping address">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: Products & Editable Parameter Specifications Table -->
+                        <div class="card border shadow-sm mb-3">
+                            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                                <span class="fw-bold text-dark"><i class="bi bi-box-seam text-primary me-2"></i>Product Items & Parameter Specifications</span>
+                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><i class="bi bi-pencil me-1"></i>Description & Specs Editable</span>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-hover align-middle mb-0" style="font-size: 13px;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 45px;" class="text-center">S.No</th>
+                                                <th style="width: 130px;" class="text-center">Product</th>
+                                                <th>Description & Parameter Specifications (Editable)</th>
+                                                <th style="width: 90px;" class="text-center">HSN/SAC</th>
+                                                <th style="width: 60px;" class="text-center">Qty</th>
+                                                <th style="width: 60px;" class="text-center">Unit</th>
+                                                <th style="width: 120px;" class="text-end">Rate (₹)</th>
+                                                <th style="width: 130px;" class="text-end">Total (₹)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="sheetProductRows">
+                                            <!-- Filled dynamically by JS -->
+                                        </tbody>
+                                        <tfoot class="table-group-divider bg-light-subtle">
+                                            <tr>
+                                                <td colspan="6" class="text-end fw-bold py-2">Sub Total:</td>
+                                                <td colspan="2" class="text-end fw-bold py-2 pe-3 text-primary fs-6" id="sheetSubTotal">Rs. 0.00</td>
+                                            </tr>
+                                            <tr>
+                                                <td colspan="6" class="text-end py-1">SGST (<span id="sheetSgstRate">9%</span>):</td>
+                                                <td colspan="2" class="text-end py-1 pe-3" id="sheetSgstAmt">Rs. 0.00</td>
+                                            </tr>
+                                            <tr>
+                                                <td colspan="6" class="text-end py-1">CGST (<span id="sheetCgstRate">9%</span>):</td>
+                                                <td colspan="2" class="text-end py-1 pe-3" id="sheetCgstAmt">Rs. 0.00</td>
+                                            </tr>
+                                            <tr>
+                                                <td colspan="6" class="text-end py-1">IGST (<span id="sheetIgstRate">0%</span>):</td>
+                                                <td colspan="2" class="text-end py-1 pe-3" id="sheetIgstAmt">Rs. 0.00</td>
+                                            </tr>
+                                            <tr class="table-primary border-top border-dark">
+                                                <td colspan="4" class="text-end fw-bold py-2">Total Invoiced Quantity:</td>
+                                                <td class="text-center fw-bold py-2" id="sheetTotalQty">0</td>
+                                                <td class="text-end fw-bold py-2">Grand Total:</td>
+                                                <td colspan="2" class="text-end fw-bold py-2 pe-3 text-success fs-5" id="sheetGrandTotal">Rs. 0.00</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-light py-2 px-3 border-top">
+                                <div class="small">
+                                    <strong>Amount Chargeable (in Words):</strong> <span id="sheetAmountWords" class="fw-bold text-dark text-uppercase ms-1">ZERO RUPEES ONLY.</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="modal-footer py-2 bg-white d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-secondary px-3" id="sheetBackToStep1Btn">
+                            <i class="bi bi-arrow-left me-1"></i> Back to Quantity
+                        </button>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-warning text-dark fw-semibold" id="btnResetToDefaultFooter">
+                                <i class="bi bi-arrow-counterclockwise me-1 text-danger"></i> Reset to Default
+                            </button>
+                            <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success px-4 fw-semibold" id="sheetSubmitInvoiceBtn">
+                                <i class="bi bi-printer me-1"></i> Generate Invoice
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
         </div>
     </div>
 </div>

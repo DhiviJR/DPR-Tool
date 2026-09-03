@@ -173,22 +173,6 @@
       <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow" {% if total_supplier_quantity >= total_customer_quantity and total_customer_quantity > 0 %}disabled{% endif %}>Add Row</button>
       <div>
         <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary">Close</a>
-        {% if po_prepared and supplier_orders|length == 1 %}
-        <button type="button"
-                id="sendMailBtn"
-                class="btn btn-outline-primary btn-sm ms-1"
-                {% if not has_supplier_emails %}disabled{% endif %}
-                title="Compose New Email to supplier">
-          <i class="bi bi-envelope-plus me-1"></i> New Email
-        </button>
-        <button type="button"
-                id="replyMailBtn"
-                class="btn btn-outline-dark btn-sm ms-1"
-                {% if not has_supplier_emails %}disabled{% endif %}
-                title="Reply Email to supplier">
-          <i class="bi bi-reply me-1"></i> Reply Email
-        </button>
-        {% endif %}
         {% if supplier_orders and missing_email_suppliers %}
         <div class="text-danger small mt-2">
           * Send Email is disabled for suppliers without an Email ID: <strong>{{ missing_email_suppliers|join:", " }}</strong>.

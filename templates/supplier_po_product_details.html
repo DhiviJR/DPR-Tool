@@ -109,6 +109,8 @@
                                     data-not-ok-reason="{{ row.not_ok_reason|default:'' }}"
                                     data-supplier-invoice-number="{{ row.supplier_invoice_number|default:'' }}"
                                     data-supplier-bill-amount="{{ row.supplier_bill_amount|default:'' }}"
+                                    data-po-value="{{ row.po_value|default:0 }}"
+                                    data-rate-per-unit="{{ row.rate_per_unit|default:0 }}"
                                     data-bill-attachment-url="{% if row.bill_attachment %}{{ row.bill_attachment.url }}{% endif %}"
                                     data-bill-attachment-name="{% if row.bill_attachment %}{{ row.bill_attachment.name|slice:'15:' }}{% endif %}">
                                     {% if row.status == 'delivered' %}Closed{% elif row.status == 'cancelled' %}Cancelled{% else %}Inward{% endif %}
@@ -174,6 +176,10 @@
                 <div class="mb-3">
                     <label for="supplierInwardBillAmount" class="form-label">Supplier Bill Amount (₹) <span class="text-danger">*</span></label>
                     <input type="number" id="supplierInwardBillAmount" class="form-control" step="0.01" min="0.01" placeholder="0.00" tabindex="6">
+                    <div id="supplierInwardPriceMismatchWarning" class="alert alert-warning py-1 px-2 mt-2 small" style="display: none; font-weight: 500;">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        <span>Warning: Entered bill amount (<strong id="enteredBillAmtDisplay">₹0.00</strong>) does not match the PO value (<strong id="expectedPoValDisplay">₹0.00</strong>).</span>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label for="supplierInwardBillAttachment" class="form-label">Bill Attachment <span class="text-danger">*</span></label>
@@ -551,6 +557,28 @@ function postSupplierInwardUpdate(row, buttonElement, receivedQuantity, okQuanti
     });
 }
 
+function checkPriceMismatchWarning() {
+    const warningEl = document.getElementById('supplierInwardPriceMismatchWarning');
+    if (!warningEl || !pendingSupplierInward) return false;
+
+    const billAmountInput = document.getElementById('supplierInwardBillAmount');
+    const billAmountVal = parseFloat(billAmountInput ? billAmountInput.value.trim() : '0');
+    const expectedPoVal = parseFloat(pendingSupplierInward.poValue || '0');
+
+    if (billAmountInput && billAmountInput.value.trim() !== '' && !isNaN(billAmountVal) && expectedPoVal > 0) {
+        if (Math.abs(billAmountVal - expectedPoVal) > 0.01) {
+            const enteredEl = document.getElementById('enteredBillAmtDisplay');
+            const expectedEl = document.getElementById('expectedPoValDisplay');
+            if (enteredEl) enteredEl.textContent = `₹${billAmountVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            if (expectedEl) expectedEl.textContent = `₹${expectedPoVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            warningEl.style.display = 'block';
+            return true;
+        }
+    }
+    warningEl.style.display = 'none';
+    return false;
+}
+
 function showFirstTimeInwardModal() {
     const orderedQty = pendingSupplierInward.orderedQty;
     document.getElementById('supplierInwardOrderedQty').value = orderedQty;
@@ -593,6 +621,7 @@ function showFirstTimeInwardModal() {
     
     updateInwardFieldsState();
     toggleSupplierInwardReason();
+    checkPriceMismatchWarning();
     validateSupplierInwardLive();
     new bootstrap.Modal(document.getElementById('supplierInwardModal')).show();
 }
@@ -610,6 +639,8 @@ document.addEventListener('click', function (e) {
     const supplierBillAmount = e.target.dataset.supplierBillAmount || '';
     const billAttachmentUrl = e.target.dataset.billAttachmentUrl || '';
     const billAttachmentName = e.target.dataset.billAttachmentName || '';
+    const poValue = parseFloat(e.target.dataset.poValue || (row.children[9] ? row.children[9].textContent.trim() : '0') || '0');
+    const ratePerUnit = parseFloat(e.target.dataset.ratePerUnit || '0');
 
     pendingSupplierInward = {
         row: row,
@@ -623,7 +654,9 @@ document.addEventListener('click', function (e) {
         supplierInvoiceNumber: supplierInvoiceNumber,
         supplierBillAmount: supplierBillAmount,
         billAttachmentUrl: billAttachmentUrl,
-        billAttachmentName: billAttachmentName
+        billAttachmentName: billAttachmentName,
+        poValue: poValue,
+        ratePerUnit: ratePerUnit
     };
 
     if (receivedQty > 0 && status !== 'closed' && status !== 'cancelled') {
@@ -908,6 +941,7 @@ function updateReworkFieldsState() {
                     updateInwardFieldsState();
                 }
                 toggleSupplierInwardReason();
+                checkPriceMismatchWarning();
                 validateSupplierInwardLive();
             });
         }
@@ -1003,7 +1037,7 @@ document.getElementById('reworkReceivedQty').addEventListener('change', function
 document.getElementById('saveSupplierInwardBtn').addEventListener('click', function () {
     if (!pendingSupplierInward) return;
 
-    if (!validateSupplierInwardLive()) {
+    if (!validateSupplierInwardLive(true)) {
         return;
     }
     const values = getSupplierInwardValues();
