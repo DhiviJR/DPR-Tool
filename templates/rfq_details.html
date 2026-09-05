@@ -1749,7 +1749,8 @@ function renderDefaultTerms(rfq, currentCustomTerms) {
     container.innerHTML = '';
 
     const validTerms = (currentCustomTerms || []).map(t => String(t).trim()).filter(Boolean);
-    const termsToRender = validTerms.length > 0 ? validTerms : getDefaultTerms(rfq);
+    const rfqTerms = (rfq && rfq.latest_quotation_terms) ? rfq.latest_quotation_terms : null;
+    const termsToRender = validTerms.length > 0 ? validTerms : (rfqTerms && rfqTerms.length > 0 ? rfqTerms : getDefaultTerms(rfq));
 
     termsToRender.forEach(termText => addTermRow(termText));
 }
@@ -1844,6 +1845,15 @@ if (prepareQuoteFormEl) {
             }
             return;
         }
+
+        window.activeNewEmailQuotationParams = {
+            productIds: productIds,
+            supplierPriceIds: supplierPriceIds,
+            mesRates: mesRates,
+            deliveryWeeks: deliveryWeeks,
+            installationCharge: installationCharge,
+            customTerms: customTerms
+        };
 
         // Populate quotation email form (New Email mode)
         const emailForm = document.getElementById('quotationEmailForm');
@@ -1955,6 +1965,8 @@ function openEditQuotationModal(mode, targetRfqId = null) {
                 installationCharge: icInput ? icInput.value : '',
                 customTerms: ctInputs.map(i => i.value)
             };
+        } else if (window.activeNewEmailQuotationParams) {
+            currentParams = window.activeNewEmailQuotationParams;
         }
     }
 
@@ -3543,6 +3555,7 @@ function openReplyComposer(msg) {
             (qP.mesRates || []).forEach(r => qParams.append('mes_rates', r));
             if (qP.deliveryWeeks) qParams.append('delivery_weeks', qP.deliveryWeeks);
             if (qP.installationCharge) qParams.append('installation_charge', qP.installationCharge);
+            (qP.customTerms || []).forEach(t => qParams.append('custom_terms', t));
         }
         const qs = qParams.toString();
         previewBtn.href = `/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`;
@@ -3676,6 +3689,10 @@ document.getElementById('emailReplyForm')?.addEventListener('submit', function(e
         (qP.mesRates || []).forEach(r => formData.append('mes_rates', r));
         if (qP.deliveryWeeks) formData.append('delivery_weeks', qP.deliveryWeeks);
         if (qP.installationCharge) formData.append('installation_charge', qP.installationCharge);
+        (qP.customTerms || []).forEach(t => {
+            formData.append('custom_terms', t);
+            formData.append('quotation_terms', t);
+        });
     }
 
     fetch(`/rfq/${rfqId}/send-reply/`, {
