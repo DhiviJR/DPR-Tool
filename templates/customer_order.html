@@ -378,6 +378,8 @@
                                     <option value="PRG" {% if p.product_type == 'PRG' %}selected{% endif %}>PRG</option>
                                     <option value="SPPG" {% if p.product_type == 'SPPG' %}selected{% endif %}>SPPG</option>
                                     <option value="SPRG" {% if p.product_type == 'SPRG' %}selected{% endif %}>SPRG</option>
+                                    <option value="Wear Check Plug" {% if p.product_type == 'Wear Check Plug' %}selected{% endif %}>Wear Check Plug</option>
+                                    <option value="Wear Check Ring" {% if p.product_type == 'Wear Check Ring' %}selected{% endif %}>Wear Check Ring</option>
                                 </select>
                             </td>
                             <td>
@@ -460,6 +462,8 @@
                                     <option value="PRG">PRG</option>
                                     <option value="SPPG">SPPG</option>
                                     <option value="SPRG">SPRG</option>
+                                    <option value="Wear Check Plug">Wear Check Plug</option>
+                                    <option value="Wear Check Ring">Wear Check Ring</option>
                                 </select>
                             </td>
                             <td>
@@ -604,7 +608,8 @@ if (poInputEl) {
 const productTypesList = [
     "APG", "ARG",
     "Multi-Gauge", "unit Std Air", "unit SPC Air", "unit Std lvdt", "unit SPC lvdt",
-    "AMC", "Service", "Spares", "TPG", "TRG", "STPG", "STRG", "PPG", "PRG", "SPPG", "SPRG"
+    "AMC", "Service", "Spares", "TPG", "TRG", "STPG", "STRG", "PPG", "PRG", "SPPG", "SPRG",
+    "Wear Check Plug", "Wear Check Ring"
 ];
 
 function generateProductRow(index, p = {}) {
@@ -776,8 +781,9 @@ function loadCustomerQuotations() {
         cb.value = value;
         cb.checked = checked;
         cb.dataset.preparedNotEmailed = preparedNotEmailed ? 'true' : 'false';
-        if (previewUrl) {
-            cb.dataset.previewUrl = previewUrl;
+        const finalPreviewUrl = previewUrl || (window.customQuotePreviewUrls ? window.customQuotePreviewUrls[value] : null);
+        if (finalPreviewUrl) {
+            cb.dataset.previewUrl = finalPreviewUrl;
         }
         cb.addEventListener('change', () => {
             updateDisplay();
@@ -793,15 +799,15 @@ function loadCustomerQuotations() {
         label.appendChild(span);
         item.appendChild(label);
 
-        if (previewUrl) {
+        if (finalPreviewUrl) {
             const previewBtn = document.createElement('a');
-            previewBtn.href = previewUrl;
+            previewBtn.href = finalPreviewUrl;
             previewBtn.target = '_blank';
             previewBtn.className = 'btn btn-sm btn-outline-primary py-0 px-2 ms-2 text-nowrap quote-item-preview-btn';
             previewBtn.style.fontSize = '12px';
             previewBtn.style.borderRadius = '5px';
             previewBtn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
-            previewBtn.title = 'Preview Generated Quotation PDF';
+            previewBtn.title = 'Preview Quotation';
             previewBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
@@ -857,15 +863,13 @@ function loadCustomerQuotations() {
                     );
                 });
 
-                // Preserve previously selected quotes when editing existing DPR
-                const isEditPage = '{% if is_edit %}true{% else %}false{% endif %}' === 'true';
-                if (isEditPage) {
-                    selectedQuotes.forEach(q => {
-                        if (!fetchedQuotes.includes(q)) {
-                            addCheckbox(q, q, true);
-                        }
-                    });
-                }
+                // Preserve all previously selected/attached quotes so they are never silently wiped out
+                selectedQuotes.forEach(q => {
+                    if (!fetchedQuotes.includes(q)) {
+                        const customUrl = (window.customQuotePreviewUrls ? window.customQuotePreviewUrls[q] : null);
+                        addCheckbox(q, q, true, false, customUrl);
+                    }
+                });
 
                 updateDisplay();
             }
@@ -1575,6 +1579,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 saveQuotationBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Add Quotation';
 
                 if (data.status === 'success') {
+                    if (!window.customQuotePreviewUrls) window.customQuotePreviewUrls = {};
+                    if (data.preview_url) {
+                        window.customQuotePreviewUrls[data.quotation_number] = data.preview_url;
+                    }
+
                     // Set quotation input
                     const quoteInput = document.getElementById('quotationNumberInput');
                     if (quoteInput) quoteInput.value = data.quotation_number;

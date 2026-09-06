@@ -398,175 +398,8 @@
                 </div>
 
                 <form id="productParamsForm" novalidate>
-                    <div class="row g-3">
-                        <!-- Size -->
-                        <div class="col-md-4" id="grp_param_size">
-                            <label class="form-label small fw-semibold">Size <span class="text-danger">*</span></label>
-                            <input type="text" id="param_size" class="form-control form-control-sm" placeholder="e.g. 10.00 mm">
-                        </div>
-
-                        <!-- Material -->
-                        <div class="col-md-4" id="grp_param_material">
-                            <label class="form-label small fw-semibold">Material <span class="text-danger">*</span></label>
-                            <select id="param_material" class="form-select form-select-sm">
-                                <option value="">Select Material</option>
-                                <option value="Steel">Steel</option>
-                                <option value="Carbide">Carbide</option>
-                                <option value="D2">D2</option>
-                            </select>
-                        </div>
-
-                        <!-- Measuring Land (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_measuring_load">
-                            <label class="form-label small fw-semibold">Measuring Land <span class="text-danger">*</span></label>
-                            <input type="text" id="param_measuring_load" class="form-control form-control-sm" placeholder="e.g. Standard">
-                        </div>
-
-                        <!-- Type of ID (APG only) -->
-                        <div class="col-md-4" id="grp_type_of_id">
-                            <label class="form-label small fw-semibold">Type of ID <span class="text-danger">*</span></label>
-                            <select id="param_type_of_id" class="form-select form-select-sm">
-                                <option value="">Select Type</option>
-                                <option value="Blind">Blind</option>
-                                <option value="Through">Through</option>
-                            </select>
-                        </div>
-
-                        <!-- Type of OD (ARG only) -->
-                        <div class="col-md-4 d-none" id="grp_type_of_od">
-                            <label class="form-label small fw-semibold">Type of OD <span class="text-danger">*</span></label>
-                            <select id="param_type_of_od" class="form-select form-select-sm">
-                                <option value="">Select Type</option>
-                                <option value="Plain">Plain</option>
-                                <option value="Stepper">Stepper</option>
-                            </select>
-                        </div>
-
-                        <!-- Depth Collar (APG only) -->
-                        <div class="col-md-4" id="grp_depth_collar">
-                            <label class="form-label small fw-semibold">Depth Collar <span class="text-danger">*</span></label>
-                            <select id="param_depth_collar" class="form-select form-select-sm">
-                                <option value="">Select</option>
-                                <option value="Yes">Yes</option>
-                                <option value="No">No</option>
-                            </select>
-                        </div>
-
-                        <!-- Extension (APG only) -->
-                        <div class="col-md-4" id="grp_extension">
-                            <label class="form-label small fw-semibold">Extension <span class="text-danger">*</span></label>
-                            <input type="text" id="param_extension" class="form-control form-control-sm" placeholder="e.g. 50 mm">
-                        </div>
-
-                        <!-- Jet from Face (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_jet_from_face">
-                            <label class="form-label small fw-semibold">Jet from Face <span class="text-danger">*</span></label>
-                            <input type="text" id="param_jet_from_face" class="form-control form-control-sm" placeholder="e.g. 3 mm">
-                        </div>
-
-                        <!-- No. of Jets (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_no_of_jets">
-                            <label class="form-label small fw-semibold">No. of Jets <span class="text-danger">*</span></label>
-                            <input type="text" id="param_no_of_jets" class="form-control form-control-sm" placeholder="e.g. 2">
-                        </div>
-
-                        <!-- Module (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_module">
-                            <label class="form-label small fw-semibold">Module <span class="text-danger">*</span></label>
-                            <select id="param_module" class="form-select form-select-sm">
-                                <option value="">Select Module</option>
-                                <option value="1A">1A</option>
-                                <option value="2A">2A</option>
-                                <option value="1.5 mm">1.5 mm</option>
-                                <option value="1 mm">1 mm</option>
-                            </select>
-                        </div>
-
-                        <!-- Gauge Type (APG/ARG) -->
-                        <div class="col-md-4 apg-arg-field" id="grp_gauge_type">
-                            <label class="form-label small fw-semibold">Gauge Type <span class="text-danger">*</span></label>
-                            <select id="param_gauge_type" class="form-select form-select-sm">
-                                <option value="">Select Gauge Type</option>
-                                <option value="Hand held">Hand held</option>
-                                <option value="Unit mount">Unit mount</option>
-                                <option value="Bench mount">Bench mount</option>
-                            </select>
-                        </div>
-
-                        <!-- Bench Mount Details (Conditional) -->
-                        <div class="col-md-4 d-none apg-arg-field" id="grp_bench_mount_details">
-                            <label class="form-label small fw-semibold text-primary">Bench Mount Details <span class="text-danger">*</span></label>
-                            <input type="text" id="param_bench_mount_details" class="form-control form-control-sm" placeholder="Enter Bench Mount details">
-                        </div>
-
-                        <!-- Unit Std Air Specific Fields -->
-                        <div class="col-md-6 unit-air-field d-none" id="grp_unit_product_name">
-                            <label class="form-label small fw-semibold">Product Name <span class="text-danger">*</span></label>
-                            <input type="text" id="param_unit_product_name" class="form-control form-control-sm" placeholder="Product Name">
-                        </div>
-
-                        <div class="col-md-6 unit-air-field d-none" id="grp_unit_principle">
-                            <label class="form-label small fw-semibold">Unit Principle <span class="text-danger">*</span></label>
-                            <select id="param_unit_principle" class="form-select form-select-sm">
-                                <option value="">Select Unit Principle</option>
-                                <option value="Electronic Piezo">Electronic Piezo</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-4 unit-air-field d-none" id="grp_unit_display">
-                            <label class="form-label small fw-semibold">Display <span class="text-danger">*</span></label>
-                            <select id="param_unit_display" class="form-select form-select-sm">
-                                <option value="">Select Display</option>
-                                <option value="GUC">GUC</option>
-                                <option value="Tri Color (RYG)">Tri Color (RYG)</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-4 unit-air-field d-none" id="grp_unit_module">
-                            <label class="form-label small fw-semibold">Module <span class="text-danger">*</span></label>
-                            <select id="param_unit_module" class="form-select form-select-sm">
-                                <option value="">Select Module</option>
-                                <option value="Module 1A">Module 1A</option>
-                                <option value="1A">1A</option>
-                                <option value="2A">2A</option>
-                                <option value="1.5 mm">1.5 mm</option>
-                                <option value="1 mm">1 mm</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-4 unit-air-field d-none" id="grp_unit_least_count">
-                            <label class="form-label small fw-semibold">Least Count <span class="text-danger">*</span></label>
-                            <select id="param_unit_least_count" class="form-select form-select-sm">
-                                <option value="">Select Least Count</option>
-                                <option value="0.0001, 0.0001">0.0001, 0.0001</option>
-                                <option value="0.0001, 0.0005, 0.0001">0.0001, 0.0005, 0.0001</option>
-                                <option value="0.0001">0.0001</option>
-                                <option value="0.0005">0.0005</option>
-                                <option value="0.001">0.001</option>
-                            </select>
-                        </div>
-
-                        <div class="col-12 unit-air-field d-none" id="grp_unit_features">
-                            <label class="form-label small fw-semibold">Features & Accessories <span class="text-danger">*</span></label>
-                            <textarea id="param_unit_features" class="form-control form-control-sm" rows="3" placeholder="Least Count 0.0001, 0.0005, 0.0001 / RS232 / Programs/ Calibration Error / O-R Option/ Air Dryer and Draining Filter / Hand Held Adapter/Unit Cover"></textarea>
-                        </div>
-
-                        <div class="col-12 unit-air-field d-none" id="grp_unit_additional_features">
-                            <label class="form-label small fw-semibold">Additional Features <span class="text-danger">*</span></label>
-                            <textarea id="param_unit_additional_features" class="form-control form-control-sm" rows="3" placeholder="a. SPC, b. Live Run Chart, c. Data Storage (8GB) and Re-check, d. Key Board enabling, e. Operator Shift details, f. Relay Output"></textarea>
-                        </div>
-
-                        <!-- Engraving Details -->
-                        <div class="col-md-6" id="grp_engraving_details">
-                            <label class="form-label small fw-semibold">Engraving Details <span class="text-danger">*</span></label>
-                            <input type="text" id="param_engraving_details" class="form-control form-control-sm" placeholder="e.g. Marking text">
-                        </div>
-
-                        <!-- Remarks -->
-                        <div class="col-12" id="grp_remarks">
-                            <label class="form-label small fw-semibold">Specification Remarks <span class="text-danger">*</span></label>
-                            <textarea id="param_remarks" class="form-control form-control-sm" rows="2" placeholder="Additional specifications or remarks"></textarea>
-                        </div>
+                    <div class="row g-3" id="dynamicParamsContainer">
+                        <!-- Dynamically generated specification fields from Product Type Master -->
                     </div>
                 </form>
             </div>
@@ -877,71 +710,184 @@
     </div>
 </div>
 
+<style>
+#prepareQuotationModal .modal-body {
+    overflow-y: auto !important;
+    max-height: calc(100vh - 110px);
+}
+#prepareQuotationModal .modal-body::-webkit-scrollbar {
+    width: 12px;
+}
+#prepareQuotationModal .modal-body::-webkit-scrollbar-track {
+    background: #cbd5e1;
+    border-radius: 6px;
+}
+#prepareQuotationModal .modal-body::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 6px;
+    border: 2px solid #cbd5e1;
+}
+#prepareQuotationModal .modal-body::-webkit-scrollbar-thumb:hover {
+    background: #0f172a;
+}
+</style>
+
 <div class="modal fade" id="prepareQuotationModal" tabindex="-1" aria-labelledby="prepareQuotationModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <form method="post" action="" id="prepareQuotationForm">
+    <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
+        <div class="modal-content border-0">
+            <form method="post" action="" id="prepareQuotationForm" class="d-flex flex-column h-100 mb-0" data-no-loader="true">
                 {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title" id="prepareQuotationModalLabel">Prepare Quotation</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="modal-header bg-dark text-white py-2 px-3 flex-shrink-0">
+                    <h5 class="modal-title fs-6" id="prepareQuotationModalLabel"><i class="bi bi-file-earmark-text me-2"></i>Edit Quotation Document</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-striped align-middle" id="prepareQuotationTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width: 60px;">S.No</th>
-                                    <th>Products</th>
-                                    <th style="width: 100px;">Quantity</th>
-                                    <th style="width: 130px;">Rate per unit</th>
-                                    <th style="width: 130px;">Supplier value</th>
-                                    <th style="width: 150px;">MES profit percentage</th>
-                                    <th style="width: 150px;">MES Rate per unit</th>
-                                    <th style="width: 150px;">MES value</th>
-                                    <th style="width: 60px;">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Rows will be added dynamically by JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="d-flex align-items-center justify-content-between mt-2">
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="prepareQuotationAddRowBtn">
-                            <i class="bi bi-plus-lg me-1"></i>Add Product Row
-                        </button>
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="d-flex align-items-center d-none" id="installationChargeFieldContainer">
-                                <label for="installationChargeInput" class="form-label mb-0 me-2 fw-bold">Installation Charge :</label>
-                                <div class="input-group input-group-sm" style="width: 130px;">
-                                    <input type="number" class="form-control" name="installation_charge" id="installationChargeInput" min="0" placeholder="e.g. 5000">
-                                    <span class="input-group-text">Rs.</span>
-                                </div>
+                <div class="modal-body bg-secondary-subtle p-3 flex-grow-1">
+                    <!-- Complete Quotation Paper Document Container -->
+                    <div class="quote-paper shadow border bg-white p-4 mx-auto" style="max-width: 960px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 0.84rem; color: #111; border-radius: 4px;">
+                        
+                        <!-- Header Row -->
+                        <div class="row align-items-center pb-2 mb-2 border-bottom border-dark border-2">
+                            <div class="col-auto">
+                                {% load static %}
+                                <img src="{% static 'images/mes_logo.jpg' %}" alt="MES Logo" style="max-height: 65px; width: auto;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                <div class="bg-dark text-white fw-bold px-3 py-2 fs-4 text-center rounded" style="display:none;">MES</div>
                             </div>
-                            <div class="d-flex align-items-center d-none" id="deliveryTimeFieldContainer">
-                                <label for="deliveryWeeksInput" class="form-label mb-0 me-2 fw-bold">Delivery time :</label>
-                                <div class="input-group input-group-sm" style="width: 130px;">
-                                    <input type="number" class="form-control" name="delivery_weeks" id="deliveryWeeksInput" min="1" value="3" required>
-                                    <span class="input-group-text">Weeks</span>
+                            <div class="col text-center">
+                                <h5 class="fw-bold mb-1 text-uppercase text-dark" style="letter-spacing: 0.5px; font-size: 1.15rem;">METROLOGY ENGINEERING SOLUTIONS</h5>
+                                <div style="font-size: 0.76rem; line-height: 1.35; color: #333;">
+                                    NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar, 2nd Cross, Dharga, Opp. Sathya Mess, Hosur, Krishnagiri, TN - 635109<br>
+                                    Phone: +91-965-577-8807 / +91-965-577-8871 | Email: {{ DEFAULT_FROM_EMAIL|default:"mesinstruments@gmail.com" }}<br>
+                                    GST: 33ABKFM1033E1ZS | PAN: ABKFM1033E | Web: www.mesinstruments.co.in
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <datalist id="rfqProductsDatalist">
-                        <!-- Populated dynamically based on RFQ products -->
-                    </datalist>
+
+                        <!-- Document Reference Bar -->
+                        <div class="d-flex justify-content-between align-items-center py-1 px-3 bg-light border-bottom mb-3 fw-bold" style="font-size: 0.82rem;">
+                            <div>Quote No: <span id="docQuoteNo" class="text-primary fw-bold">MES/QT/2026</span></div>
+                            <div>Date: <span id="docQuoteDate">02-09-2026</span></div>
+                        </div>
+
+                        <!-- Document Title -->
+                        <h5 class="text-center fw-bold text-decoration-underline mb-3" style="font-size: 1.05rem;">Quotation (Confidential)</h5>
+
+                        <!-- Customer & Enquiry Info -->
+                        <div class="row mb-3 g-2" style="font-size: 0.82rem;">
+                            <div class="col-md-7">
+                                <div class="fw-bold text-dark">To:</div>
+                                <div class="fw-bold fs-6 text-dark" id="docCustomerName">M/s. Customer Name</div>
+                                <div id="docCustomerAddress" class="text-secondary mb-1">Address details...</div>
+                                <div><span class="fw-semibold">GSTIN:</span> <span id="docCustomerGstin">-</span></div>
+                                <div><span class="fw-semibold">Phone:</span> <span id="docCustomerPhone">-</span> | <span class="fw-semibold">Email:</span> <span id="docCustomerEmail">-</span></div>
+                            </div>
+                            <div class="col-md-5 text-end">
+                                <div class="bg-light p-2 border rounded">
+                                    <div><span class="fw-semibold">Enquiry No:</span> <span id="docEnquiryNo" class="badge bg-secondary">RFQ #</span></div>
+                                    <div class="mt-1"><span class="fw-semibold">Payment Terms:</span> <span id="docPaymentTerms" class="text-dark fw-bold">30 Days</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Greeting -->
+                        <div class="mb-3" style="font-size: 0.82rem;">
+                            <div class="fw-semibold">Dear Sir,</div>
+                            <div class="ps-3 text-muted">
+                                As per your enquiry, we are glad to submit our best offer. Assuring of our best and prompt services at all times.
+                            </div>
+                        </div>
+
+                        <!-- Your Investment Section -->
+                        <div class="my-3">
+                            <h6 class="fw-bold text-center text-decoration-underline mb-2" style="font-size: 0.95rem;">Your Investment</h6>
+                            <div class="table-responsive">
+                                <table class="table table-bordered align-middle mb-1" id="prepareQuotationTable" style="font-size: 0.8rem;">
+                                    <thead style="background-color: #a7d3ef; color: #000;">
+                                        <tr class="text-center align-middle">
+                                            <th style="width: 40px;">S.No</th>
+                                            <th style="width: 110px;">Product Type</th>
+                                            <th>Description & Specifications</th>
+                                            <th style="width: 65px;">Qty</th>
+                                            <th style="width: 65px;">Unit</th>
+                                            <th style="width: 190px;">Rate & Profit (Rs.)</th>
+                                            <th style="width: 110px;">Total (Rs.)</th>
+                                            <th style="width: 40px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Rows populated dynamically by JS -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-secondary fw-bold">
+                                            <td colspan="6" class="text-end pe-3">Total Investment (Excl. GST):</td>
+                                            <td class="text-end text-success fs-6 fw-bold" id="prepareQuotationGrandTotal">₹ 0.00</td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div class="d-flex justify-content-end align-items-center mt-2">
+                                <div id="prepareQuotationWarning" class="alert alert-warning py-1 px-2 mb-0 small d-none fw-bold" style="font-size:0.75rem;">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Profit below 25% detected on row(s).
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Our Terms & Conditions Section -->
+                        <div class="mt-4 pt-2 border-top">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold text-decoration-underline mb-0" style="font-size: 0.9rem;">Our Terms & Conditions</h6>
+                                <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" id="addCustomTermBtn" style="font-size:0.75rem;">
+                                    <i class="bi bi-plus-lg me-1"></i>Add Term
+                                </button>
+                            </div>
+
+                            <div class="row g-2 mb-2 p-2 bg-light border rounded" style="font-size: 0.8rem;">
+                                <div class="col-md-6" id="deliveryTimeFieldContainer">
+                                    <div class="d-flex align-items-center">
+                                        <label for="deliveryWeeksInput" class="fw-bold me-2 mb-0">Delivery Time:</label>
+                                        <div class="input-group input-group-sm" style="width: 130px;">
+                                            <input type="number" class="form-control" name="delivery_weeks" id="deliveryWeeksInput" min="1" value="3" required>
+                                            <span class="input-group-text">Weeks</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6" id="installationChargeFieldContainer">
+                                    <div class="d-flex align-items-center">
+                                        <label for="installationChargeInput" class="fw-bold me-2 mb-0">Installation Charge:</label>
+                                        <div class="input-group input-group-sm" style="width: 140px;">
+                                            <span class="input-group-text">Rs.</span>
+                                            <input type="number" class="form-control" name="installation_charge" id="installationChargeInput" min="0" placeholder="0">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Editable Terms & Conditions List -->
+                            <div id="termsListContainer" class="d-flex flex-column gap-1">
+                                <!-- Populated dynamically by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Authorized Signatory Footer -->
+                        <div class="d-flex justify-content-end text-end mt-4 pt-3 border-top">
+                            <div>
+                                <div class="fw-bold text-dark" style="font-size: 0.85rem;">For METROLOGY ENGINEERING SOLUTIONS</div>
+                                <div class="mt-4 pt-2 text-muted small" style="font-size:0.75rem;">[ Authorized Signatory ]</div>
+                            </div>
+                        </div>
+
+                    </div><!-- end quote-paper -->
+                    <datalist id="rfqProductsDatalist"></datalist>
                 </div>
-                <div class="modal-footer d-flex flex-column align-items-end">
-                    <div id="prepareQuotationWarning" class="alert alert-warning py-1 px-2 mb-2 small d-none" style="font-weight: 500;">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i>your entering below 25% is that really ok
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success" id="prepareQuotationSubmitBtn">
-                            Submit
-                        </button>
-                    </div>
+                <div class="modal-footer bg-light py-2 px-3 flex-shrink-0 border-top">
+                    <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-3 fw-bold" id="downloadQuotationPdfModalBtn">
+                        <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+                    </button>
+                    <button type="submit" class="btn btn-success btn-sm px-4 fw-bold" id="prepareQuotationSubmitBtn">
+                        <i class="bi bi-check-circle me-1"></i>Save & Update Attachment
+                    </button>
                 </div>
             </form>
         </div>
@@ -987,10 +933,13 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" id="editQuotationAttachmentBtn">
+                        <i class="bi bi-pencil-square me-1"></i>Edit Quotation
+                    </button>
                     <button type="button" class="btn btn-outline-primary" id="previewQuotationAttachmentBtn">
                         <i class="bi bi-eye me-1"></i>Preview Attachment
                     </button>
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" class="btn btn-primary" id="sendQuotationEmailSubmitBtn">
                         <i class="bi bi-send me-1"></i>Send Email
                     </button>
                 </div>
@@ -1167,11 +1116,18 @@
                                             <textarea name="body" id="replyBody" class="form-control form-control-sm flex-grow-1" rows="10" style="min-height: 220px; font-size:0.9rem; line-height:1.5; resize: vertical;" required placeholder="Type your reply..."></textarea>
                                         </div>
                                         <div class="col-12 mt-2">
-                                            <div class="alert alert-info py-1 px-2 mb-1" id="replyAutoAttachmentNote" style="font-size:0.78rem;">
-                                                <i class="bi bi-info-circle me-1"></i>Latest prepared quotation PDF will be attached automatically to this reply.
-                                                <a href="#" id="previewReplyQuotationPdfBtn" target="_blank" class="fw-bold ms-2 text-decoration-none">
-                                                    <i class="bi bi-file-earmark-pdf me-1"></i>Preview Quotation PDF
-                                                </a>
+                                            <div class="alert alert-info py-1 px-2 mb-1 d-flex align-items-center justify-content-between flex-wrap gap-1" id="replyAutoAttachmentNote" style="font-size:0.78rem;">
+                                                <div>
+                                                    <i class="bi bi-info-circle me-1"></i>Latest prepared quotation PDF will be attached automatically to this reply.
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <a href="#" id="previewReplyQuotationPdfBtn" target="_blank" class="fw-bold text-decoration-none">
+                                                        <i class="bi bi-file-earmark-pdf me-1"></i>Preview Quotation PDF
+                                                    </a>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold" id="editReplyQuotationBtn" style="font-size:0.75rem;">
+                                                        <i class="bi bi-pencil-square me-1"></i>Edit Quotation
+                                                    </button>
+                                                </div>
                                             </div>
                                             <label class="form-label" style="font-size:0.8rem;">Additional Attachment (Optional)</label>
                                             <input type="file" name="reply_attachment" id="replyAttachment" class="form-control form-control-sm">
@@ -1196,11 +1152,24 @@
 </div>
 
 {{ rfq_payloads|json_script:"rfq-data" }}
+{{ product_types_specs_data|json_script:"product-types-specs-data" }}
+{% endblock %}
 
-
+{% block extra_js %}
 <script src="{% static 'js/po-table-tools.js' %}?v=3"></script>
 <script>
 const rfqData = JSON.parse(document.getElementById('rfq-data').textContent);
+const initialProductTypeSpecs = JSON.parse(document.getElementById('product-types-specs-data')?.textContent || '{}');
+const allProductTypeSpecs = { ...initialProductTypeSpecs };
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
 function buildQuotationEmailBody(rfq, selectedItems) {
     const selectedSet = new Set(selectedItems.productIds.map(value => String(value)));
     const selectedProducts = (rfq.products || []).filter(product => selectedSet.has(String(product.id)));
@@ -1236,12 +1205,21 @@ function buildQuotationEmailBody(rfq, selectedItems) {
 }
 
 function ensureSupplierPriceSelection(row, rfq) {
-    const checkboxes = row.querySelectorAll('.rfq-quotation-product:not(:disabled)');
+    const allCheckboxes = row.querySelectorAll('.rfq-quotation-product:not(:disabled)');
+    const anyChecked = Array.from(allCheckboxes).some(cb => cb.checked);
+
+    // Only if user has NOT checked any checkbox, default to checking all
+    if (!anyChecked) {
+        allCheckboxes.forEach(cb => {
+            cb.checked = true;
+        });
+    }
+
+    const selectedCheckboxes = row.querySelectorAll('.rfq-quotation-product:checked');
     let hasUnselectedMultiSupplier = false;
     const unselectedProductNames = [];
 
-    checkboxes.forEach(cb => {
-        cb.checked = true;
+    selectedCheckboxes.forEach(cb => {
         const productId = cb.value;
         const radios = row.querySelectorAll(`.rfq-quotation-supplier-price[data-product-id="${productId}"]`);
 
@@ -1266,6 +1244,9 @@ function ensureSupplierPriceSelection(row, rfq) {
 }
 
 function openQuotationEmailModal(button) {
+    if (typeof hideLoading === 'function') {
+        hideLoading();
+    }
     const row = button.closest('tr[data-rfq-id]');
     const rfqId = Number(button.dataset.rfqId);
     const rfq = rfqData.find(item => item.id === rfqId);
@@ -1303,58 +1284,13 @@ function openQuotationEmailModal(button) {
 
     row.querySelector('.rfq-quotation-selection-warning')?.remove();
 
-    // Populate and open prepareQuotationModal
     const form = document.getElementById('prepareQuotationForm');
-    form.reset();
-    form.dataset.rfqId = String(rfq.id);
-    form.dataset.mode = 'new';
     form.dataset.hasSentEmail = hasSentEmail ? 'true' : 'false';
 
-    const titleEl = document.getElementById('prepareQuotationModalLabel');
-    if (titleEl) {
-        titleEl.textContent = hasSentEmail ? `Prepare Revised Quotation - ${rfq.rfq_no}` : `Prepare Quotation - ${rfq.rfq_no}`;
-    }
+    const rfqInput = document.getElementById('quotationEmailRfqId');
+    if (rfqInput) rfqInput.value = rfq.id;
 
-    const submitBtn = document.getElementById('prepareQuotationSubmitBtn');
-    if (submitBtn) {
-        submitBtn.innerHTML = '<i class="bi bi-arrow-right-circle me-1"></i>Continue to Compose Email';
-    }
-
-    const tbody = document.querySelector('#prepareQuotationTable tbody');
-    tbody.innerHTML = '';
-    const datalist = document.getElementById('rfqProductsDatalist');
-    if (datalist) {
-        datalist.innerHTML = '';
-        (rfq.products || []).forEach(product => {
-            const option = document.createElement('option');
-            option.value = product.product_name || '';
-            datalist.appendChild(option);
-        });
-    }
-
-    selectedItems.productIds.forEach(productId => {
-        const product = (rfq.products || []).find(item => String(item.id) === String(productId));
-        if (!product) return;
-        let rate = parseFloat(product.rate_per_unit) || 0;
-        let supplierValue = parseFloat(product.value) || 0;
-        let supplierPriceId = '';
-        const checkedSupplierPrice = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${product.id}"]:checked`);
-        if (checkedSupplierPrice) {
-            const supplierPrice = (product.supplier_prices || []).find(price => String(price.id) === String(checkedSupplierPrice.value));
-            if (supplierPrice) {
-                rate = parseFloat(supplierPrice.price) || rate;
-                supplierValue = parseFloat(supplierPrice.value) || supplierValue;
-                supplierPriceId = String(supplierPrice.id);
-            }
-        }
-        addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId);
-    });
-
-    checkDeliveryWeeksVisibility();
-    checkInstallationChargeVisibility();
-    checkProfitWarning();
-
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal')).show();
+    openEditQuotationModal('new', rfq.id);
 }
 
 document.addEventListener('click', function (e) {
@@ -1372,15 +1308,70 @@ document.getElementById('previewQuotationAttachmentBtn')?.addEventListener('clic
     const dwInput = document.querySelector('#quotationEmailProductInputs input[name="delivery_weeks"]');
     const icInput = document.querySelector('#quotationEmailProductInputs input[name="installation_charge"]');
 
+    const termInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="custom_terms"]'));
+
     const params = new URLSearchParams();
     prodInputs.forEach(inp => params.append('product_ids', inp.value));
     spInputs.forEach(inp => params.append('supplier_price_ids', inp.value));
     mesRateInputs.forEach(inp => params.append('mes_rates', inp.value));
     if (dwInput && dwInput.value) params.append('delivery_weeks', dwInput.value);
     if (icInput && icInput.value) params.append('installation_charge', icInput.value);
+    termInputs.forEach(inp => params.append('custom_terms', inp.value));
 
     const qs = params.toString();
     window.open(`/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`, '_blank');
+});
+
+document.getElementById('downloadQuotationPdfModalBtn')?.addEventListener('click', function () {
+    const form = document.getElementById('prepareQuotationForm');
+    if (!form) return;
+    const rfqId = form.dataset.rfqId;
+    if (!rfqId) return;
+
+    const rows = form.querySelectorAll('#prepareQuotationTable tbody tr');
+    if (rows.length === 0) {
+        alert('Please select at least one product row.');
+        return;
+    }
+
+    const params = new URLSearchParams();
+    rows.forEach(row => {
+        const prodIdInput = row.querySelector('input[name="product_ids"]');
+        const spIdInput = row.querySelector('input[name="supplier_price_ids"]');
+        const mesRateInput = row.querySelector('.prepare-quote-mes-rate');
+        const baseRateInput = row.querySelector('.prepare-quote-rate');
+
+        if (prodIdInput && prodIdInput.value) {
+            params.append('product_ids', prodIdInput.value);
+            if (spIdInput && spIdInput.value) params.append('supplier_price_ids', spIdInput.value);
+            const rateVal = mesRateInput && mesRateInput.value ? mesRateInput.value : (baseRateInput ? baseRateInput.value : '0');
+            params.append('mes_rates', rateVal);
+        }
+    });
+
+    const dwInput = document.getElementById('deliveryWeeksInput')?.value || '';
+    const icInput = document.getElementById('installationChargeInput')?.value || '';
+    if (dwInput) params.append('delivery_weeks', dwInput);
+    if (icInput) params.append('installation_charge', icInput);
+
+    const customTerms = Array.from(document.querySelectorAll('#termsListContainer .prepare-quote-term-input'))
+        .map(input => input.value.trim())
+        .filter(Boolean);
+    customTerms.forEach(t => params.append('custom_terms', t));
+
+    const qs = params.toString();
+    window.open(`/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`, '_blank');
+});
+
+document.getElementById('quotationEmailForm')?.addEventListener('submit', function (e) {
+    if (this.checkValidity && !this.checkValidity()) {
+        return;
+    }
+    const submitBtn = document.getElementById('sendQuotationEmailSubmitBtn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Sending Email & Updating Attachment...';
+    }
 });
 
 function getSelectedQuotationItems(row) {
@@ -1436,33 +1427,83 @@ function showQuotationSelectionWarning(row, title, message, className = 'alert-w
     actionCell.appendChild(warning);
 }
 
+function updatePrepareQuotationGrandTotal() {
+    const rows = document.querySelectorAll('#prepareQuotationTable tbody tr');
+    let grandTotal = 0;
+    rows.forEach(row => {
+        const valInput = row.querySelector('.prepare-quote-mes-value');
+        if (valInput) {
+            const val = parseFloat(valInput.value) || 0;
+            grandTotal += val;
+        }
+    });
+    const el = document.getElementById('prepareQuotationGrandTotal');
+    if (el) {
+        el.textContent = '₹ ' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+}
+
 function addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId = '') {
     const tbody = document.querySelector('#prepareQuotationTable tbody');
     const row = document.createElement('tr');
     const index = tbody.rows.length + 1;
-    const quantity = parseFloat(product.quantity) || 0;
+    const quantity = parseFloat(product.quantity) || 1;
     const baseRate = parseFloat(rate) || 0;
     const baseValue = parseFloat(supplierValue) || (quantity * baseRate);
-    const initialMesRate = baseRate > 0 ? baseRate.toFixed(2) : '';
-    const initialMesValue = baseValue > 0 ? baseValue.toFixed(2) : '';
+    const initialMesRate = baseRate > 0 ? baseRate.toFixed(2) : '0.00';
+    const initialMesValue = baseValue > 0 ? baseValue.toFixed(2) : '0.00';
+    const unitStr = product.unit || "No's";
+
+    let specSummary = '';
+    if (product.product_specifications && typeof product.product_specifications === 'object') {
+        const specs = [];
+        for (const [k, v] of Object.entries(product.product_specifications)) {
+            if (v) specs.push(`${k}: ${v}`);
+        }
+        specSummary = specs.join(', ');
+    }
+    if (product.remarks) {
+        specSummary += (specSummary ? ' | Remarks: ' : '') + product.remarks;
+    }
 
     row.innerHTML = `
-        <td class="text-center prepare-quote-serial">${index}</td>
-        <td>
+        <td class="text-center prepare-quote-serial align-top pt-2">${index}</td>
+        <td class="align-top pt-2">
             <input type="hidden" name="product_ids" value="${product.id}">
-            <input type="hidden" class="prepare-quote-product-type" value="${product.product_type || ''}">
+            <input type="hidden" class="prepare-quote-product-type" value="${escapeHtml(product.product_type || '')}">
             ${supplierPriceId ? `<input type="hidden" name="supplier_price_ids" value="${supplierPriceId}">` : ''}
-            <input type="text" class="form-control" value="${escapeHtml(product.product_name || '')}" readonly>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold" style="font-size:0.75rem;">${escapeHtml(product.product_type || 'P0011')}</span>
         </td>
-        <td><input type="number" class="form-control prepare-quote-qty" value="${quantity}" readonly></td>
-        <td><input type="number" step="0.01" class="form-control prepare-quote-rate" value="${baseRate}" readonly></td>
-        <td><input type="number" step="0.01" class="form-control" value="${baseValue}" readonly></td>
-        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-profit" name="mes_profit_percentages" value="" placeholder="0%"></td>
-        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-rate" name="mes_rates" value="${initialMesRate}"></td>
-        <td><input type="number" step="0.01" class="form-control prepare-quote-mes-value" value="${initialMesValue}" readonly></td>
-        <td><button type="button" class="btn btn-outline-danger btn-sm prepare-quote-remove-row"><i class="bi bi-trash"></i></button></td>
+        <td class="align-top">
+            <div class="fw-bold text-dark" style="font-size:0.83rem;">${escapeHtml(product.product_name || '')}</div>
+            ${specSummary ? `<div class="small text-muted" style="font-size:0.74rem;">${escapeHtml(specSummary)}</div>` : ''}
+        </td>
+        <td class="text-center align-top pt-2">
+            <input type="number" class="form-control form-control-sm prepare-quote-qty text-center" value="${quantity}" min="1" style="width: 55px; font-size:0.8rem;">
+        </td>
+        <td class="text-center align-top pt-2">
+            <input type="text" class="form-control form-control-sm prepare-quote-unit text-center" value="${escapeHtml(unitStr)}" style="width: 55px; font-size:0.8rem;">
+        </td>
+        <td class="align-top">
+            <div class="d-flex align-items-center gap-1 mb-1">
+                <span class="small text-muted" style="font-size:0.72rem;">Profit %:</span>
+                <input type="number" step="0.01" class="form-control form-control-sm prepare-quote-mes-profit py-0 px-1 text-center" name="mes_profit_percentages" value="" placeholder="0%" style="width: 70px; font-size:0.78rem;">
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <span class="small fw-semibold" style="font-size:0.72rem;">Rate (₹):</span>
+                <input type="number" step="0.01" class="form-control form-control-sm prepare-quote-mes-rate fw-bold text-success py-0 px-1 text-end" name="mes_rates" value="${initialMesRate}" style="width: 95px; font-size:0.8rem;">
+            </div>
+            <input type="hidden" class="prepare-quote-rate" value="${baseRate}">
+        </td>
+        <td class="text-end align-top pt-2">
+            <input type="number" step="0.01" class="form-control form-control-sm prepare-quote-mes-value text-end fw-bold bg-light" value="${initialMesValue}" readonly style="font-size:0.82rem;">
+        </td>
+        <td class="text-center align-top pt-2">
+            <button type="button" class="btn btn-outline-danger btn-sm p-1 prepare-quote-remove-row" style="font-size:0.75rem;"><i class="bi bi-trash"></i></button>
+        </td>
     `;
     tbody.appendChild(row);
+    updatePrepareQuotationGrandTotal();
 }
 
 document.addEventListener('click', function (e) {
@@ -1534,8 +1575,7 @@ document.addEventListener('click', function (e) {
     checkInstallationChargeVisibility();
     checkProfitWarning();
 
-    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal'));
-    modal.show();
+    openEditQuotationModal('new', rfq.id);
 });
 
 function checkDeliveryWeeksVisibility() {
@@ -1601,13 +1641,17 @@ document.addEventListener('click', function (e) {
         const serial = row.querySelector('.prepare-quote-serial');
         if (serial) serial.textContent = index + 1;
     });
+    updatePrepareQuotationGrandTotal();
     checkDeliveryWeeksVisibility();
     checkInstallationChargeVisibility();
     checkProfitWarning();
 });
 
 document.addEventListener('input', function (e) {
-    if (!e.target.classList.contains('prepare-quote-mes-profit') && !e.target.classList.contains('prepare-quote-mes-rate')) return;
+    if (!e.target.classList.contains('prepare-quote-mes-profit') && 
+        !e.target.classList.contains('prepare-quote-mes-rate') &&
+        !e.target.classList.contains('prepare-quote-qty')) return;
+
     const row = e.target.closest('tr');
     if (!row) return;
 
@@ -1617,7 +1661,10 @@ document.addEventListener('input', function (e) {
     const rateInput = row.querySelector('.prepare-quote-mes-rate');
     const valueInput = row.querySelector('.prepare-quote-mes-value');
 
-    if (e.target.classList.contains('prepare-quote-mes-profit')) {
+    if (e.target.classList.contains('prepare-quote-qty')) {
+        const mesRate = parseFloat(rateInput?.value || 0) || baseRate;
+        if (valueInput) valueInput.value = (quantity * mesRate).toFixed(2);
+    } else if (e.target.classList.contains('prepare-quote-mes-profit')) {
         if (e.target.value.trim() === '') {
             if (rateInput) rateInput.value = baseRate > 0 ? baseRate.toFixed(2) : '';
             if (valueInput) valueInput.value = (quantity * baseRate) > 0 ? (quantity * baseRate).toFixed(2) : '';
@@ -1635,124 +1682,485 @@ document.addEventListener('input', function (e) {
         }
         if (valueInput) valueInput.value = (quantity * customRate) > 0 ? (quantity * customRate).toFixed(2) : '';
     }
+
+    updatePrepareQuotationGrandTotal();
     checkProfitWarning();
 });
 
-document.addEventListener('submit', function (e) {
-    const form = e.target.closest('#prepareQuotationForm');
-    if (!form) return;
-    e.preventDefault();
+function addTermRow(text = '') {
+    const container = document.getElementById('termsListContainer');
+    if (!container) return;
 
-    const rfqId = form.dataset.rfqId;
-    const rfq = rfqData.find(item => String(item.id) === String(rfqId));
-    if (!rfq) return;
+    const div = document.createElement('div');
+    div.className = 'd-flex align-items-center gap-2 mb-1 prepare-quote-term-row';
 
-    const rows = form.querySelectorAll('#prepareQuotationTable tbody tr');
-    if (rows.length === 0) {
-        alert('Please select at least one product row.');
-        return;
-    }
+    const index = container.children.length + 1;
+    div.innerHTML = `
+        <span class="badge bg-light text-dark border prepare-quote-term-num fw-bold" style="min-width: 32px; font-size: 0.78rem;">${index}.</span>
+        <input type="text" class="form-control form-control-sm prepare-quote-term-input" name="custom_terms" value="${escapeHtml(text)}" placeholder="Enter condition details..." style="font-size: 0.8rem;">
+        <button type="button" class="btn btn-outline-danger btn-sm px-2 py-0 prepare-quote-remove-term" style="font-size: 0.75rem;" title="Delete term"><i class="bi bi-trash"></i></button>
+    `;
+    container.appendChild(div);
+}
 
-    const productIds = [];
-    const supplierPriceIds = [];
-    const mesRates = [];
-
-    rows.forEach(row => {
-        const prodIdInput = row.querySelector('input[name="product_ids"]');
-        const spIdInput = row.querySelector('input[name="supplier_price_ids"]');
-        const mesRateInput = row.querySelector('.prepare-quote-mes-rate');
-        const baseRateInput = row.querySelector('.prepare-quote-rate');
-
-        if (prodIdInput && prodIdInput.value) {
-            productIds.push(prodIdInput.value);
-            supplierPriceIds.push(spIdInput ? spIdInput.value : '');
-            const rateVal = mesRateInput && mesRateInput.value ? mesRateInput.value : (baseRateInput ? baseRateInput.value : '0');
-            mesRates.push(rateVal);
-        }
+function renumberTerms() {
+    const container = document.getElementById('termsListContainer');
+    if (!container) return;
+    Array.from(container.children).forEach((row, idx) => {
+        const numSpan = row.querySelector('.prepare-quote-term-num');
+        if (numSpan) numSpan.textContent = (idx + 1) + '.';
     });
+}
 
-    const deliveryWeeks = document.getElementById('deliveryWeeksInput')?.value || '';
-    const installationCharge = document.getElementById('installationChargeInput')?.value || '';
+function getDefaultTerms(rfq) {
+    const payTerms = (rfq && rfq.customer_payment_terms) ? (rfq.customer_payment_terms + ' Days Against Invoice') : '30 Days Against Invoice';
+    const now = new Date();
+    const validTillDate = new Date(now.getTime() + (60 * 24 * 60 * 60 * 1000));
+    const validTillStr = String(validTillDate.getDate()).padStart(2, '0') + '/' + String(validTillDate.getMonth() + 1).padStart(2, '0') + '/' + validTillDate.getFullYear();
 
-    const isReplyMode = form.dataset.mode === 'reply';
+    const dwInput = document.getElementById('deliveryWeeksInput');
+    const deliveryWeeks = dwInput ? dwInput.value : '3';
+    const deliveryStr = deliveryWeeks ? `Delivery : ${deliveryWeeks} Weeks` : 'Delivery : 3 Weeks';
 
-    // Hide prepare quotation modal
-    const modalEl = document.getElementById('prepareQuotationModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
-    if (modal) {
-        modal.hide();
-    }
+    const icInput = document.getElementById('installationChargeInput');
+    const instVal = icInput ? icInput.value.trim() : '';
+    const instStr = (instVal && instVal !== '0') ? `Installation Charge : Rs. ${instVal}` : 'Installation Charge : Nil';
 
-    if (isReplyMode) {
-        window.activeReplyQuotationParams = {
+    return [
+        deliveryStr,
+        `Payment : ${payTerms}`,
+        `Goods & Service Tax(GST) : 18% Extra as Applicable`,
+        `Dispatch Mode : By Courier`,
+        `Packing & Forwarding : 2%`,
+        instStr,
+        `Discount : Negotiable`,
+        `Quotation Validity : This offer is Valid till ${validTillStr}`,
+        `Purchase Order : Purchase Order must be send to mesinstruments@gmail.com`,
+        `Cancellation: Once Order confirmed, orders cannot be cancelled or altered.`,
+        `Force Majeure: The Company is not liable for delay or failure due to natural calamities, strikes, or transport issues.`,
+        `Confidentiality: All technical documents and data shared are confidential and shall not be disclosed without consent.`,
+        `Jurisdiction: All disputes arising out of or in connection with this Quotation shall be settled by arbitration in Chennai, India. in accordance with the Indian Arbitration & Conciliation Act rules. The decision shall be final and binding on both parties.`
+    ];
+}
+
+function renderDefaultTerms(rfq, currentCustomTerms) {
+    const container = document.getElementById('termsListContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const validTerms = (currentCustomTerms || []).map(t => String(t).trim()).filter(Boolean);
+    const rfqTerms = (rfq && rfq.latest_quotation_terms) ? rfq.latest_quotation_terms : null;
+    const termsToRender = validTerms.length > 0 ? validTerms : (rfqTerms && rfqTerms.length > 0 ? rfqTerms : getDefaultTerms(rfq));
+
+    termsToRender.forEach(termText => addTermRow(termText));
+}
+
+const prepareQuoteFormEl = document.getElementById('prepareQuotationForm');
+if (prepareQuoteFormEl) {
+    prepareQuoteFormEl.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (typeof hideLoading === 'function') {
+            hideLoading();
+        }
+
+        const form = this;
+        const rfqId = form.dataset.rfqId;
+        const rfq = (typeof rfqData !== 'undefined') ? rfqData.find(item => String(item.id) === String(rfqId)) : null;
+        if (!rfq) return;
+
+        const rows = form.querySelectorAll('#prepareQuotationTable tbody tr');
+        if (rows.length === 0) {
+            alert('Please select at least one product row.');
+            return;
+        }
+
+        const productIds = [];
+        const supplierPriceIds = [];
+        const mesRates = [];
+
+        rows.forEach(row => {
+            const prodIdInput = row.querySelector('input[name="product_ids"]');
+            const spIdInput = row.querySelector('input[name="supplier_price_ids"]');
+            const mesRateInput = row.querySelector('.prepare-quote-mes-rate');
+            const baseRateInput = row.querySelector('.prepare-quote-rate');
+
+            if (prodIdInput && prodIdInput.value) {
+                productIds.push(prodIdInput.value);
+                supplierPriceIds.push(spIdInput ? spIdInput.value : '');
+                const rateVal = mesRateInput && mesRateInput.value ? mesRateInput.value : (baseRateInput ? baseRateInput.value : '0');
+                mesRates.push(rateVal);
+            }
+        });
+
+        const deliveryWeeks = document.getElementById('deliveryWeeksInput')?.value || '';
+        const installationCharge = document.getElementById('installationChargeInput')?.value || '';
+        const customTerms = Array.from(document.querySelectorAll('#termsListContainer .prepare-quote-term-input'))
+            .map(input => input.value.trim())
+            .filter(Boolean);
+
+        const mode = form.dataset.mode || 'new';
+        const isReplyMode = mode === 'reply' || mode === 'edit_reply';
+        const hasSentEmail = form.dataset.hasSentEmail === 'true';
+
+        // Hide prepare quotation modal
+        const modalEl = document.getElementById('prepareQuotationModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) {
+            modal.hide();
+        }
+
+        if (isReplyMode) {
+            window.activeReplyQuotationParams = {
+                productIds: productIds,
+                supplierPriceIds: supplierPriceIds,
+                mesRates: mesRates,
+                deliveryWeeks: deliveryWeeks,
+                installationCharge: installationCharge,
+                customTerms: customTerms
+            };
+
+            const previewBtn = document.getElementById('previewReplyQuotationPdfBtn');
+            if (previewBtn && rfq.id) {
+                const qParams = new URLSearchParams();
+                productIds.forEach(id => qParams.append('product_ids', id));
+                supplierPriceIds.forEach(id => { if (id) qParams.append('supplier_price_ids', id); });
+                mesRates.forEach(r => qParams.append('mes_rates', r));
+                if (deliveryWeeks) qParams.append('delivery_weeks', deliveryWeeks);
+                if (installationCharge) qParams.append('installation_charge', installationCharge);
+                customTerms.forEach(t => qParams.append('custom_terms', t));
+                const qs = qParams.toString();
+                previewBtn.href = `/rfq/${rfq.id}/quotation/download/${qs ? '?' + qs : ''}`;
+            }
+
+            if (typeof hideLoading === 'function') {
+                hideLoading();
+            }
+
+            const replyComposer = document.getElementById('emailReplyComposer');
+            if (!replyComposer || replyComposer.style.display === 'none') {
+                openEmailChainModalDirect(rfq.id, rfq.rfq_no || ('RFQ #' + rfq.id));
+            } else {
+                const ecModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('emailChainModal'));
+                ecModal.show();
+            }
+            return;
+        }
+
+        window.activeNewEmailQuotationParams = {
             productIds: productIds,
             supplierPriceIds: supplierPriceIds,
             mesRates: mesRates,
             deliveryWeeks: deliveryWeeks,
-            installationCharge: installationCharge
+            installationCharge: installationCharge,
+            customTerms: customTerms
         };
-        openEmailChainModalDirect(rfq.id, rfq.rfq_no || ('RFQ #' + rfq.id));
+
+        // Populate quotation email form (New Email mode)
+        const emailForm = document.getElementById('quotationEmailForm');
+        if (mode !== 'edit_new_email') {
+            emailForm.reset();
+            document.getElementById('quotationEmailRfqId').value = rfq.id;
+            document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
+            const quoteNo = (rfq.quotation_no && rfq.quotation_no !== '-') ? rfq.quotation_no : (rfq.default_quotation_no || rfq.rfq_no || 'RFQ');
+            document.getElementById('quotationEmailSubject').value = `Quotation for ${quoteNo}`;
+            document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, {
+                productIds: productIds,
+                supplierPriceIds: supplierPriceIds.filter(Boolean)
+            });
+        }
+
+        const productInputs = document.getElementById('quotationEmailProductInputs');
+        productInputs.innerHTML = '';
+        productIds.forEach((productId, idx) => {
+            const pInput = document.createElement('input');
+            pInput.type = 'hidden';
+            pInput.name = 'quotation_product_ids';
+            pInput.value = productId;
+            productInputs.appendChild(pInput);
+
+            const spId = supplierPriceIds[idx];
+            if (spId) {
+                const spInput = document.createElement('input');
+                spInput.type = 'hidden';
+                spInput.name = 'quotation_supplier_price_ids';
+                spInput.value = spId;
+                productInputs.appendChild(spInput);
+            }
+
+            const mInput = document.createElement('input');
+            mInput.type = 'hidden';
+            mInput.name = 'mes_rates';
+            mInput.value = mesRates[idx] || '';
+            productInputs.appendChild(mInput);
+        });
+
+        if (deliveryWeeks) {
+            const dwInput = document.createElement('input');
+            dwInput.type = 'hidden';
+            dwInput.name = 'delivery_weeks';
+            dwInput.value = deliveryWeeks;
+            productInputs.appendChild(dwInput);
+        }
+        if (installationCharge) {
+            const icInput = document.createElement('input');
+            icInput.type = 'hidden';
+            icInput.name = 'installation_charge';
+            icInput.value = installationCharge;
+            productInputs.appendChild(icInput);
+        }
+        customTerms.forEach(termText => {
+            const ctInput = document.createElement('input');
+            ctInput.type = 'hidden';
+            ctInput.name = 'custom_terms';
+            ctInput.value = termText;
+            productInputs.appendChild(ctInput);
+
+            const qtInput = document.createElement('input');
+            qtInput.type = 'hidden';
+            qtInput.name = 'quotation_terms';
+            qtInput.value = termText;
+            productInputs.appendChild(qtInput);
+        });
+
+        const note = document.getElementById('quotationAutoAttachmentNote');
+        if (note) {
+            note.textContent = hasSentEmail
+                ? `Revised quotation PDF for ${productIds.length} product(s) with entered MES rates will be generated and attached automatically upon sending.`
+                : `Quotation PDF for ${productIds.length} product(s) with entered MES rates will be generated and attached automatically upon sending.`;
+        }
+
+        if (typeof hideLoading === 'function') {
+            hideLoading();
+        }
+
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('quotationEmailModal')).show();
+    });
+}
+
+function openEditQuotationModal(mode, targetRfqId = null) {
+    if (typeof hideLoading === 'function') {
+        hideLoading();
+    }
+    let rfqId = targetRfqId ? Number(targetRfqId) : null;
+    let currentParams = null;
+
+    if (mode === 'edit_reply' || mode === 'reply') {
+        if (!rfqId) rfqId = Number(document.getElementById('emailChainRfqId')?.value);
+        currentParams = window.activeReplyQuotationParams || null;
+    } else {
+        if (!rfqId) rfqId = Number(document.getElementById('quotationEmailRfqId')?.value);
+        const prodInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_product_ids"]'));
+        const spInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_supplier_price_ids"]'));
+        const mesRateInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="mes_rates"]'));
+        const dwInput = document.querySelector('#quotationEmailProductInputs input[name="delivery_weeks"]');
+        const icInput = document.querySelector('#quotationEmailProductInputs input[name="installation_charge"]');
+        const ctInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="custom_terms"]'));
+
+        if (prodInputs.length > 0) {
+            currentParams = {
+                productIds: prodInputs.map(i => i.value),
+                supplierPriceIds: spInputs.map(i => i.value),
+                mesRates: mesRateInputs.map(i => i.value),
+                deliveryWeeks: dwInput ? dwInput.value : '',
+                installationCharge: icInput ? icInput.value : '',
+                customTerms: ctInputs.map(i => i.value)
+            };
+        } else if (window.activeNewEmailQuotationParams) {
+            currentParams = window.activeNewEmailQuotationParams;
+        }
+    }
+
+    if (!rfqId) {
+        const formRfq = document.getElementById('prepareQuotationForm')?.dataset?.rfqId;
+        if (formRfq) rfqId = Number(formRfq);
+    }
+
+    if (!rfqId) {
+        alert('RFQ ID missing.');
         return;
     }
 
-    // Populate quotation email form (New Email mode)
-    const emailForm = document.getElementById('quotationEmailForm');
-    emailForm.reset();
-    document.getElementById('quotationEmailRfqId').value = rfq.id;
-    document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
-    document.getElementById('quotationEmailSubject').value = `Quotation for ${rfq.rfq_no || 'RFQ'}`;
-    document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, {
-        productIds: productIds,
-        supplierPriceIds: supplierPriceIds.filter(Boolean)
-    });
+    const rfq = (typeof rfqData !== 'undefined') ? rfqData.find(item => item.id === rfqId) : null;
+    if (!rfq) {
+        alert('RFQ details not found.');
+        return;
+    }
 
-    const productInputs = document.getElementById('quotationEmailProductInputs');
-    productInputs.innerHTML = '';
-    productIds.forEach((productId, idx) => {
-        const pInput = document.createElement('input');
-        pInput.type = 'hidden';
-        pInput.name = 'quotation_product_ids';
-        pInput.value = productId;
-        productInputs.appendChild(pInput);
+    const row = document.querySelector(`tr[data-rfq-id="${rfqId}"]`);
+    let selectedItems = null;
 
-        const spId = supplierPriceIds[idx];
-        if (spId) {
-            const spInput = document.createElement('input');
-            spInput.type = 'hidden';
-            spInput.name = 'quotation_supplier_price_ids';
-            spInput.value = spId;
-            productInputs.appendChild(spInput);
+    if (currentParams && currentParams.productIds && currentParams.productIds.length > 0) {
+        selectedItems = {
+            productIds: currentParams.productIds,
+            supplierPriceIds: currentParams.supplierPriceIds || []
+        };
+    } else if (row) {
+        selectedItems = getSelectedQuotationItems(row);
+    }
+
+    if (!selectedItems || !selectedItems.productIds || selectedItems.productIds.length === 0) {
+        selectedItems = {
+            productIds: (rfq.products || []).map(p => String(p.id)),
+            supplierPriceIds: []
+        };
+    }
+
+    // Populate document paper headers & customer details
+    const now = new Date();
+    const dateStr = String(now.getDate()).padStart(2, '0') + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + now.getFullYear();
+    const validTillDate = new Date(now.getTime() + (60 * 24 * 60 * 60 * 1000));
+    const validTillStr = String(validTillDate.getDate()).padStart(2, '0') + '/' + String(validTillDate.getMonth() + 1).padStart(2, '0') + '/' + validTillDate.getFullYear();
+
+    const docQuoteNo = document.getElementById('docQuoteNo');
+    if (docQuoteNo) docQuoteNo.textContent = `MES/QT/${rfq.rfq_no ? rfq.rfq_no.replace('RFQ-', '') : rfq.id}`;
+
+    const docQuoteDate = document.getElementById('docQuoteDate');
+    if (docQuoteDate) docQuoteDate.textContent = dateStr;
+
+    const docCustomerName = document.getElementById('docCustomerName');
+    if (docCustomerName) docCustomerName.textContent = 'M/s. ' + (rfq.customer_name || 'Customer');
+
+    const docCustomerAddress = document.getElementById('docCustomerAddress');
+    if (docCustomerAddress) docCustomerAddress.textContent = rfq.customer_address || '';
+
+    const docCustomerGstin = document.getElementById('docCustomerGstin');
+    if (docCustomerGstin) docCustomerGstin.textContent = rfq.customer_gstin || '-';
+
+    const docCustomerPhone = document.getElementById('docCustomerPhone');
+    if (docCustomerPhone) docCustomerPhone.textContent = rfq.customer_phone || '-';
+
+    const docCustomerEmail = document.getElementById('docCustomerEmail');
+    if (docCustomerEmail) docCustomerEmail.textContent = rfq.customer_email || '-';
+
+    const docEnquiryNo = document.getElementById('docEnquiryNo');
+    if (docEnquiryNo) docEnquiryNo.textContent = rfq.rfq_no || ('RFQ #' + rfq.id);
+
+    const payTerms = rfq.customer_payment_terms ? (rfq.customer_payment_terms + ' Days') : '30 Days Against Invoice';
+    const docPaymentTerms = document.getElementById('docPaymentTerms');
+    if (docPaymentTerms) docPaymentTerms.textContent = payTerms;
+
+    const form = document.getElementById('prepareQuotationForm');
+    form.reset();
+    form.dataset.rfqId = String(rfq.id);
+    form.dataset.mode = mode;
+
+    const titleEl = document.getElementById('prepareQuotationModalLabel');
+    if (titleEl) {
+        titleEl.textContent = `Edit Quotation Document - ${rfq.rfq_no || ('RFQ #' + rfq.id)}`;
+    }
+
+    const submitBtn = document.getElementById('prepareQuotationSubmitBtn');
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Save & Update Attachment';
+    }
+
+    const tbody = document.querySelector('#prepareQuotationTable tbody');
+    tbody.innerHTML = '';
+
+    const datalist = document.getElementById('rfqProductsDatalist');
+    if (datalist) {
+        datalist.innerHTML = '';
+        (rfq.products || []).forEach(product => {
+            const option = document.createElement('option');
+            option.value = product.product_name || '';
+            datalist.appendChild(option);
+        });
+    }
+
+    const mesRatesArr = currentParams ? (currentParams.mesRates || []) : [];
+
+    selectedItems.productIds.forEach((productId, idx) => {
+        const product = (rfq.products || []).find(item => String(item.id) === String(productId));
+        if (!product) return;
+
+        let rate = parseFloat(product.rate_per_unit) || 0;
+        let supplierValue = parseFloat(product.value) || 0;
+        let supplierPriceId = (selectedItems.supplierPriceIds && selectedItems.supplierPriceIds[idx]) ? String(selectedItems.supplierPriceIds[idx]) : '';
+
+        if (row && !supplierPriceId) {
+            const checkedSupplierPrice = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${product.id}"]:checked`);
+            if (checkedSupplierPrice) {
+                const supplierPrice = (product.supplier_prices || []).find(price => String(price.id) === String(checkedSupplierPrice.value));
+                if (supplierPrice) {
+                    rate = parseFloat(supplierPrice.price) || rate;
+                    supplierValue = parseFloat(supplierPrice.value) || supplierValue;
+                    supplierPriceId = String(supplierPrice.id);
+                }
+            }
         }
 
-        const mInput = document.createElement('input');
-        mInput.type = 'hidden';
-        mInput.name = 'mes_rates';
-        mInput.value = mesRates[idx] || '';
-        productInputs.appendChild(mInput);
+        addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId);
+
+        const lastRow = tbody.rows[tbody.rows.length - 1];
+        if (lastRow) {
+            const customRateVal = mesRatesArr[idx];
+            if (customRateVal !== undefined && customRateVal !== '' && customRateVal !== null) {
+                const mesRateInput = lastRow.querySelector('.prepare-quote-mes-rate');
+                const mesProfitInput = lastRow.querySelector('.prepare-quote-mes-profit');
+                const mesValueInput = lastRow.querySelector('.prepare-quote-mes-value');
+                const qty = parseFloat(lastRow.querySelector('.prepare-quote-qty')?.value || 0) || 0;
+                
+                if (mesRateInput) mesRateInput.value = customRateVal;
+                
+                const customRate = parseFloat(customRateVal);
+                if (!isNaN(customRate) && rate > 0) {
+                    const calculatedProfit = ((customRate - rate) / rate) * 100;
+                    if (mesProfitInput) mesProfitInput.value = calculatedProfit.toFixed(2);
+                    if (mesValueInput) mesValueInput.value = (qty * customRate).toFixed(2);
+                }
+            }
+        }
     });
 
-    if (deliveryWeeks) {
-        const dwInput = document.createElement('input');
-        dwInput.type = 'hidden';
-        dwInput.name = 'delivery_weeks';
-        dwInput.value = deliveryWeeks;
-        productInputs.appendChild(dwInput);
-    }
-    if (installationCharge) {
-        const icInput = document.createElement('input');
-        icInput.type = 'hidden';
-        icInput.name = 'installation_charge';
-        icInput.value = installationCharge;
-        productInputs.appendChild(icInput);
+    const dwInput = document.getElementById('deliveryWeeksInput');
+    if (dwInput) {
+        dwInput.value = (currentParams && currentParams.deliveryWeeks) ? currentParams.deliveryWeeks : '3';
     }
 
-    const hasSentEmail = form.dataset.hasSentEmail === 'true';
-    const note = document.getElementById('quotationAutoAttachmentNote');
-    note.textContent = hasSentEmail
-        ? `Revised quotation PDF for ${productIds.length} product(s) with entered MES rates will be generated and attached automatically upon sending.`
-        : `Quotation PDF for ${productIds.length} product(s) with entered MES rates will be generated and attached automatically upon sending.`;
+    const icInput = document.getElementById('installationChargeInput');
+    if (icInput) {
+        icInput.value = (currentParams && currentParams.installationCharge) ? currentParams.installationCharge : '';
+    }
 
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('quotationEmailModal')).show();
+    renderDefaultTerms(rfq, currentParams ? currentParams.customTerms : null);
+
+    updatePrepareQuotationGrandTotal();
+    checkDeliveryWeeksVisibility();
+    checkInstallationChargeVisibility();
+    checkProfitWarning();
+
+    if (mode === 'edit_new_email') {
+        const emailModal = bootstrap.Modal.getInstance(document.getElementById('quotationEmailModal'));
+        if (emailModal) emailModal.hide();
+    }
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal')).show();
+}
+
+document.addEventListener('click', function(e) {
+    const addTermBtn = e.target.closest('#addCustomTermBtn');
+    if (addTermBtn) {
+        addTermRow('');
+        return;
+    }
+    const removeTermBtn = e.target.closest('.prepare-quote-remove-term');
+    if (removeTermBtn) {
+        removeTermBtn.closest('.prepare-quote-term-row')?.remove();
+        renumberTerms();
+        return;
+    }
+    const editReplyBtn = e.target.closest('#editReplyQuotationBtn');
+    if (editReplyBtn) {
+        e.preventDefault();
+        openEditQuotationModal('edit_reply');
+        return;
+    }
+    const editNewBtn = e.target.closest('#editQuotationAttachmentBtn');
+    if (editNewBtn) {
+        e.preventDefault();
+        openEditQuotationModal('edit_new_email');
+        return;
+    }
 });
 
 
@@ -1769,7 +2177,7 @@ function getRfqProductTypeOptions(selectedValue = '') {
     return `
         <option value="">Select Type</option>
         {% for value, label in product_type_choices %}
-        <option value="{{ value }}" ${selectedValue === '{{ value }}' ? 'selected' : ''}>{{ label }}</option>
+        <option value="{{ value }}" ${(selectedValue === '{{ value }}' || selectedValue === '{{ label|escapejs }}') ? 'selected' : ''}>{{ label }}</option>
         {% endfor %}
     `;
 }
@@ -2158,14 +2566,6 @@ function buildRfqProductRow(product = getBlankRfqProduct()) {
     return row;
 }
 
-function escapeHtml(value) {
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-
 function setRfqProductRows(products) {
     const tbody = document.querySelector('#rfqProductTable tbody');
     tbody.innerHTML = '';
@@ -2270,8 +2670,8 @@ function populateRfqForm(rfq) {
     }
 }
 
-document.getElementById('openAddRfqModal').addEventListener('click', resetRfqForm);
-document.getElementById('rfqRegion').addEventListener('change', filterRfqCustomersByRegion);
+document.getElementById('openAddRfqModal')?.addEventListener('click', resetRfqForm);
+document.getElementById('rfqRegion')?.addEventListener('change', filterRfqCustomersByRegion);
 
 document.addEventListener('click', function (e) {
     const editButton = e.target.closest('.rfq-edit-btn');
@@ -2283,7 +2683,7 @@ document.addEventListener('click', function (e) {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addRfqModal')).show();
 });
 
-document.getElementById('addRfqProductRow').addEventListener('click', function () {
+document.getElementById('addRfqProductRow')?.addEventListener('click', function () {
     document.querySelector('#rfqProductTable tbody').appendChild(buildRfqProductRow());
     renumberRfqProductRows();
     updateSupplierEmailVisibility();
@@ -2413,11 +2813,11 @@ document.addEventListener('input', function (e) {
     syncRfqPriceMode(row);
 });
 
-document.getElementById('supplierEmailBody').addEventListener('input', function () {
+document.getElementById('supplierEmailBody')?.addEventListener('input', function () {
     supplierEmailBodyManuallyEdited = this.value !== lastGeneratedSupplierEmailBody;
 });
 
-document.getElementById('addRfqForm').addEventListener('input', function (e) {
+document.getElementById('addRfqForm')?.addEventListener('input', function (e) {
     if (e.target.id === 'supplierEmailBody') return;
     if (!e.target.matches('[name="product_name[]"], [name="quantity[]"], [name="product_remarks[]"], #rfqEnquiryDetails')) return;
     refreshSupplierEmailBody();
@@ -2900,56 +3300,28 @@ function openQuotationModalForReply(chainBtn) {
         return;
     }
 
-    const form = document.getElementById('prepareQuotationForm');
-    form.reset();
-    form.dataset.rfqId = String(rfq.id);
-    form.dataset.mode = 'reply';
+    // Check if quotation mail was already sent for this RFQ (second time click / revision)
+    const hasSentEmail = Boolean(
+        chainBtn.dataset.hasSentEmail === 'true' ||
+        (rfq && rfq.has_sent_email) ||
+        (rfq && rfq.products && rfq.products.some(p => p.quotation_email_sent)) ||
+        (rfq && rfq.quotation_no && rfq.quotation_no !== '-')
+    );
 
-    const titleEl = document.getElementById('prepareQuotationModalLabel');
-    if (titleEl) {
-        titleEl.textContent = `Prepare Quotation (Reply Email) - ${rfq.rfq_no}`;
-    }
-
-    const submitBtn = document.getElementById('prepareQuotationSubmitBtn');
-    if (submitBtn) {
-        submitBtn.innerHTML = '<i class="bi bi-reply-all me-1"></i>Continue to Reply Email';
-    }
-
-    const tbody = document.querySelector('#prepareQuotationTable tbody');
-    tbody.innerHTML = '';
-    const datalist = document.getElementById('rfqProductsDatalist');
-    if (datalist) {
-        datalist.innerHTML = '';
-        (rfq.products || []).forEach(product => {
-            const option = document.createElement('option');
-            option.value = product.product_name || '';
-            datalist.appendChild(option);
-        });
-    }
-
-    selectedItems.productIds.forEach(productId => {
-        const product = (rfq.products || []).find(item => String(item.id) === String(productId));
-        if (!product) return;
-        let rate = parseFloat(product.rate_per_unit) || 0;
-        let supplierValue = parseFloat(product.value) || 0;
-        let supplierPriceId = '';
-        const checkedSupplierPrice = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${product.id}"]:checked`);
-        if (checkedSupplierPrice) {
-            const supplierPrice = (product.supplier_prices || []).find(price => String(price.id) === String(checkedSupplierPrice.value));
-            if (supplierPrice) {
-                rate = parseFloat(supplierPrice.price) || rate;
-                supplierValue = parseFloat(supplierPrice.value) || supplierValue;
-                supplierPriceId = String(supplierPrice.id);
-            }
+    if (hasSentEmail) {
+        const confirmMsg = "The quotation mail was already sent for this RFQ. This will create and send a Revised Quotation.\n\nDo you want to continue?";
+        if (!confirm(confirmMsg)) {
+            return;
         }
-        addPrepareQuotationRow(product, rate, supplierValue, supplierPriceId);
-    });
+    }
 
-    checkDeliveryWeeksVisibility();
-    checkInstallationChargeVisibility();
-    checkProfitWarning();
+    const form = document.getElementById('prepareQuotationForm');
+    if (form) form.dataset.hasSentEmail = hasSentEmail ? 'true' : 'false';
 
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal')).show();
+    const ecInput = document.getElementById('emailChainRfqId');
+    if (ecInput) ecInput.value = String(rfq.id);
+
+    openEditQuotationModal('edit_reply', rfq.id);
 }
 
 document.addEventListener('click', function(e) {
@@ -3018,11 +3390,6 @@ function loadEmailThread(rfqId, autoSync = false) {
         .catch(err => {
             listEl.innerHTML = `<div class="alert alert-danger m-2" style="font-size:0.8rem;">Error: ${escapeHtml(err.message)}</div>`;
         });
-}
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
 
 function formatSenderName(senderStr) {
@@ -3188,6 +3555,7 @@ function openReplyComposer(msg) {
             (qP.mesRates || []).forEach(r => qParams.append('mes_rates', r));
             if (qP.deliveryWeeks) qParams.append('delivery_weeks', qP.deliveryWeeks);
             if (qP.installationCharge) qParams.append('installation_charge', qP.installationCharge);
+            (qP.customTerms || []).forEach(t => qParams.append('custom_terms', t));
         }
         const qs = qParams.toString();
         previewBtn.href = `/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`;
@@ -3321,6 +3689,10 @@ document.getElementById('emailReplyForm')?.addEventListener('submit', function(e
         (qP.mesRates || []).forEach(r => formData.append('mes_rates', r));
         if (qP.deliveryWeeks) formData.append('delivery_weeks', qP.deliveryWeeks);
         if (qP.installationCharge) formData.append('installation_charge', qP.installationCharge);
+        (qP.customTerms || []).forEach(t => {
+            formData.append('custom_terms', t);
+            formData.append('quotation_terms', t);
+        });
     }
 
     fetch(`/rfq/${rfqId}/send-reply/`, {
@@ -3348,21 +3720,81 @@ document.getElementById('emailReplyForm')?.addEventListener('submit', function(e
         document.getElementById('emailChainAlert').innerHTML = `<div class="alert alert-danger py-2 mb-0 rounded-0" style="font-size:0.82rem;">Error: ${escapeHtml(err.message)}</div>`;
     });
 });
+
 // ============================================================
-// Product Specification Parameters Manager
+// Product Specification Parameters Manager (Dynamic)
 // ============================================================
 let activeParamRow = null;
 
 function getParamCategoryFromType(prodType) {
     const pt = (prodType || '').toUpperCase().trim();
-    if (pt.includes('TRG') || pt.includes('THREAD RING') || pt.includes('PRG') || pt.includes('PLAIN RING')) return 'TRG';
+    if (pt.includes('WEAR CHECK RING') || pt === 'WEAR CHECK RING') return 'WEAR_CHECK_RING';
+    if (pt.includes('WEAR CHECK PLUG') || pt === 'WEAR_CHECK_PLUG') return 'WEAR_CHECK_PLUG';
+    if (pt.includes('TRG') || pt.includes('THREAD RING') || pt.includes('PRG') || pt.includes('PLAIN RING') || pt.includes('TPR')) return 'TRG';
     if (pt.includes('TPG') || pt.includes('THREAD PLUG') || pt.includes('PPG') || pt.includes('PLAIN PLUG') || pt.includes('PIN')) return 'TPG';
     if (pt.includes('ARG') || pt === 'SARG') return 'ARG';
     if (pt.includes('SPC LVDT') || pt.includes('UNIT SPC LVDT')) return 'UNIT_SPC_LVDT';
     if (pt.includes('SPC AIR') || pt.includes('UNIT SPC AIR')) return 'UNIT_SPC_AIR';
     if (pt.includes('STD LVDT') || pt.includes('UNIT STD LVDT')) return 'UNIT_STD_LVDT';
     if (pt.includes('UNIT STD AIR') || pt.includes('STD AIR') || pt.includes('UNIT') || pt.includes('AIR UNIT')) return 'UNIT_STD_AIR';
-    return 'APG'; // Air Plug Gauge or default
+    return 'APG';
+}
+
+function getProductTypeData(prodType) {
+    if (!prodType) return null;
+    const key = String(prodType).trim().toUpperCase();
+    if (allProductTypeSpecs[key]) return allProductTypeSpecs[key];
+
+    // Search by exact code or name
+    for (const [k, pt] of Object.entries(allProductTypeSpecs)) {
+        if (pt.code && pt.code.toUpperCase() === key) return pt;
+        if (pt.name && pt.name.toUpperCase() === key) return pt;
+    }
+    // Search by partial match
+    for (const [k, pt] of Object.entries(allProductTypeSpecs)) {
+        if (pt.code && (key.includes(pt.code.toUpperCase()) || pt.code.toUpperCase().includes(key))) return pt;
+        if (pt.name && (key.includes(pt.name.toUpperCase()) || pt.name.toUpperCase().includes(key))) return pt;
+    }
+    return null;
+}
+
+function updateParamFieldDependencies() {
+    const container = document.getElementById('dynamicParamsContainer');
+    if (!container) return;
+
+    const groups = container.querySelectorAll('.param-field-group');
+    groups.forEach(grp => {
+        const depField = (grp.dataset.dependsField || '').trim();
+        const depVal = (grp.dataset.dependsValue || '').trim();
+        if (!depField) return;
+
+        const allCtrls = container.querySelectorAll('.dynamic-param-control');
+        let ctrl = null;
+        for (const c of allCtrls) {
+            const cKey = (c.dataset.key || '').trim().toLowerCase();
+            const cLabel = (c.dataset.label || '').trim().toLowerCase();
+            const dTarget = depField.toLowerCase();
+            if (cKey === dTarget || cLabel === dTarget) {
+                ctrl = c;
+                break;
+            }
+        }
+
+        if (ctrl) {
+            const currentVal = (ctrl.value || '').trim().toLowerCase();
+            const targetVal = depVal.toLowerCase();
+            const isMatch = (currentVal === targetVal);
+            if (isMatch) {
+                grp.classList.remove('d-none');
+            } else {
+                grp.classList.add('d-none');
+                const innerControl = grp.querySelector('.dynamic-param-control');
+                if (innerControl) {
+                    innerControl.classList.remove('is-invalid');
+                }
+            }
+        }
+    });
 }
 
 function isProductSpecComplete(row) {
@@ -3382,33 +3814,27 @@ function isProductSpecComplete(row) {
             return false;
         }
 
-        const category = getParamCategoryFromType(prodType);
-        const isUnit = (category === 'UNIT_STD_AIR' || category === 'UNIT_SPC_AIR' || category === 'UNIT_STD_LVDT' || category === 'UNIT_SPC_LVDT');
-
-        const hasVal = (key) => specs[key] !== undefined && specs[key] !== null && String(specs[key]).trim() !== '';
-
-        if (isUnit) {
-            if (!hasVal("Product Name") || !hasVal("Display") || !hasVal("Engraving details") || !hasVal("Remarks")) return false;
-            if (category === 'UNIT_STD_LVDT') {
-                if (!hasVal("Additional Features")) return false;
-            } else if (category === 'UNIT_SPC_AIR' || category === 'UNIT_SPC_LVDT') {
-                if (!hasVal("Features & Accessories") || !hasVal("Additional Features") || !hasVal("Module") || !hasVal("Least Count")) return false;
-            } else { // UNIT_STD_AIR
-                if (!hasVal("Features & Accessories") || !hasVal("Unit Principle") || !hasVal("Module") || !hasVal("Least Count")) return false;
-            }
-        } else {
-            if (!hasVal("Size") || !hasVal("Material") || !hasVal("Engraving details") || !hasVal("Remarks")) return false;
-            if (category !== 'TRG' && category !== 'TPG') {
-                if ((!hasVal("Measuring land") && !hasVal("Measuring load")) || !hasVal("Jet from face") || !hasVal("No. of jets") || !hasVal("Module") || !hasVal("Gauge Type")) return false;
-                if (category === 'ARG') {
-                    if (!hasVal("Type of OD")) return false;
-                } else { // APG
-                    if (!hasVal("Type of ID") || !hasVal("Depth collar") || !hasVal("Extension")) return false;
+        const ptData = getProductTypeData(prodType);
+        if (ptData && ptData.fields && ptData.fields.length > 0) {
+            for (const f of ptData.fields) {
+                if (f.is_required) {
+                    if (f.depends_on_field && f.depends_on_value) {
+                        const triggerVal = specs[f.depends_on_field] || specs[f.depends_on_field.toLowerCase()] || '';
+                        if (String(triggerVal).trim().toLowerCase() !== String(f.depends_on_value).trim().toLowerCase()) {
+                            continue; // Dependency not met, skip requirement
+                        }
+                    }
+                    const val = specs[f.key] !== undefined ? specs[f.key] : (specs[f.label] !== undefined ? specs[f.label] : '');
+                    if (val === undefined || val === null || String(val).trim() === '') {
+                        return false;
+                    }
                 }
-                if (specs["Gauge Type"] === 'Bench mount' && !hasVal("Bench mount details")) return false;
             }
+            return true;
         }
-        return true;
+
+        // Fallback if no schema loaded
+        return Object.values(specs).some(v => v && String(v).trim() !== '');
     } catch (e) {
         return false;
     }
@@ -3420,6 +3846,16 @@ function updateSpecPreview(row) {
     const previewEl = row.querySelector('.rfq-spec-preview');
     if (!specInput || !previewEl) return;
 
+    const typeSelect = row.querySelector('[name="product_type[]"]');
+    const prodType = typeSelect ? typeSelect.value : '';
+    const ptData = getProductTypeData(prodType);
+    const labelMap = {};
+    if (ptData && ptData.fields) {
+        ptData.fields.forEach(f => {
+            if (f.key && f.label) labelMap[f.key] = f.label;
+        });
+    }
+
     let text = '';
     if (specInput.value && specInput.value.trim() !== '' && specInput.value.trim() !== '{}') {
         try {
@@ -3427,7 +3863,8 @@ function updateSpecPreview(row) {
             const items = [];
             for (const [k, v] of Object.entries(obj)) {
                 if (v && String(v).trim()) {
-                    items.push(`${k}: ${v}`);
+                    const displayLabel = labelMap[k] || k;
+                    items.push(`${escapeHtml(displayLabel)}: ${escapeHtml(v)}`);
                 }
             }
             if (items.length > 0) {
@@ -3440,230 +3877,213 @@ function updateSpecPreview(row) {
         } catch(e) {}
     }
     if (!text) {
-        text = '<span class="text-danger small"><i class="bi bi-exclamation-circle me-1"></i>Parameters required</span>';
+        text = '<span class="text-danger small"><i class="bi bi-exclamation-triangle-fill me-1"></i>Parameters required</span>';
     }
     previewEl.innerHTML = text;
 }
 
-function openProductParamsModal(row) {
-    activeParamRow = row;
-    const typeSelect = row.querySelector('[name="product_type[]"]');
-    const prodType = typeSelect ? typeSelect.value : '';
-    const category = getParamCategoryFromType(prodType);
+function renderDynamicParamsFields(ptData, row) {
+    const container = document.getElementById('dynamicParamsContainer');
+    if (!container) return;
+    container.innerHTML = '';
 
-    const modalCategoryTitle = document.getElementById('modalParamCategoryTitle');
-    const modalTypeBadge = document.getElementById('modalParamTypeBadge');
-    
-    const categoryTitles = {
-        'TRG': 'Thread Ring Gauge',
-        'TPG': 'Thread Plug Gauge',
-        'PRG': 'Plain Ring Gauge',
-        'PPG': 'Plain Plug Gauge',
-        'ARG': 'Air Ring Gauge',
-        'APG': 'Air Plug Gauge',
-        'UNIT_STD_AIR': 'unit Std Air',
-        'UNIT_SPC_AIR': 'unit SPC Air',
-        'UNIT_STD_LVDT': 'unit Std lvdt',
-        'UNIT_SPC_LVDT': 'unit SPC lvdt'
-    };
-    if (modalCategoryTitle) modalCategoryTitle.textContent = categoryTitles[category] || prodType || 'Gauge';
-    if (modalTypeBadge) modalTypeBadge.textContent = categoryTitles[category] || category;
-
-    // Toggle field visibility depending on category
-    const apgArgFields = document.querySelectorAll('.apg-arg-field');
-    const unitAirFields = document.querySelectorAll('.unit-air-field');
-    const grpId = document.getElementById('grp_type_of_id');
-    const grpOd = document.getElementById('grp_type_of_od');
-    const grpCollar = document.getElementById('grp_depth_collar');
-    const grpExt = document.getElementById('grp_extension');
-    const sizeCol = document.getElementById('grp_param_size');
-    const matCol = document.getElementById('grp_param_material');
-
-    const isUnitCategory = (category === 'UNIT_STD_AIR' || category === 'UNIT_SPC_AIR' || category === 'UNIT_STD_LVDT' || category === 'UNIT_SPC_LVDT');
-
-    if (isUnitCategory) {
-        apgArgFields.forEach(el => el.classList.add('d-none'));
-        grpId?.classList.add('d-none');
-        grpOd?.classList.add('d-none');
-        grpCollar?.classList.add('d-none');
-        grpExt?.classList.add('d-none');
-        sizeCol?.classList.add('d-none');
-        matCol?.classList.add('d-none');
-
-        const prodNameGrp = document.getElementById('grp_unit_product_name');
-        const displayGrp = document.getElementById('grp_unit_display');
-        const moduleGrp = document.getElementById('grp_unit_module');
-        const leastCountGrp = document.getElementById('grp_unit_least_count');
-        const featuresGrp = document.getElementById('grp_unit_features');
-        const addFeatGrp = document.getElementById('grp_unit_additional_features');
-        const principleGrp = document.getElementById('grp_unit_principle');
-
-        prodNameGrp?.classList.remove('d-none');
-        displayGrp?.classList.remove('d-none');
-
-        if (category === 'UNIT_STD_LVDT') {
-            moduleGrp?.classList.add('d-none');
-            leastCountGrp?.classList.add('d-none');
-            featuresGrp?.classList.add('d-none');
-            principleGrp?.classList.add('d-none');
-            addFeatGrp?.classList.remove('d-none');
-        } else if (category === 'UNIT_SPC_AIR' || category === 'UNIT_SPC_LVDT') {
-            moduleGrp?.classList.remove('d-none');
-            leastCountGrp?.classList.remove('d-none');
-            featuresGrp?.classList.remove('d-none');
-            principleGrp?.classList.add('d-none');
-            addFeatGrp?.classList.remove('d-none');
-        } else { // UNIT_STD_AIR
-            moduleGrp?.classList.remove('d-none');
-            leastCountGrp?.classList.remove('d-none');
-            featuresGrp?.classList.remove('d-none');
-            principleGrp?.classList.remove('d-none');
-            addFeatGrp?.classList.add('d-none');
-        }
-    } else {
-        unitAirFields.forEach(el => el.classList.add('d-none'));
-        document.getElementById('grp_unit_additional_features')?.classList.add('d-none');
-        if (category === 'TRG' || category === 'TPG') {
-            apgArgFields.forEach(el => el.classList.add('d-none'));
-            grpId?.classList.add('d-none');
-            grpOd?.classList.add('d-none');
-            grpCollar?.classList.add('d-none');
-            grpExt?.classList.add('d-none');
-            if (sizeCol) { sizeCol.classList.remove('d-none'); sizeCol.className = 'col-md-6'; }
-            if (matCol) { matCol.classList.remove('d-none'); matCol.className = 'col-md-6'; }
-        } else {
-            apgArgFields.forEach(el => el.classList.remove('d-none'));
-            if (sizeCol) { sizeCol.classList.remove('d-none'); sizeCol.className = 'col-md-4'; }
-            if (matCol) { matCol.classList.remove('d-none'); matCol.className = 'col-md-4'; }
-
-            if (category === 'ARG') {
-                grpId?.classList.add('d-none');
-                grpOd?.classList.remove('d-none');
-                grpCollar?.classList.add('d-none');
-                grpExt?.classList.add('d-none');
-            } else {
-                grpId?.classList.remove('d-none');
-                grpOd?.classList.add('d-none');
-                grpCollar?.classList.remove('d-none');
-                grpExt?.classList.remove('d-none');
-            }
-        }
-    }
-
-    // Clear form inputs and error alerts
-    const form = document.getElementById('productParamsForm');
-    if (form) {
-        form.reset();
-        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-    }
-    const modalAlertContainer = document.getElementById('paramsModalAlertContainer');
-    if (modalAlertContainer) modalAlertContainer.innerHTML = '';
-    document.getElementById('grp_bench_mount_details')?.classList.add('d-none');
-
-    // Populate if existing specs
-    const specInput = row.querySelector('.rfq-product-spec-input');
-    let hasExistingSpecs = false;
-
+    const specInput = row ? row.querySelector('.rfq-product-spec-input') : null;
+    let existingSpecs = {};
     if (specInput && specInput.value) {
         try {
-            const data = JSON.parse(specInput.value);
-            if (data && Object.keys(data).length > 0) {
-                hasExistingSpecs = true;
-                if (data["Engraving details"]) document.getElementById('param_engraving_details').value = data["Engraving details"];
-                if (data["Remarks"]) document.getElementById('param_remarks').value = data["Remarks"];
-
-                if (isUnitCategory) {
-                    if (data["Product Name"]) document.getElementById('param_unit_product_name').value = data["Product Name"];
-                    if (data["Display"]) document.getElementById('param_unit_display').value = data["Display"];
-                    if (data["Additional Features"]) document.getElementById('param_unit_additional_features').value = data["Additional Features"];
-                    if (data["Features & Accessories"]) document.getElementById('param_unit_features').value = data["Features & Accessories"];
-                    if (data["Unit Principle"]) document.getElementById('param_unit_principle').value = data["Unit Principle"];
-                    if (data["Module"]) document.getElementById('param_unit_module').value = data["Module"];
-                    if (data["Least Count"]) document.getElementById('param_unit_least_count').value = data["Least Count"];
-                } else {
-                    if (data["Size"]) document.getElementById('param_size').value = data["Size"];
-                    if (data["Material"]) document.getElementById('param_material').value = data["Material"];
-
-                    if (category !== 'TRG' && category !== 'TPG') {
-                        if (data["Measuring land"]) document.getElementById('param_measuring_load').value = data["Measuring land"];
-                        else if (data["Measuring load"]) document.getElementById('param_measuring_load').value = data["Measuring load"];
-                        if (data["Type of ID"]) document.getElementById('param_type_of_id').value = data["Type of ID"];
-                        if (data["Type of OD"]) document.getElementById('param_type_of_od').value = data["Type of OD"];
-                        if (data["Depth collar"]) document.getElementById('param_depth_collar').value = data["Depth collar"];
-                        if (data["Extension"]) document.getElementById('param_extension').value = data["Extension"];
-                        if (data["Jet from face"]) document.getElementById('param_jet_from_face').value = data["Jet from face"];
-                        if (data["No. of jets"]) document.getElementById('param_no_of_jets').value = data["No. of jets"];
-                        if (data["Module"]) document.getElementById('param_module').value = data["Module"];
-                        if (data["Gauge Type"]) {
-                            document.getElementById('param_gauge_type').value = data["Gauge Type"];
-                            if (data["Gauge Type"] === 'Bench mount') {
-                                document.getElementById('grp_bench_mount_details')?.classList.remove('d-none');
-                            }
-                        }
-                        if (data["Bench mount details"]) document.getElementById('param_bench_mount_details').value = data["Bench mount details"];
-                    }
-                }
-            }
+            const parsed = JSON.parse(specInput.value);
+            if (parsed && typeof parsed === 'object') existingSpecs = parsed;
         } catch(e) {}
     }
 
-    if (category === 'UNIT_STD_LVDT' && !hasExistingSpecs) {
-        document.getElementById('param_unit_product_name').value = 'unit Std lvdt';
-        document.getElementById('param_unit_display').value = 'Tri Color (RYG)';
-    } else if ((category === 'UNIT_SPC_AIR' || category === 'UNIT_SPC_LVDT') && !hasExistingSpecs) {
-        document.getElementById('param_unit_product_name').value = (category === 'UNIT_SPC_LVDT') ? 'unit SPC lvdt' : 'SPC based Air Unit – 8 Channel';
-        document.getElementById('param_unit_display').value = 'GUC';
-        document.getElementById('param_unit_module').value = 'Module 1A';
-        document.getElementById('param_unit_least_count').value = '0.0001, 0.0001';
-        document.getElementById('param_unit_features').value = 'Least Count - 0.0001, 0.0001 /RS232 / Programs/ Calibration Error / O-R Option';
-        document.getElementById('param_unit_additional_features').value = 'a. SPC, b. Live Run Chart, c. Data Storage (8GB) and Re-check, d. Key Board enabling, e. Operator Shift details, f. Relay Output';
-    } else if (category === 'UNIT_STD_AIR' && !hasExistingSpecs) {
-        document.getElementById('param_unit_product_name').value = 'unit Std Air';
-        document.getElementById('param_unit_principle').value = 'Electronic Piezo';
-        document.getElementById('param_unit_display').value = 'Tri Color (RYG)';
-        document.getElementById('param_unit_module').value = 'Module 1A';
-        document.getElementById('param_unit_least_count').value = '0.0001, 0.0005, 0.0001';
-        document.getElementById('param_unit_features').value = 'Least Count 0.0001, 0.0005, 0.0001 / RS232 / Programs/ Calibration Error / O-R Option/ Air Dryer and Draining Filter / Hand Held Adapter/Unit Cover';
+    const fields = (ptData && ptData.fields && ptData.fields.length > 0) ? ptData.fields : [];
+
+    if (fields.length === 0) {
+        container.innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-info py-2 mb-2 small">
+                    <i class="bi bi-info-circle me-1"></i>No custom spec fields configured in Product Type Master for this type. You can enter general specifications below:
+                </div>
+            </div>
+            <div class="col-md-6 param-field-group" data-key="Engraving details" data-label="Engraving Details" data-required="false">
+                <label class="form-label small fw-semibold">Engraving Details</label>
+                <input type="text" class="form-control form-control-sm dynamic-param-control" data-key="Engraving details" data-label="Engraving Details" placeholder="e.g. Marking text" value="${escapeHtml(existingSpecs['Engraving details'] || '')}">
+            </div>
+            <div class="col-md-6 param-field-group" data-key="Remarks" data-label="Specification Remarks" data-required="true">
+                <label class="form-label small fw-semibold">Specification Remarks <span class="text-danger">*</span></label>
+                <textarea class="form-control form-control-sm dynamic-param-control" rows="2" data-key="Remarks" data-label="Specification Remarks" placeholder="Additional specifications or remarks">${escapeHtml(existingSpecs['Remarks'] || existingSpecs['Specification'] || '')}</textarea>
+            </div>
+        `;
+        return;
     }
+
+    function getFieldValue(f) {
+        if (existingSpecs[f.key] !== undefined && existingSpecs[f.key] !== null) return existingSpecs[f.key];
+        if (existingSpecs[f.label] !== undefined && existingSpecs[f.label] !== null) return existingSpecs[f.label];
+        const lowerKey = (f.key || '').toLowerCase();
+        const lowerLabel = (f.label || '').toLowerCase();
+        for (const [k, v] of Object.entries(existingSpecs)) {
+            if (k.toLowerCase() === lowerKey || k.toLowerCase() === lowerLabel) return v;
+        }
+        return '';
+    }
+
+    const htmlParts = [];
+    fields.forEach(f => {
+        const val = getFieldValue(f);
+        let colClass = 'col-md-4';
+        if (f.type === 'textarea') {
+            colClass = 'col-12';
+        } else if (fields.length <= 4) {
+            colClass = 'col-md-6';
+        } else if (f.label && f.label.length > 25) {
+            colClass = 'col-md-6';
+        }
+
+        let controlHtml = '';
+        if (f.type === 'select') {
+            const options = Array.isArray(f.options) ? f.options : ((f.options_str || '').split(',').map(s => s.trim()).filter(Boolean));
+            controlHtml = `
+                <select class="form-select form-select-sm dynamic-param-control"
+                        data-key="${escapeHtml(f.key)}"
+                        data-label="${escapeHtml(f.label)}">
+                    <option value="">Select ${escapeHtml(f.label)}</option>
+                    ${options.map(opt => `<option value="${escapeHtml(opt)}" ${String(val).toLowerCase() === String(opt).toLowerCase() ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+                </select>
+            `;
+        } else if (f.type === 'boolean') {
+            controlHtml = `
+                <select class="form-select form-select-sm dynamic-param-control"
+                        data-key="${escapeHtml(f.key)}"
+                        data-label="${escapeHtml(f.label)}">
+                    <option value="">Select</option>
+                    <option value="Yes" ${String(val).toLowerCase() === 'yes' ? 'selected' : ''}>Yes</option>
+                    <option value="No" ${String(val).toLowerCase() === 'no' ? 'selected' : ''}>No</option>
+                </select>
+            `;
+        } else if (f.type === 'textarea') {
+            controlHtml = `
+                <textarea class="form-control form-control-sm dynamic-param-control"
+                          rows="2"
+                          data-key="${escapeHtml(f.key)}"
+                          data-label="${escapeHtml(f.label)}"
+                          placeholder="${escapeHtml(f.placeholder || '')}">${escapeHtml(val)}</textarea>
+            `;
+        } else if (f.type === 'number') {
+            controlHtml = `
+                <input type="number" step="any"
+                       class="form-control form-control-sm dynamic-param-control"
+                       data-key="${escapeHtml(f.key)}"
+                       data-label="${escapeHtml(f.label)}"
+                       placeholder="${escapeHtml(f.placeholder || '')}"
+                       value="${escapeHtml(val)}">
+            `;
+        } else {
+            controlHtml = `
+                <input type="text"
+                       class="form-control form-control-sm dynamic-param-control"
+                       data-key="${escapeHtml(f.key)}"
+                       data-label="${escapeHtml(f.label)}"
+                       placeholder="${escapeHtml(f.placeholder || '')}"
+                       value="${escapeHtml(val)}">
+            `;
+        }
+
+        htmlParts.push(`
+            <div class="${colClass} param-field-group"
+                 id="param_grp_${escapeHtml(f.id || f.key)}"
+                 data-key="${escapeHtml(f.key)}"
+                 data-label="${escapeHtml(f.label)}"
+                 data-required="${f.is_required ? 'true' : 'false'}"
+                 data-depends-field="${escapeHtml(f.depends_on_field || '')}"
+                 data-depends-value="${escapeHtml(f.depends_on_value || '')}">
+                <label class="form-label small fw-semibold">
+                    ${escapeHtml(f.label)} ${f.is_required ? '<span class="text-danger">*</span>' : ''}
+                </label>
+                ${controlHtml}
+            </div>
+        `);
+    });
+
+    container.innerHTML = htmlParts.join('');
+    updateParamFieldDependencies();
+}
+
+async function openProductParamsModal(row) {
+    activeParamRow = row;
+    const typeSelect = row ? row.querySelector('[name="product_type[]"]') : null;
+    const prodType = typeSelect ? typeSelect.value : '';
+
+    const modalCategoryTitle = document.getElementById('modalParamCategoryTitle');
+    const modalTypeBadge = document.getElementById('modalParamTypeBadge');
+    const modalAlertContainer = document.getElementById('paramsModalAlertContainer');
+    const container = document.getElementById('dynamicParamsContainer');
+    if (modalAlertContainer) modalAlertContainer.innerHTML = '';
+
+    if (!prodType) {
+        if (modalCategoryTitle) modalCategoryTitle.textContent = 'Product';
+        if (modalTypeBadge) modalTypeBadge.textContent = 'None';
+        if (container) {
+            container.innerHTML = `
+                <div class="col-12 text-center py-4 text-muted">
+                    <i class="bi bi-exclamation-circle text-warning fs-3 d-block mb-2"></i>
+                    Please select a Product Type for this row before configuring parameters.
+                </div>
+            `;
+        }
+        const modalEl = document.getElementById('productParamsModal');
+        if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        return;
+    }
+
+    let ptData = getProductTypeData(prodType);
+
+    // Fetch fresh specs from API so any newly created fields or renamed fields are reflected immediately!
+    try {
+        const resp = await fetch(`/api/product-types/${encodeURIComponent(prodType)}/specs/`);
+        if (resp.ok) {
+            const apiData = await resp.json();
+            if (apiData && apiData.status === 'ok') {
+                allProductTypeSpecs[apiData.code.toUpperCase()] = apiData;
+                if (apiData.name) allProductTypeSpecs[apiData.name.toUpperCase()] = apiData;
+                ptData = apiData;
+            }
+        }
+    } catch(err) {
+        // Fallback to embedded data
+    }
+
+    if (modalCategoryTitle) modalCategoryTitle.textContent = ptData ? (ptData.name || prodType) : prodType;
+    if (modalTypeBadge) modalTypeBadge.textContent = ptData ? (ptData.code || prodType) : prodType;
+
+    renderDynamicParamsFields(ptData, row);
 
     const modalEl = document.getElementById('productParamsModal');
     if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
 }
 
-document.getElementById('param_gauge_type')?.addEventListener('change', function() {
-    const grpBench = document.getElementById('grp_bench_mount_details');
-    const benchInput = document.getElementById('param_bench_mount_details');
-    if (this.value === 'Bench mount') {
-        grpBench?.classList.remove('d-none');
-    } else {
-        grpBench?.classList.add('d-none');
-        if (benchInput) {
-            benchInput.value = '';
-            benchInput.classList.remove('is-invalid');
-        }
-    }
-});
-
-// Clear invalid state on input / change
+// Live clear invalid state and update dependencies
 document.getElementById('productParamsForm')?.addEventListener('input', function(e) {
-    if (e.target && e.target.value && e.target.value.trim() !== '') {
+    if (e.target && e.target.classList.contains('dynamic-param-control')) {
         e.target.classList.remove('is-invalid');
         const hasInvalid = document.querySelector('#productParamsForm .is-invalid');
         if (!hasInvalid) {
             const container = document.getElementById('paramsModalAlertContainer');
             if (container) container.innerHTML = '';
         }
+        updateParamFieldDependencies();
     }
 });
 
 document.getElementById('productParamsForm')?.addEventListener('change', function(e) {
-    if (e.target && e.target.value && e.target.value.trim() !== '') {
+    if (e.target && e.target.classList.contains('dynamic-param-control')) {
         e.target.classList.remove('is-invalid');
         const hasInvalid = document.querySelector('#productParamsForm .is-invalid');
         if (!hasInvalid) {
             const container = document.getElementById('paramsModalAlertContainer');
             if (container) container.innerHTML = '';
         }
+        updateParamFieldDependencies();
     }
 });
 
@@ -3671,40 +4091,33 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
     if (!activeParamRow) return;
 
     const modalAlertContainer = document.getElementById('paramsModalAlertContainer');
-    const form = document.getElementById('productParamsForm');
-    if (!form) return;
+    const container = document.getElementById('dynamicParamsContainer');
+    if (!container) return;
 
-    const typeSelect = activeParamRow.querySelector('[name="product_type[]"]');
-    const prodType = typeSelect ? typeSelect.value : document.getElementById('modalParamTypeBadge').textContent;
-    const category = getParamCategoryFromType(prodType);
-    const isUnitCategory = (category === 'UNIT_STD_AIR' || category === 'UNIT_SPC_AIR' || category === 'UNIT_STD_LVDT' || category === 'UNIT_SPC_LVDT');
-
-    // Validate all visible parameter fields
     const missingFields = [];
     let firstInvalidEl = null;
 
-    const fieldGroups = form.querySelectorAll('.row > div');
-    fieldGroups.forEach(grp => {
-        // Skip hidden groups
+    const groups = container.querySelectorAll('.param-field-group');
+    groups.forEach(grp => {
         if (grp.classList.contains('d-none') || grp.offsetParent === null) {
-            const control = grp.querySelector('input, select, textarea');
-            if (control) control.classList.remove('is-invalid');
+            const ctrl = grp.querySelector('.dynamic-param-control');
+            if (ctrl) ctrl.classList.remove('is-invalid');
             return;
         }
 
-        const control = grp.querySelector('input, select, textarea');
-        if (!control) return;
+        const ctrl = grp.querySelector('.dynamic-param-control');
+        if (!ctrl) return;
 
-        const val = (control.value || '').trim();
-        const label = grp.querySelector('label');
-        const labelText = label ? label.textContent.replace('*', '').trim() : 'Field';
+        const isRequired = grp.dataset.required === 'true';
+        const val = (ctrl.value || '').trim();
+        const label = grp.dataset.label || grp.dataset.key || 'Field';
 
-        if (!val) {
-            control.classList.add('is-invalid');
-            missingFields.push(labelText);
-            if (!firstInvalidEl) firstInvalidEl = control;
+        if (isRequired && !val) {
+            ctrl.classList.add('is-invalid');
+            missingFields.push(label);
+            if (!firstInvalidEl) firstInvalidEl = ctrl;
         } else {
-            control.classList.remove('is-invalid');
+            ctrl.classList.remove('is-invalid');
         }
     });
 
@@ -3729,53 +4142,16 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
     if (modalAlertContainer) modalAlertContainer.innerHTML = '';
 
     const specs = {};
-
-    if (isUnitCategory) {
-        specs["Product Name"] = document.getElementById('param_unit_product_name').value.trim();
-        specs["Display"] = document.getElementById('param_unit_display').value;
-
-        if (category === 'UNIT_STD_LVDT') {
-            specs["Additional Features"] = document.getElementById('param_unit_additional_features').value.trim();
-        } else if (category === 'UNIT_SPC_AIR' || category === 'UNIT_SPC_LVDT') {
-            specs["Features & Accessories"] = document.getElementById('param_unit_features').value.trim();
-            specs["Additional Features"] = document.getElementById('param_unit_additional_features').value.trim();
-            specs["Module"] = document.getElementById('param_unit_module').value;
-            specs["Least Count"] = document.getElementById('param_unit_least_count').value;
-        } else { // UNIT_STD_AIR
-            specs["Features & Accessories"] = document.getElementById('param_unit_features').value.trim();
-            specs["Unit Principle"] = document.getElementById('param_unit_principle').value;
-            specs["Module"] = document.getElementById('param_unit_module').value;
-            specs["Least Count"] = document.getElementById('param_unit_least_count').value;
+    groups.forEach(grp => {
+        if (grp.classList.contains('d-none') || grp.offsetParent === null) return;
+        const ctrl = grp.querySelector('.dynamic-param-control');
+        if (!ctrl) return;
+        const key = ctrl.dataset.key || ctrl.dataset.label;
+        const val = (ctrl.value || '').trim();
+        if (val) {
+            specs[key] = val;
         }
-    } else {
-        specs["Size"] = document.getElementById('param_size').value.trim();
-        specs["Material"] = document.getElementById('param_material').value;
-
-        if (category !== 'TRG' && category !== 'TPG') {
-            specs["Measuring land"] = document.getElementById('param_measuring_load').value.trim();
-
-            if (category === 'ARG') {
-                specs["Type of OD"] = document.getElementById('param_type_of_od').value;
-            } else {
-                specs["Type of ID"] = document.getElementById('param_type_of_id').value;
-                specs["Depth collar"] = document.getElementById('param_depth_collar').value;
-                specs["Extension"] = document.getElementById('param_extension').value.trim();
-            }
-
-            specs["Jet from face"] = document.getElementById('param_jet_from_face').value.trim();
-            specs["No. of jets"] = document.getElementById('param_no_of_jets').value.trim();
-            specs["Module"] = document.getElementById('param_module').value;
-
-            const gType = document.getElementById('param_gauge_type').value;
-            specs["Gauge Type"] = gType;
-            if (gType === 'Bench mount') {
-                specs["Bench mount details"] = document.getElementById('param_bench_mount_details').value.trim();
-            }
-        }
-    }
-
-    specs["Engraving details"] = document.getElementById('param_engraving_details').value.trim();
-    specs["Remarks"] = document.getElementById('param_remarks').value.trim();
+    });
 
     const hiddenInput = activeParamRow.querySelector('.rfq-product-spec-input');
     if (hiddenInput) {
@@ -3783,13 +4159,9 @@ document.getElementById('saveProductParamsBtn')?.addEventListener('click', funct
     }
 
     updateSpecPreview(activeParamRow);
-    removeFieldValidationPopover();
-    const rfqAlertContainer = document.getElementById('rfqModalAlertContainer');
-    if (rfqAlertContainer) rfqAlertContainer.innerHTML = '';
-    refreshSupplierEmailBody();
-
     const modalEl = document.getElementById('productParamsModal');
     if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
+    if (typeof refreshSupplierEmailBody === 'function') refreshSupplierEmailBody();
 });
 
 const productParamsModalEl = document.getElementById('productParamsModal');

@@ -5,6 +5,7 @@ from email.utils import parseaddr, parsedate_to_datetime
 import uuid
 import re
 import logging
+import time
 from datetime import datetime
 
 from django.conf import settings
@@ -230,6 +231,9 @@ def send_threaded_rfq_email(
 
     email_obj.send(fail_silently=False)
 
+    # Save copy to IMAP Sent folder so it appears in Outlook Sent Items
+    _append_to_imap_sent_folder(email_obj)
+
     # Record sent email in DB
     email_record = None
     if rfq:
@@ -250,6 +254,81 @@ def send_threaded_rfq_email(
         )
 
     return email_record
+
+
+def _append_to_imap_sent_folder(email_obj):
+    """
+    Appends a copy of an outgoing EmailMessage to the IMAP Sent folder
+    so that it automatically appears in Outlook Sent Items.
+    """
+    imap_host = getattr(settings, 'EMAIL_IMAP_HOST', getattr(settings, 'EMAIL_HOST', 'mail.mesinstruments.co.in'))
+    imap_port = int(getattr(settings, 'EMAIL_IMAP_PORT', 993))
+    imap_user = getattr(settings, 'EMAIL_HOST_USER', '')
+    imap_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+
+    if not imap_user or not imap_password:
+        logger.warning("IMAP Sent Append: Email credentials not configured.")
+        return
+
+    try:
+        mail = imaplib.IMAP4_SSL(imap_host, imap_port, timeout=10)
+        mail.login(imap_user, imap_password)
+
+        # 1. Discover Sent folder name dynamically from mail.list()
+        target_sent_folder = None
+        status, mailboxes = mail.list()
+        if status == 'OK' and mailboxes:
+            for mb in mailboxes:
+                if isinstance(mb, bytes):
+                    mb_str = mb.decode('utf-8', errors='ignore')
+                    if r'\Sent' in mb_str or 'sent' in mb_str.lower():
+                        parts = mb_str.split('"')
+                        if len(parts) >= 2:
+                            folder_name = parts[-2] if parts[-1].strip() == '' else parts[-1]
+                            folder_name = folder_name.strip()
+                            if folder_name and folder_name.lower() != 'inbox':
+                                target_sent_folder = folder_name
+                                break
+
+        # Fallback candidates if discovery didn't find one
+        candidate_folders = []
+        if target_sent_folder:
+            candidate_folders.append(target_sent_folder)
+        candidate_folders.extend(['Sent Items', 'Sent', 'INBOX.Sent', 'Sent Messages'])
+
+        # Deduplicate candidates while preserving order
+        unique_candidates = []
+        for f in candidate_folders:
+            if f not in unique_candidates:
+                unique_candidates.append(f)
+
+        raw_message = email_obj.message().as_bytes()
+        now_date = imaplib.Time2Internaldate(time.time())
+
+        appended = False
+        for folder in unique_candidates:
+            try:
+                res, _ = mail.append(f'"{folder}"', r'(\Seen)', now_date, raw_message)
+                if res == 'OK':
+                    appended = True
+                    logger.info(f"Successfully saved sent email copy to IMAP folder '{folder}'")
+                    break
+            except Exception:
+                try:
+                    res, _ = mail.append(folder, r'(\Seen)', now_date, raw_message)
+                    if res == 'OK':
+                        appended = True
+                        logger.info(f"Successfully saved sent email copy to IMAP folder '{folder}'")
+                        break
+                except Exception:
+                    continue
+
+        if not appended:
+            logger.warning(f"Could not append sent email to any IMAP Sent folder: {unique_candidates}")
+
+        mail.logout()
+    except Exception as exc:
+        logger.warning(f"Error appending sent message to IMAP Sent folder: {exc}")
 
 SPAM_DOMAINS = ['fiverr.com', 'gst.gov.in', 'atlassian.net', 'atlassian.com', 'peopleperhour.com', 'vyaparapp.in']
 
