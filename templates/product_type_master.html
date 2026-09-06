@@ -10,6 +10,15 @@
         <p class="dpr-page-subtitle mb-0">Manage product types, billing HSN codes, delivery lead times, and dynamic parameter fields</p>
     </div>
     <div class="d-flex gap-2">
+        {% if not product_types %}
+        <form method="POST" action="" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="seed_default_types">
+            <button type="submit" class="btn btn-outline-primary dpr-back-btn btn-sm">
+                <i class="bi bi-database-fill-down me-1"></i>Load Defaults
+            </button>
+        </form>
+        {% endif %}
         <button type="button" class="btn btn-primary dpr-back-btn btn-sm" id="openAddProductTypeBtn">
             <i class="bi bi-plus-lg me-1"></i>Add Product Type
         </button>
@@ -161,8 +170,16 @@
     </div>
     {% empty %}
     <div class="col-12 text-center py-5 text-muted">
-        <i class="bi bi-box-seam fs-1 d-block mb-2 text-secondary"></i>
-        No Product Types configured yet. Click <strong>Add Product Type</strong> to get started.
+        <i class="bi bi-box-seam fs-1 d-block mb-3 text-secondary"></i>
+        <h5 class="fw-bold text-dark mb-2">No Product Types configured yet</h5>
+        <p class="mb-4 text-secondary">Click <strong>Add Product Type</strong> to create one manually, or click below to populate all 20 standard product types and 178 spec fields.</p>
+        <form method="POST" action="" class="d-inline-block">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="seed_default_types">
+            <button type="submit" class="btn btn-primary px-4 py-2 shadow-sm">
+                <i class="bi bi-database-fill-down me-2"></i>Load Default Product Types & Specs (20 Types & 178 Specs)
+            </button>
+        </form>
     </div>
     {% endfor %}
 </div>

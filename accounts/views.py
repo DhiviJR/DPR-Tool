@@ -294,12 +294,14 @@ def _normalize_spec_key(key):
         'EXTENSION': 'EXTENSION',
         'EXTENTION': 'EXTENSION',
         'TYPE OF ID': 'TYPE OF ID',
+        'BORE DETAILS': 'BORE DETAILS',
         'TYPE OF OD': 'TYPE OF OD',
         'ROUGHNESS': 'ROUGHNESS',
         'JET FROM FACE': 'JET FROM FACE',
         'NO. OF JETS': 'NO. OF JETS',
         'NO. JETS': 'NO. OF JETS',
         'NO OF JETS': 'NO. OF JETS',
+        'JET DETAILS': 'JET DETAILS',
         'GAUGE TYPE': 'GAUGE TYPE',
         'GAGUE TYPE': 'GAUGE TYPE',
         'BENCH MOUNT DETAILS': 'BENCH MOUNT DETAILS',
@@ -318,7 +320,9 @@ def _normalize_spec_key(key):
         'DISPLAY': 'DISPLAY',
         'LEAST COUNT': 'LEAST COUNT',
         'FEATURES & ACCESSORIES': 'FEATURES & ACCESSORIES',
+        'ACCESSORIES & FEATURES': 'ACCESSORIES & FEATURES',
         'ADDITIONAL FEATURES': 'ADDITIONAL FEATURES',
+        'DETAILS': 'DETAILS',
     }
     return mapping.get(k_upper, k_upper)
 
@@ -336,28 +340,33 @@ def _spec_sort_key(norm_key):
         'EXTENSION',
         'EXTENTION',
         'TYPE OF ID',
+        'BORE DETAILS',
         'TYPE OF OD',
         'ROUGHNESS',
         'JET FROM FACE',
         'NO. OF JETS',
         'NO. JETS',
         'NO OF JETS',
+        'JET DETAILS',
         'GAUGE TYPE',
         'GAGUE TYPE',
         'BENCH MOUNT DETAILS',
         'PULL / CHOPPER',
         'DULL CROME',
+        'DULL CHROME',
         'AIR UNIT MODULE',
         'MODULE',
         'UNIT PRINCIPLE',
         'DISPLAY',
         'LEAST COUNT',
         'FEATURES & ACCESSORIES',
+        'ACCESSORIES & FEATURES',
         'ADDITIONAL FEATURES',
         'PACKAGING',
         'PACKAGING (MABC)',
         'SPECIFICATION REMARKS',
         'REMARKS',
+        'DETAILS',
     ]
     try:
         return order_list.index(norm_upper)
@@ -387,6 +396,41 @@ def _extract_embedded_specs_from_text(text):
                     return parsed, rem
             except Exception:
                 pass
+
+    if '|' in t or '\n' in t:
+        raw_chunks = []
+        for line in t.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if '|' in line:
+                raw_chunks.extend(c.strip() for c in line.split('|') if c.strip())
+            else:
+                raw_chunks.append(line)
+
+        parsed_specs = {}
+        rem_parts = []
+        has_key_value = False
+
+        for chunk in raw_chunks:
+            if ':' in chunk:
+                k, v = chunk.split(':', 1)
+                k_clean = k.strip()
+                v_clean = re.sub(r'[ \t]+', ' ', v).strip()
+                if (1 <= len(k_clean) <= 45 and 
+                    not k_clean.lower().startswith(('http', 'https', 'ftp', 'mailto')) and
+                    not re.search(r'[\r\n]', k_clean)):
+                    parsed_specs[k_clean] = v_clean
+                    has_key_value = True
+                    continue
+            chunk_clean = re.sub(r'[ \t]+', ' ', chunk).strip()
+            if chunk_clean:
+                rem_parts.append(chunk_clean)
+
+        if has_key_value and len(parsed_specs) > 0:
+            rem_str = ' | '.join(rem_parts) if rem_parts else ''
+            return parsed_specs, rem_str
+
     return None, text
 
 
@@ -411,9 +455,12 @@ def _normalize_product_specifications(raw_specs):
                     return json.loads(s.replace("'", '"'))
                 except Exception:
                     pass
-        embedded, _ = _extract_embedded_specs_from_text(s)
-        if embedded:
-            return embedded
+        m = re.search(r'(?:SPECIFICATION\s*[:\-]\s*)?(\{.*?\})', s, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except Exception:
+                pass
         return s
 
     if isinstance(specs, str):
@@ -421,7 +468,11 @@ def _normalize_product_specifications(raw_specs):
         if isinstance(parsed, dict):
             specs = parsed
         else:
-            return {}
+            emb, _ = _extract_embedded_specs_from_text(specs)
+            if emb:
+                specs = emb
+            else:
+                return {}
 
     if not isinstance(specs, dict):
         return {}
@@ -454,15 +505,15 @@ def _normalize_product_specifications(raw_specs):
 def _is_redundant_remarks(remarks_str, product_name, specs_dict):
     if not remarks_str or not str(remarks_str).strip():
         return True
-    r = str(remarks_str).strip()
+    r = re.sub(r'\s+', ' ', str(remarks_str)).strip()
     if r.lower() in ('none', 'null', '-', 'n/a', 'na', 'nil', 'nill'):
         return True
-    specs_rem = str(specs_dict.get('Remarks', '') or specs_dict.get('Specification Remarks', '') or specs_dict.get('REMARKS', '')).strip()
+    specs_rem = re.sub(r'\s+', ' ', str(specs_dict.get('Remarks', '') or specs_dict.get('Specification Remarks', '') or specs_dict.get('REMARKS', ''))).strip()
     if specs_rem and r.lower() == specs_rem.lower():
         return True
-    tokens = [t.strip().lower() for t in re.split(r'[;,|\/\n]+', r) if t.strip()]
-    pname_clean = str(product_name or '').strip().lower()
-    mat_clean = str(specs_dict.get('Material', '') or specs_dict.get('MATERIAL', '')).strip().lower()
+    tokens = [re.sub(r'\s+', ' ', t).strip().lower() for t in re.split(r'[;,|\/\n]+', r) if t.strip()]
+    pname_clean = re.sub(r'\s+', ' ', str(product_name or '').strip().lower())
+    mat_clean = re.sub(r'\s+', ' ', str(specs_dict.get('Material', '') or specs_dict.get('MATERIAL', '')).strip().lower())
     if tokens and all(
         t in pname_clean or (mat_clean and t in f"{mat_clean} {pname_clean}") or t in ('air plug gauge', 'air ring gauge', 'apg', 'arg', 'tpg', 'trg')
         for t in tokens
@@ -482,10 +533,13 @@ def _format_product_description_lines(product_name, specs_dict, remarks=None):
 
     specs = _normalize_product_specifications(specs_dict)
     clean_remarks = remarks
-    if not specs and clean_remarks:
-        emb_specs, clean_remarks = _extract_embedded_specs_from_text(clean_remarks)
+    if clean_remarks:
+        emb_specs, new_rem = _extract_embedded_specs_from_text(clean_remarks)
         if emb_specs:
-            specs = emb_specs
+            for ek, ev in emb_specs.items():
+                if ek not in specs or not specs[ek]:
+                    specs[ek] = ev
+            clean_remarks = new_rem
 
     sorted_items = sorted(
         specs.items(),
@@ -500,8 +554,11 @@ def _format_product_description_lines(product_name, specs_dict, remarks=None):
             norm_k = _normalize_spec_key(k)
             lines.append(f"{norm_k} : {str(v).strip()}")
 
-    if clean_remarks and not _is_redundant_remarks(clean_remarks, product_name, specs):
-        lines.append(str(clean_remarks).strip())
+    if clean_remarks:
+        for rem_part in str(clean_remarks).split(' | '):
+            rem_part = rem_part.strip()
+            if rem_part and not _is_redundant_remarks(rem_part, product_name, specs):
+                lines.append(rem_part)
 
     return lines
 
@@ -1982,6 +2039,12 @@ def product_type_master(request):
                     default_delivery_weeks=delivery_weeks
                 )
                 messages.success(request, f'Product type "{pt.name}" created successfully.')
+            return redirect('product_type_master')
+
+        elif action == 'seed_default_types':
+            from products.seed_data import load_default_product_types
+            pt_count, spec_count = load_default_product_types()
+            messages.success(request, f'Successfully loaded {pt_count} Product Types and {spec_count} Specification Fields!')
             return redirect('product_type_master')
 
         elif action == 'save_spec_field':
@@ -6749,16 +6812,30 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
 
         custom_desc_text = custom_data.get(f'description_{p.id}', '').strip() if custom_data else ''
         if custom_desc_text:
-            lines = [l.strip() for l in custom_desc_text.split('\n') if l.strip()]
-            escaped_desc = []
-            for i, line in enumerate(lines):
-                if i == 0 and not line.startswith('<b>'):
-                    escaped_desc.append(f"<b>{pdf_text(line)}</b>")
-                elif line.startswith('<b>') and line.endswith('</b>'):
-                    escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
-                else:
-                    escaped_desc.append(pdf_text(line))
-            desc_text = '<br/>'.join(escaped_desc)
+            if '|' in custom_desc_text and ':' in custom_desc_text:
+                desc_lines = _format_product_description_lines(
+                    p.product_name,
+                    raw_specs,
+                    custom_desc_text
+                )
+                escaped_desc = []
+                for line in desc_lines:
+                    if line.startswith('<b>') and line.endswith('</b>'):
+                        escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+                    else:
+                        escaped_desc.append(pdf_text(line))
+                desc_text = '<br/>'.join(escaped_desc)
+            else:
+                lines = [l.strip() for l in custom_desc_text.split('\n') if l.strip()]
+                escaped_desc = []
+                for i, line in enumerate(lines):
+                    if i == 0 and not line.startswith('<b>'):
+                        escaped_desc.append(f"<b>{pdf_text(line)}</b>")
+                    elif line.startswith('<b>') and line.endswith('</b>'):
+                        escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+                    else:
+                        escaped_desc.append(pdf_text(line))
+                desc_text = '<br/>'.join(escaped_desc)
         else:
             desc_lines = _format_product_description_lines(
                 p.product_name,
