@@ -13,8 +13,8 @@
                     </h3>
                     <p class="text-muted mb-0">Inspect AI classification details and override category if needed</p>
                 </div>
-                <a href="{% url 'email_classifier:dashboard' %}" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+                <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i>Back
                 </a>
             </div>
 
@@ -24,7 +24,7 @@
                     <div class="row align-items-center">
                         <div class="col-md-8">
                             <h5 class="fw-bold text-dark mb-1">{{ record.subject }}</h5>
-                            <span class="text-muted small">From: {{ record.sender|default:'Unknown' }} &bull; {{ record.received_at|date:'d M Y, H:i' }}</span>
+                            <div class="small text-dark mt-1"><strong class="text-dark fw-bold">From:</strong> <span class="text-dark fw-semibold" style="color: #111827 !important;">{{ record.sender|default:'Unknown' }}</span> <span class="text-secondary mx-1">&bull;</span> <span class="text-secondary fw-medium">Received: {{ record.received_at|date:'d M Y, H:i' }}</span></div>
                         </div>
                         <div class="col-md-4 text-md-end mt-2 mt-md-0">
                             <span class="badge bg-primary px-3 py-2 fs-6">AI Category: {{ record.ai_category }}</span>
@@ -33,7 +33,7 @@
                 </div>
                 <div class="card-body p-4">
                     <h6 class="fw-semibold text-secondary mb-2">Email Body</h6>
-                    <div class="p-3 bg-light rounded-3 border mb-4 font-monospace text-dark" style="white-space: pre-wrap; max-height: 250px; overflow-y: auto;">
+                    <div class="p-3.5 bg-white rounded-3 border mb-4 text-dark shadow-xs" style="white-space: pre-wrap; word-break: break-word; max-height: 350px; overflow-y: auto; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 0.92rem; line-height: 1.68; color: #1f2937 !important; background-color: #ffffff !important; border: 1px solid #dee2e6 !important;">
 {{ record.body }}
                     </div>
 

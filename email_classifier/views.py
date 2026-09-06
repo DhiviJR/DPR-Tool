@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from .forms import EmailPasteForm, ReviewForm
@@ -88,6 +89,7 @@ def dashboard(request):
     category_order = [
         'CUSTOMER_ORDER',
         'PAYMENT_INVOICE',
+        'DISPATCH',
         'QUOTATION_REQUEST',
         'OTHERS',
         'SUPPORT_COMPLAINT',
@@ -143,35 +145,69 @@ def toggle_enquiry_status(request, record_id):
 def sync_inbox(request):
     if request.method == 'POST':
         try:
-            messages_list, inbox_total = fetch_all_messages(offset=0, limit=25)
             classifier = get_classifier()
             saved = 0
             skipped = 0
-            
-            uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
-            existing_uids = set(EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True))
+            offset = 0
+            BATCH_SIZE = 50
+            is_initial_import = (EmailRecord.objects.count() == 0)
 
-            for message in messages_list:
-                if message['uid'] in existing_uids:
-                    skipped += 1
-                    continue
+            while True:
                 try:
-                    result = classifier.classify(
-                        subject=message['subject'], body=message['body'], sender=message['sender'],
-                    )
-                    EmailRecord.objects.create(
-                        sender=message['sender'], subject=message['subject'], body=message['body'],
-                        source='imap', imap_uid=message['uid'],
-                        received_at=message.get('date'),
-                        ai_category=result['category'],
-                        confidence=result['confidence'],
-                        reason=result['reason'],
-                        important_details=result['important_details'],
-                    )
-                    saved += 1
+                    messages_list, inbox_total = fetch_all_messages(offset=offset, limit=BATCH_SIZE)
                 except Exception:
-                    pass
-            messages.success(request, f'Inbox synced successfully. {saved} new email(s) imported from info@mesinstruments.co.in.')
+                    break
+
+                if not messages_list:
+                    if not is_initial_import:
+                        break
+                    offset += BATCH_SIZE
+                    if offset >= inbox_total:
+                        break
+                    continue
+
+                uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
+                existing_uids = set(EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True))
+
+                for message in messages_list:
+                    if message['uid'] in existing_uids:
+                        skipped += 1
+                        continue
+                    try:
+                        result = classifier.classify(
+                            subject=message['subject'], body=message['body'], sender=message['sender'],
+                        )
+                        EmailRecord.objects.create(
+                            sender=message['sender'], subject=message['subject'], body=message['body'],
+                            source='imap', imap_uid=message['uid'],
+                            received_at=message.get('date'),
+                            ai_category=result['category'],
+                            confidence=result['confidence'],
+                            reason=result['reason'],
+                            important_details=result['important_details'],
+                            has_attachments=message.get('has_attachments', False),
+                            attachment_names=message.get('attachment_names', ''),
+                        )
+                        saved += 1
+                    except Exception:
+                        pass
+
+                if not is_initial_import:
+                    break
+
+                offset += BATCH_SIZE
+                if offset >= inbox_total:
+                    break
+
+            # Sync RFQ & Supplier email threads across the system
+            rfq_synced = 0
+            try:
+                from accounts.email_services import sync_rfq_inbox
+                rfq_synced, rfq_err = sync_rfq_inbox(rfq=None)
+            except Exception:
+                pass
+
+            messages.success(request, f'Inbox synced successfully. {saved} email(s) classified, {rfq_synced} RFQ/Supplier messages synced.')
         except Exception as exc:
             messages.error(request, f'Inbox sync failed: {exc}')
     return redirect('email_classifier:dashboard')
@@ -205,13 +241,27 @@ def classify_email(request):
 def review_email(request, record_id):
     record = get_object_or_404(EmailRecord, pk=record_id)
     if request.method == 'POST':
-        form = ReviewForm(request.POST, instance=record)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Email review saved successfully.')
-            return redirect('email_classifier:dashboard')
-    else:
-        form = ReviewForm(instance=record)
+        final_cat = request.POST.get('final_category')
+        if final_cat in EmailRecord.Category.values:
+            record.final_category = final_cat
+            record.reviewed = True
+            record.save(update_fields=['final_category', 'reviewed'])
+            messages.success(request, f'Category updated to {record.get_final_category_display()}.')
+        elif final_cat == '':
+            record.final_category = ''
+            record.reviewed = False
+            record.save(update_fields=['final_category', 'reviewed'])
+            messages.success(request, 'Category reset to AI default.')
+        else:
+            form = ReviewForm(request.POST, instance=record)
+            if form.is_valid():
+                form.save()
+                messages.success(request, 'Email category saved successfully.')
+
+        redirect_url = request.META.get('HTTP_REFERER') or reverse('email_classifier:dashboard')
+        return redirect(redirect_url)
+
+    form = ReviewForm(instance=record)
     return render(request, 'email_classifier/review.html', {'form': form, 'record': record})
 
 
@@ -508,28 +558,39 @@ def _simplify_product_title(text):
         return ''
     t = text.strip(' "\'#*>-_\t\r\n')
 
-    dia_match = re.search(r'(?i)(?:dia|Ø|size|size\s*:)\s*[Øø]?\s*(\d+(?:\.\d+)?)', t)
-    dia_str = f" Ø{dia_match.group(1)}mm" if dia_match else ""
-
-    if re.search(r'(?i)\bcarbide\s+air\s+plug\b|\bcarbide\s+air\s+plug\s+gauge\b', t):
+    if re.search(r'(?i)\bcarbide\s+air\s+plug\b|\bcarbide\s+air\s+plug\s+gauge\b|\bcarbide\s+apg\b', t):
         return "Carbide Air Plug Gauge"
-    if re.search(r'(?i)\bair\s+ring\s+gauge\b|\barg\b', t):
+    if re.search(r'(?i)\bcarbide\s+air\s+ring\b|\bcarbide\s+air\s+ring\s+gauge\b|\bcarbide\s+arg\b', t):
+        return "Carbide Air Ring Gauge"
+    if re.search(r'(?i)\bcarbide\s+air\s+(?:caliper|snap)\b', t):
+        return "Carbide Air Caliper Gauge"
+    if re.search(r'(?i)\bair\s+ring\s+gauge\b|\bair\s+ring\b|\barg\b', t):
         return "Air Ring Gauge"
-    if re.search(r'(?i)\bair\s+plug\s+gauge\b|\bapg\b', t):
+    if re.search(r'(?i)\bair\s+plug\s+gauge\b|\bair\s+plug\b|\bapg\b', t):
         return "Air Plug Gauge"
-    if re.search(r'(?i)\bthread\s+plug\s+gauge\b|\btpg\b', t):
+    if re.search(r'(?i)\bair\s+(?:caliper|snap)\s*gauge\b|\bair\s+(?:caliper|snap)\b', t):
+        return "Air Caliper Gauge"
+    if re.search(r'(?i)\bair\s+gauge\b', t):
+        if re.search(r'(?i)\b(air\s+ring|(?<!setting\s)ring\s+gauge|od|outer|setting\s+plug)\b', t):
+            return "Air Ring Gauge"
+        return "Air Plug Gauge"
+    if re.search(r'(?i)\bmaster\s+setting\s+ring\b|\bsetting\s+rings?\b|\bmaster\s+rings?\b', t):
+        return "Master Setting Ring"
+    if re.search(r'(?i)\bmaster\s+setting\s+plug\b|\bsetting\s+plugs?\b', t):
+        return "Master Setting Plug"
+    if re.search(r'(?i)\bthread\s+plug\s+gauge\b|\bthread\s+plug\b|\btpg\b', t):
         return "Thread Plug Gauge"
-    if re.search(r'(?i)\bthread\s+ring\s+gauge\b|\btrg\b', t):
+    if re.search(r'(?i)\bthread\s+ring\s+gauge\b|\bthread\s+ring\b|\btrg\b', t):
         return "Thread Ring Gauge"
-    if re.search(r'(?i)\bplain\s+plug\s+gauge\b|\bppg\b', t):
+    if re.search(r'(?i)\bplain\s+plug\s+gauge\b|\bplain\s+plug\b|\bppg\b', t):
         return "Plain Plug Gauge"
-    if re.search(r'(?i)\bplain\s+ring\s+gauge\b|\bprg\b', t):
+    if re.search(r'(?i)\bplain\s+ring\s+gauge\b|\bplain\s+ring\b|\bprg\b', t):
         return "Plain Ring Gauge"
     if re.search(r'(?i)\bmulti[- ]gauge\b', t):
         return "Multi-Gauge"
     if re.search(r'(?i)\bcomparator\s+stand\b', t):
         return "Comparator Stand"
-    if re.search(r'(?i)\bair\s+(?:gauge\s+)?unit\b', t):
+    if re.search(r'(?i)\bair\s+(?:gauge\s+)?unit\b|\bair\s+electronic\s+unit\b', t):
         return "Air Gauge Unit"
     if re.search(r'(?i)\bspc\s+(?:gauge|unit)\b|\bspc\b', t):
         return "SPC Gauge"
@@ -547,10 +608,252 @@ def _simplify_product_title(text):
         return ''
 
     # Only return string if line explicitly matches a known gauge product term and is short
-    if any(kw in clean_lower for kw in ('air plug', 'air ring', 'thread plug', 'thread ring', 'plug gauge', 'ring gauge', 'multi-gauge', 'spc gauge', 'lvdt gauge', 'comparator stand')) and len(clean_t) <= 45:
+    if any(kw in clean_lower for kw in ('air plug', 'air ring', 'air gauge', 'thread plug', 'thread ring', 'plug gauge', 'ring gauge', 'multi-gauge', 'spc gauge', 'lvdt gauge', 'comparator stand')) and len(clean_t) <= 45:
         return clean_t[:50].strip()
 
     return ''
+
+
+def _clean_extracted_size(raw_size):
+    if not raw_size:
+        return ''
+    s = raw_size.strip(' *#>-_\t,;:')
+    s = re.sub(r'^(?:[Øø\?]|dia|diameter|size[:\s]*)\s*', '', s, flags=re.I).strip()
+    if re.match(r'^\d{4,}$', s):
+        return ''
+    if not any(c.isdigit() for c in s):
+        return ''
+    if s.count('(') > s.count(')'):
+        s = s + ')' * (s.count('(') - s.count(')'))
+    if re.match(r'^\d+(?:\.\d+)?$', s):
+        try:
+            num_val = float(s)
+            if num_val > 500:
+                return ''
+        except ValueError:
+            pass
+        s = f"{s} mm"
+    return s
+
+
+def _extract_product_specifications(product_name, product_type, line_text='', full_body='', subject=''):
+    line_clean = (line_text or '').strip()
+    body_clean = (full_body or '').strip()
+    subj_clean = (subject or '').strip()
+    combined_context = f"{line_clean}\n{subj_clean}\n{body_clean}"
+
+    ptype = (product_type or '').upper().strip()
+    pname = (product_name or '').strip()
+    specs = {}
+
+    is_unit = any(u in ptype for u in ('UNIT', 'SPC', 'LVDT')) or any(u in pname.lower() for u in ('unit', 'spc', 'lvdt'))
+
+    if is_unit:
+        if 'SPC' in ptype or 'SPC' in pname.upper():
+            if 'LVDT' in ptype or 'LVDT' in pname.upper():
+                specs["Product Name"] = "unit SPC lvdt"
+                specs["Display"] = "GUC"
+            else:
+                specs["Product Name"] = "SPC based Air Unit – 8 Channel"
+                specs["Display"] = "GUC"
+            specs["Module"] = "Module 1A"
+            specs["Least Count"] = "0.0001, 0.0001"
+            specs["Features & Accessories"] = "Least Count - 0.0001, 0.0001 /RS232 / Programs/ Calibration Error / O-R Option"
+            specs["Additional Features"] = "a. SPC, b. Live Run Chart, c. Data Storage (8GB) and Re-check, d. Key Board enabling, e. Operator Shift details, f. Relay Output"
+        elif 'LVDT' in ptype or 'LVDT' in pname.upper():
+            specs["Product Name"] = "unit Std lvdt"
+            specs["Display"] = "Tri Color (RYG)"
+            specs["Additional Features"] = "a. SPC, b. Live Run Chart, c. Data Storage (8GB) and Re-check, d. Key Board enabling, e. Operator Shift details, f. Relay Output"
+        else:
+            specs["Product Name"] = "unit Std Air"
+            specs["Unit Principle"] = "Electronic Piezo"
+            specs["Display"] = "Tri Color (RYG)"
+            specs["Module"] = "Module 1A"
+            specs["Least Count"] = "0.0001, 0.0005, 0.0001"
+            specs["Features & Accessories"] = "Least Count 0.0001, 0.0005, 0.0001 / RS232 / Programs/ Calibration Error / O-R Option/ Air Dryer and Draining Filter / Hand Held Adapter/Unit Cover"
+
+        if re.search(r'\b(tri\s*color|ryg)\b', combined_context, re.I):
+            specs["Display"] = "Tri Color (RYG)"
+        elif re.search(r'\bguc\b', combined_context, re.I):
+            specs["Display"] = "GUC"
+
+        lc_match = re.search(r'\b(?:least\s*count|lc)\s*[:\-]?\s*([0-9\.\,\s]+)', combined_context, re.I)
+        if lc_match:
+            lc_val = lc_match.group(1).strip(' ,')
+            if lc_val in ("0.0001, 0.0001", "0.0001, 0.0005, 0.0001", "0.0001", "0.0005", "0.001"):
+                specs["Least Count"] = lc_val
+
+        mod_unit_match = re.search(r'\b(?:module|mod)\s*[:\-]?\s*(Module\s*1A|1A|2A|1\.5\s*mm|1\s*mm)\b', combined_context, re.I)
+        if mod_unit_match:
+            specs["Module"] = mod_unit_match.group(1).strip()
+
+        eng_m = re.search(r'(?i)(?:engraving\s+details?|marking\s+text|engraving|marking)\s*[:\-]\s*([^\r\n,]+)', combined_context)
+        if eng_m:
+            specs["Engraving details"] = eng_m.group(1).strip()
+
+        rem_m = re.search(r'(?i)(?:spec(?:ification)?\s*remarks?|remarks?)\s*[:\-]\s*([^\r\n]+)', combined_context)
+        if rem_m:
+            specs["Remarks"] = rem_m.group(1).strip()
+
+        return specs
+
+    # Strip leading serial numbers (e.g. "1.", "1)", "1 ", "1 -")
+    line_proc = re.sub(r'^\s*[\(\[]?\d+[\.\)\-\]]\s*', '', line_clean).strip()
+    if re.search(r'(?i)\b(phone\s*no|mob\s*no|pin\s*[-–:]?\s*\d{6}|gstin|disclaimer)\b', line_proc):
+        line_proc = ''
+
+    # 1. Size Extraction
+    size = ""
+    m_explicit_dia = re.search(r'(?:[Øø]|[\?]\s*(?=\d)|(?:dia|diameter|size)\s*[:\-]?\s*)\s*([Øø]?\s*\d+(?:\.\d+)?(?:\s*[\/\-]\s*\d+(?:\.\d+)?)?(?:\s*(?:[\+\-±\/\(\)]|\+\/)\s*[\+\-]?\d+(?:\.\d+)?(?:\s*[\/\-]\s*[\+\-]?\d+(?:\.\d+)?)?\)?)*(?:\s*(?:mm|cm|h\d+|H\d+))?)', line_proc, re.I)
+    m_thread = re.search(r'(?:^|[\s_:\-\(\[\{,])(M\d+(?:\.\d+)?\s*[xX]\s*\d+(?:\.\d+)?(?:\s*-\s*[0-9A-Za-z]+|\s+[0-9][A-Za-z]{1,2})?)(?:$|[\s_:\-\)\]\},])', line_proc)
+    m_pt = re.search(r'(?:^|[\s_:\-\(\[\{,])(PT\s*\d+(?:/\d+)?)(?:$|[\s_:\-\)\]\},])', line_proc, re.I)
+    m_imp = re.search(
+        r'(?:^|[\s_:\-\(\[\{,A-Za-z])('
+        r'(?:\d+(?:[\.\s\-/]\d+)*(?:/\d+)?)(?:\"|\'\')?'
+        r'(?:\s*[\-xX/\s]\s*|\s*)'
+        r'(?:\d+(?:[\.\s\-/]\d+)*(?:/\d+)?)'
+        r'\s*(?:NPTF?|UNF?|UNC|UN|BSF|BSW|NPSF|PT|UNEF|BSPP|BSPT)'
+        r'(?:\s*\(M\))?'
+        r'(?:\s*L\d+)?'
+        r'(?:\s*-\s*[0-9A-Za-z]+|\s+[0-9][A-Za-z]{1,2})?'
+        r'(?:\s*(?:LH|RH))?'
+        r')(?:$|[\s_:\-\)\]\},])',
+        line_proc,
+        re.I
+    )
+    m_other_th = re.search(
+        r'(?:^|[\s_:\-\(\[\{,A-Za-z])('
+        r'(?:\d+(?:[\.\s\-/]\d+)*(?:/\d+)?)(?:\"|\'\')?'
+        r'(?:\s*[\-xX/\s]\s*|\s*)'
+        r'(?:NPTF?|UNF?|UNC|UN|BSF|BSW|NPSF|PT|UNEF|BSPP|BSPT)'
+        r'(?:\s*\(M\))?'
+        r'(?:\s*L\d+)?'
+        r'(?:\s*-\s*[0-9A-Za-z]+|\s+[0-9][A-Za-z]{1,2})?'
+        r'(?:\s*(?:LH|RH))?'
+        r')(?:$|[\s_:\-\)\]\},])',
+        line_proc,
+        re.I
+    )
+    m_dim = re.search(r'(?:OD|ID)?\s*(\d+(?:\.\d+)?(?:\s*[\/\-]\s*\d+(?:\.\d+)?)?(?:\s*(?:[\+\-±\/\(\)]|\+\/)\s*[\+\-]?\d+(?:\.\d+)?(?:\s*[\/\-]\s*[\+\-]?\d+(?:\.\d+)?)?\)?)*(?:\s*(?:mm|h\d+|H\d+))?)', line_proc)
+
+    if m_explicit_dia:
+        size = _clean_extracted_size(m_explicit_dia.group(1))
+    if not size and m_thread:
+        size = _clean_extracted_size(m_thread.group(1))
+    if not size and m_pt:
+        size = _clean_extracted_size(m_pt.group(1))
+    if not size and m_imp:
+        size = _clean_extracted_size(m_imp.group(1))
+    if not size and m_other_th:
+        size = _clean_extracted_size(m_other_th.group(1))
+    if not size and m_dim:
+        cand = m_dim.group(0).strip(' *#>-_\t')
+        if len(cand) >= 2 and not re.match(r'^\d+\s*(?:nos|pcs|set|unit)$', cand, re.I):
+            size = _clean_extracted_size(cand)
+
+    if not size:
+        m_ctx_dia = re.search(r'(?:[Øø]|[\?]\s*(?=\d)|(?:dia|diameter|size)\s*[:\-]?\s*)\s*([Øø]?\s*\d+(?:\.\d+)?(?:\s*[\/\-]\s*\d+(?:\.\d+)?)?(?:\s*(?:[\+\-±\/\(\)]|\+\/)\s*[\+\-]?\d+(?:\.\d+)?(?:\s*[\/\-]\s*[\+\-]?\d+(?:\.\d+)?)?\)?)*(?:\s*(?:mm|cm|h\d+|H\d+))?)', body_clean, re.I)
+        if m_ctx_dia:
+            size = _clean_extracted_size(m_ctx_dia.group(1))
+
+    if not size:
+        m_ctx_th = re.search(r'(?:^|[\s_:\-\(\[\{,])(M\d+(?:\.\d+)?\s*[xX]\s*\d+(?:\.\d+)?(?:\s*-\s*[0-9A-Za-z]+|\s+[0-9][A-Za-z]{1,2})?)(?:$|[\s_:\-\)\]\},])', body_clean)
+        if m_ctx_th:
+            size = _clean_extracted_size(m_ctx_th.group(1))
+
+    if size:
+        specs["Size"] = size
+
+    # 2. Material
+    if re.search(r'\b(carbide|tc|tungsten\s+carbide)\b', combined_context, re.I):
+        specs["Material"] = "Carbide"
+    elif re.search(r'\b(d2|d-2)\b', combined_context, re.I):
+        specs["Material"] = "D2"
+    elif re.search(r'\b(steel|ohns|hss)\b', combined_context, re.I):
+        specs["Material"] = "Steel"
+    else:
+        specs["Material"] = "Steel"
+
+    is_air_gauge = ptype in ('APG', 'ARG', 'SARG', 'SAPG') or 'AIR' in ptype or 'AIR' in pname.upper()
+    is_apg = ptype in ('APG', 'SAPG') or ('AIR' in pname.upper() and 'PLUG' in pname.upper()) or ptype == ''
+    is_arg = ptype in ('ARG', 'SARG') or ('AIR' in pname.upper() and 'RING' in pname.upper())
+
+    if is_air_gauge:
+        load_m = re.search(r'(?i)(?:measuring\s*(?:land|load)|land|load)\s*[:\-]\s*([^\r\n,;]+)', combined_context)
+        specs["Measuring land"] = load_m.group(1).strip() if load_m else "Standard"
+
+        if is_arg:
+            specs["Type of OD"] = "Stepper" if re.search(r'\b(stepper|step)\b', combined_context, re.I) else "Plain"
+        else:
+            if re.search(r'\b(blind(?:\s+hole|\s+bore)?)\b', combined_context, re.I):
+                specs["Type of ID"] = "Blind"
+            elif re.search(r'\b(through(?:\s+hole|\s+bore)?|thru(?:\s+bore|\s+hole)?)\b', combined_context, re.I):
+                specs["Type of ID"] = "Through"
+            else:
+                specs["Type of ID"] = "Through"
+
+        if not is_arg:
+            specs["Depth collar"] = "Yes" if re.search(r'\b(with\s+(?:depth\s+)?collar|depth\s+collar\s*:\s*yes)\b', combined_context, re.I) else "No"
+            ext_m = re.search(r'(?i)\b(?:extension|ext)\s*[:\-]?\s*(\d+(?:\.\d+)?\s*(?:mm|cm)?)\b', combined_context)
+            if ext_m:
+                specs["Extension"] = ext_m.group(1).strip()
+
+        jet_face_m = re.search(r'(?i)\b(?:jet\s+(?:from\s+)?face|jet\s+dist(?:ance)?)\s*[:\-]?\s*(\d+(?:\.\d+)?\s*(?:mm)?)\b', combined_context)
+        if jet_face_m:
+            v = jet_face_m.group(1).strip()
+            specs["Jet from face"] = v if v.endswith('mm') else f"{v} mm"
+        else:
+            specs["Jet from face"] = "3 mm"
+
+        jets_m = re.search(r'(?i)\b(?:no\.?\s*(?:of\s*)?jets?\s*[:\-]?\s*(\d+)|(\d+)\s*[- ]?(?:jets?|nozzles?))\b', combined_context)
+        if jets_m:
+            val = jets_m.group(1) or jets_m.group(2)
+            specs["No. of jets"] = val.strip() if val else "2"
+        else:
+            specs["No. of jets"] = "2"
+
+        mod_m = re.search(r'(?i)\b(?:module|mod)\s*[:\-]?\s*(1A|2A|1\.5\s*mm|1\s*mm)\b', combined_context)
+        specs["Module"] = mod_m.group(1).strip() if mod_m else "1A"
+
+        if re.search(r'(?i)\b(bench\s+mount(?:ed)?)\b', combined_context):
+            specs["Gauge Type"] = "Bench mount"
+            bench_m = re.search(r'(?i)\bbench\s+mount\s+details?\s*[:\-]\s*([^\r\n,;]+)', combined_context)
+            if bench_m:
+                specs["Bench mount details"] = bench_m.group(1).strip()
+        elif re.search(r'(?i)\b(unit\s+mount(?:ed)?)\b', combined_context):
+            specs["Gauge Type"] = "Unit mount"
+        else:
+            specs["Gauge Type"] = "Hand held"
+
+    eng_m = re.search(r'(?i)(?:engraving\s+details?|marking\s+text|engraving|marking)\s*[:\-]\s*([^\r\n,;]+)', combined_context)
+    if eng_m:
+        specs["Engraving details"] = eng_m.group(1).strip()
+    else:
+        gn_m = re.search(r'(?i)\b(for\s+(?:go|nogo)\s+(?:plug|ring)|go\s+plug|nogo\s+plug|go\s+ring|nogo\s+ring|go\s+only|nogo\s+only|goplug|nogoplug|goring|nogoring|rhgoring|forgoplug|fornogoplug)\b', line_clean)
+        part_m = re.search(r'\b(NB\d{4,}|GEL\s*\d{4}|NH\d{5,})\b', line_clean)
+        eng_parts = []
+        if gn_m:
+            eng_parts.append(gn_m.group(0).strip().upper())
+        if part_m:
+            eng_parts.append(part_m.group(0).strip())
+        if eng_parts:
+            specs["Engraving details"] = " / ".join(eng_parts)
+
+    rem_list = []
+    bore_m = re.search(r'(?i)\b(bore\s*[:\-]?\s*[\d\.]+\s*(?:mm)?)\b', combined_context)
+    if bore_m:
+        rem_list.append(bore_m.group(1).strip())
+    ring_m = re.search(r'(?i)\b(along\s+with\s+setting\s+rings?)\b', combined_context)
+    if ring_m:
+        rem_list.append(ring_m.group(1).strip())
+    depth_m = re.search(r'(?i)\b(depth\s*[-:]?\s*\d+(?:\.\d+)?\s*(?:mm)?)\b', combined_context)
+    if depth_m:
+        rem_list.append(depth_m.group(1).strip())
+    if rem_list:
+        specs["Remarks"] = " | ".join(rem_list)
+
+    return specs
+
 
 def _extract_all_products(subject, body):
     subject = (subject or '').strip()
@@ -572,10 +875,18 @@ def _extract_all_products(subject, body):
         title = _simplify_product_title(line_clean)
         if title:
             ptype = 'APG'
-            if 'Air Ring' in title or 'arg' in line_lower:
+            if 'Carbide Air Plug' in title:
+                ptype = 'Carbide APG'
+            elif 'Carbide Air Ring' in title:
+                ptype = 'Carbide ARG'
+            elif 'Carbide Air Caliper' in title or 'Air Caliper' in title:
+                ptype = 'Carbide Air Caliper'
+            elif 'Air Ring' in title or 'arg' in line_lower:
                 ptype = 'ARG'
             elif 'Air Plug' in title or 'apg' in line_lower:
                 ptype = 'APG'
+            elif 'Master Setting Ring' in title:
+                ptype = 'Master Setting Rings'
             elif 'Thread Plug' in title or 'tpg' in line_lower:
                 ptype = 'TPG'
             elif 'Thread Ring' in title or 'trg' in line_lower:
@@ -600,11 +911,14 @@ def _extract_all_products(subject, body):
                 try: qty = int(qty_match.group(1))
                 except Exception: pass
 
+            specs = _extract_product_specifications(title, ptype, line_clean, body, subject)
+
             items.append({
                 'product_name': title,
                 'product_type': ptype,
                 'quantity': qty,
-                'remarks': remarks
+                'remarks': remarks,
+                'product_specifications': specs
             })
 
     return _group_duplicate_products(items)
@@ -645,8 +959,9 @@ def _group_duplicate_products(items):
 
         p_rate = str(item.get('rate') or item.get('rate_per_unit') or '').strip()
         p_remarks = (item.get('remarks') or item.get('product_remarks') or '').strip()
+        p_size = str((item.get('product_specifications') or {}).get('Size') or '').strip().lower()
 
-        key = (p_name.lower(), p_type.lower(), p_rate)
+        key = (p_name.lower(), p_type.lower(), p_size, p_rate)
 
         qty = item.get('quantity') or 1
         try:
@@ -670,6 +985,7 @@ def _group_duplicate_products(items):
             new_item['product_type'] = p_type
             new_item['quantity'] = qty
             new_item['remarks'] = p_remarks
+            new_item['product_specifications'] = item.get('product_specifications') or {}
             new_item['_remarks_lower_set'] = {p_remarks.lower()} if p_remarks else set()
             grouped_map[key] = new_item
             grouped_list.append(new_item)
@@ -678,6 +994,7 @@ def _group_duplicate_products(items):
         item.pop('_remarks_lower_set', None)
 
     return grouped_list
+
 
 def _extract_product_name(subject, body):
     all_prods = _extract_all_products(subject, body)
@@ -749,7 +1066,7 @@ def add_rfq_from_email(request, record_id):
 
     customer = None
     if sender_email and not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS):
-        customer = Customer.objects.filter(email__iexact=sender_email).first()
+        customer = Customer.objects.filter(email__icontains=sender_email).first()
 
     if not customer and target_cust_name:
         customer = Customer.objects.filter(customer_name__iexact=target_cust_name).first()
@@ -786,6 +1103,13 @@ def add_rfq_from_email(request, record_id):
     qty, unit = _extract_qty_and_unit(record.body)
     product_remarks = _extract_product_remarks(record.body)
 
+    single_specs = {}
+    if all_extracted_products and all_extracted_products[0].get('product_specifications'):
+        single_specs = all_extracted_products[0]['product_specifications']
+    else:
+        single_specs = _extract_product_specifications(clean_product_name, product_type, record.subject, record.body, record.subject)
+
+    single_specs_json = json.dumps(single_specs) if single_specs else ''
     mail_date_str = record.received_at.strftime('%Y-%m-%d') if record.received_at else timezone.localdate().strftime('%Y-%m-%d')
 
     if customer:
@@ -806,13 +1130,25 @@ def add_rfq_from_email(request, record_id):
             'quantity': qty,
             'unit': unit,
             'product_remarks': product_remarks,
+            'product_specifications': single_specs_json,
         }
         if products_json:
             request.session['email_prefill_products_json'] = products_json
-            if len(products_json) < 800:
+            request.session[f'email_products_{record.id}'] = products_json
+            if len(products_json) < 1800:
                 params_dict['products_json'] = products_json
+        else:
+            request.session.pop('email_prefill_products_json', None)
+            request.session.pop(f'email_products_{record.id}', None)
 
-        return redirect(f"{url}?{urlencode(params_dict)}")
+        rfq_url = f"{url}?{urlencode(params_dict)}"
+
+        # AJAX request: return JSON so the frontend can redirect directly
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({'status': 'found', 'redirect_url': rfq_url})
+
+        return redirect(rfq_url)
     else:
         cust_name_final = ext_company_name or target_cust_name or clean_sname or 'New Customer'
         cust_name_final = re.sub(r'[\-\s]*\b\d{7,12}\b', '', cust_name_final).strip(' -_')
@@ -821,8 +1157,13 @@ def add_rfq_from_email(request, record_id):
 
         if products_json:
             request.session['email_prefill_products_json'] = products_json
+            request.session[f'email_products_{record.id}'] = products_json
+        else:
+            request.session.pop('email_prefill_products_json', None)
+            request.session.pop(f'email_products_{record.id}', None)
 
-        url = reverse('customer_details')
+        # Build the Add Customer URL (pre-filled with email data)
+        add_cust_url = reverse('customer_details')
         cust_params = {
             'customer_name': cust_name_final or 'New Customer',
             'email': sender_email if not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS) else '',
@@ -837,9 +1178,43 @@ def add_rfq_from_email(request, record_id):
             'quantity_param': qty,
             'unit_param': unit,
             'product_remarks_param': product_remarks,
+            'product_specifications_param': single_specs_json,
         }
+        add_cust_redirect = f"{add_cust_url}?{urlencode(cust_params)}"
+
+        # Build the Skip-to-Add-RFQ URL (without a customer_id)
+        rfq_url = reverse('rfq_details')
+        rfq_params = {
+            'add_rfq': '1',
+            'from_email_id': record.id,
+            'mail_date': mail_date_str,
+            'enquiry_details': record.subject,
+            'region': ext_region or '',
+            'product_name': clean_product_name,
+            'product_type': product_type,
+            'quantity': qty,
+            'unit': unit,
+            'product_remarks': product_remarks,
+            'product_specifications': single_specs_json,
+        }
+        if products_json and len(products_json) < 1800:
+            rfq_params['products_json'] = products_json
+        skip_rfq_redirect = f"{rfq_url}?{urlencode(rfq_params)}"
+
+        # AJAX request: return JSON so the frontend shows the popup
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({
+                'status': 'new_customer',
+                'customer_name': cust_name_final or 'New Customer',
+                'add_customer_url': add_cust_redirect,
+                'skip_rfq_url': skip_rfq_redirect,
+            })
+
+        # Non-AJAX fallback: redirect to customer details page (original behaviour)
         messages.info(request, f'New customer "{cust_name_final}" detected. Please complete customer master details to proceed to Add RFQ.')
-        return redirect(f"{url}?{urlencode(cust_params)}")
+        return redirect(add_cust_redirect)
+
 
 
 @login_required
@@ -912,7 +1287,7 @@ def add_po_from_email(request, record_id):
         customer = linked_rfq.customer
 
     if not customer and sender_email and not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS):
-        customer = Customer.objects.filter(email__iexact=sender_email).first()
+        customer = Customer.objects.filter(email__icontains=sender_email).first()
 
     if not customer and target_cust_name:
         customer = Customer.objects.filter(customer_name__iexact=target_cust_name).first()
@@ -1054,5 +1429,78 @@ def add_po_from_email(request, record_id):
             params_dict['products_json'] = products_json
 
     return redirect(f"{url}?{urlencode(params_dict)}")
+
+
+@login_required
+def download_email_attachment(request, record_id):
+    """Download an email attachment directly on-demand from IMAP."""
+    import email
+    import imaplib
+    import mimetypes
+    from django.conf import settings
+    from django.http import HttpResponse, Http404
+    from .services.imap_reader import _decode
+
+    record = get_object_or_404(EmailRecord, pk=record_id)
+    target_filename = request.GET.get('file', '').strip()
+    if not target_filename:
+        raise Http404("No attachment filename specified.")
+
+    required = (settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
+    if not all(required):
+        raise Http404("IMAP settings are not configured.")
+
+    client = imaplib.IMAP4_SSL(settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_PORT)
+    try:
+        client.login(settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
+        status, _ = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
+        if status != 'OK':
+            raise Http404("Cannot open mailbox.")
+
+        msg_nums = []
+        if record.subject:
+            clean_subj = ''.join(c for c in record.subject[:35] if c.isalnum() or c == ' ').strip()
+            if clean_subj:
+                try:
+                    st_subj, res_subj = client.search(None, f'(SUBJECT "{clean_subj}")')
+                    if st_subj == 'OK' and res_subj and res_subj[0]:
+                        msg_nums = list(reversed(res_subj[0].split()))
+                except Exception:
+                    pass
+
+        if not msg_nums:
+            status, result = client.search(None, 'ALL')
+            if status == 'OK' and result and result[0]:
+                msg_nums = list(reversed(result[0].split()))[:100]
+
+        for num in msg_nums:
+            st, data = client.fetch(num, '(RFC822)')
+            if st == 'OK' and data and data[0] and isinstance(data[0], tuple):
+                msg = email.message_from_bytes(data[0][1])
+                msg_id = _decode(msg.get('Message-ID'))
+                subj = _decode(msg.get('Subject'))
+
+                if (record.imap_uid and record.imap_uid in (msg_id, subj)) or (record.subject and record.subject.strip() == subj.strip()) or len(msg_nums) <= 5:
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            fn = part.get_filename()
+                            if fn:
+                                decoded_fn = ' '.join(_decode(fn).split())
+                                if target_filename.lower() in decoded_fn.lower() or decoded_fn.lower() in target_filename.lower():
+                                    file_bytes = part.get_payload(decode=True)
+                                    if file_bytes:
+                                        content_type = part.get_content_type() or mimetypes.guess_type(target_filename)[0] or 'application/octet-stream'
+                                        response = HttpResponse(file_bytes, content_type=content_type)
+                                        safe_fn = target_filename.replace('"', '').replace('\r', '').replace('\n', '')
+                                        response['Content-Disposition'] = f'attachment; filename="{safe_fn}"'
+                                        return response
+
+        raise Http404(f"Attachment '{target_filename}' could not be retrieved from mailbox.")
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
+
 
 

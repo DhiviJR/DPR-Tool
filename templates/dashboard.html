@@ -12,42 +12,8 @@
     <span class="badge rounded-pill text-bg-primary px-3 py-2">DPR Operations</span>
 </div> -->
 
-<!-- Quick actions -->
-{% if can_view_masters or can_view_customer_details %}
-<div class="dpr-card dpr-dashboard-menu mb-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-        <div>
-            <h6 class="mb-1">Master Data</h6>
-            <div class="small text-muted">Manage customer{% if can_view_masters %} and supplier{% endif %} details</div>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-            {% if can_view_customer_details or is_admin or is_sales %}
-            <a href="{% url 'customer_details' %}" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-people me-1"></i>Customer Details
-            </a>
-            {% endif %}
-            {% if can_view_masters %}
-            <a href="{% url 'supplier_details' %}" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-building me-1"></i>Supplier Details
-            </a>
-            {% endif %}
-        </div>
-    </div>
-</div>
-{% endif %}
 
 <div class="row g-3 mb-4">
-    {% if can_view_rfq %}
-    <div class="col-md-6 col-xl-3">
-        <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
-            <div class="dpr-action-card dpr-action-info">
-                <i class="bi bi-envelope-paper fs-4 mb-2 d-block"></i>
-                <small>Manage RFQ</small>
-                <h6 class="mb-0">RFQ</h6>
-            </div>
-        </a>
-    </div>
-    {% endif %}
     <div class="col-md-6 col-xl-3">
         <a href="{% url 'email_classifier:dashboard' %}" class="dpr-card-hover text-decoration-none">
             <div class="dpr-action-card dpr-action-info" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff;">
@@ -57,13 +23,13 @@
             </div>
         </a>
     </div>
-    {% if can_view_customer_po and not is_admin and not is_purchase %}
+    {% if can_view_rfq %}
     <div class="col-md-6 col-xl-3">
-        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
-            <div class="dpr-action-card dpr-action-success">
-                <i class="bi bi-bag-check fs-4 mb-2 d-block"></i>
-                <small>Track Products &amp; Validity</small>
-                <h6 class="mb-0">Customer PO</h6>
+        <a href="{% url 'rfq_details' %}" class="dpr-card-hover">
+            <div class="dpr-action-card dpr-action-info">
+                <i class="bi bi-envelope-paper fs-4 mb-2 d-block"></i>
+                <small>Manage RFQ</small>
+                <h6 class="mb-0">RFQ</h6>
             </div>
         </a>
     </div>
@@ -103,6 +69,19 @@
     </div>
     {% endif %}
     {% endif %}
+
+    {% if can_view_customer_po and not is_admin and not is_purchase %}
+    <div class="col-md-6 col-xl-3">
+        <a href="{% url 'customer_po_product_details' %}" class="dpr-card-hover">
+            <div class="dpr-action-card dpr-action-success">
+                <i class="bi bi-bag-check fs-4 mb-2 d-block"></i>
+                <small>Track Products &amp; Validity</small>
+                <h6 class="mb-0">Customer PO</h6>
+            </div>
+        </a>
+    </div>
+    {% endif %}
+
     {% if can_view_accounts %}
     <div class="col-md-6 col-xl-3">
         <a href="javascript:void(0)" class="dpr-card-hover text-decoration-none" data-bs-toggle="modal" data-bs-target="#accountsSelectionModal">
@@ -1023,5 +1002,7 @@ if (supplierChartCtx) {
         }
     });
 }
+
 </script>
 {% endblock %}
+

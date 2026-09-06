@@ -140,7 +140,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = os.environ.get('DJANGO_TIME_ZONE', 'Asia/Kolkata')
 
 USE_I18N = True
 
@@ -184,6 +184,10 @@ EMAIL_TIMEOUT = int(os.environ.get('DJANGO_EMAIL_TIMEOUT', '30'))
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DJANGO_DEFAULT_FROM_EMAIL',
     'info@mesinstruments.co.in'
+)
+SUPPLIER_RFQ_TO_EMAIL = os.environ.get(
+    'DJANGO_SUPPLIER_RFQ_TO_EMAIL',
+    'ftp@mesinstruments.co.in'
 )
 # IMAP Settings for Inbox Sync
 EMAIL_IMAP_HOST = os.environ.get('DJANGO_EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')

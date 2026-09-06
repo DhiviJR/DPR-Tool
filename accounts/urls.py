@@ -7,6 +7,9 @@ urlpatterns = [
     path('customer-po-product-details/', views.customer_po_product_details, name='customer_po_product_details'),
     path('supplier-po-product-details/', views.supplier_po_product_details, name='supplier_po_product_details'),
     path('rework-tracking/', views.rework_tracking, name='rework_tracking'),
+    path('masters/product-types/', views.product_type_master, name='product_type_master'),
+    path('api/product-types/all/', views.get_all_product_types_api, name='get_all_product_types_api'),
+    path('api/product-types/<str:code>/specs/', views.get_product_type_specs_api, name='get_product_type_specs_api'),
     path('material-status/', views.material_status, name='material_status'),
     path('accounts-details/', views.accounts_details, name='accounts_details'),
     path('supplier-accounts-details/', views.supplier_accounts_details, name='supplier_accounts_details'),
@@ -51,7 +54,10 @@ urlpatterns = [
     path('add-customer/',views.add_customer,name='add_customer'
 ),
     path('add-supplier/', views.add_supplier, name='add_supplier'),
+    path('add-quotation-ajax/', views.add_quotation_ajax, name='add_quotation_ajax'),
     path('get-customer-quotations/', views.get_customer_quotations, name='get_customer_quotations'),
     path('check-customer-po-number/', views.check_customer_po_number, name='check_customer_po_number'),
     path('send-invoice-email/', views.send_invoice_email, name='send_invoice_email'),
+    path('sync-all-mail/', views.sync_all_mail, name='sync_all_mail'),
 ]
+

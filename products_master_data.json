@@ -1,0 +1,3110 @@
+[
+{
+  "model": "products.producttype",
+  "pk": 1,
+  "fields": {
+    "name": "Air Plug Gauge",
+    "code": "APG",
+    "category": "Gauge",
+    "hsn_code": "90173029",
+    "default_delivery_weeks": 3,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.279Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 2,
+  "fields": {
+    "name": "Air Ring Gauge",
+    "code": "ARG",
+    "category": "Gauge",
+    "hsn_code": "90173029",
+    "default_delivery_weeks": 3,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.291Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 3,
+  "fields": {
+    "name": "Thread Plug Gauge",
+    "code": "TPG",
+    "category": "Gauge",
+    "hsn_code": "90173021",
+    "default_delivery_weeks": 2,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.304Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 4,
+  "fields": {
+    "name": "Thread Ring Gauge",
+    "code": "TRG",
+    "category": "Gauge",
+    "hsn_code": "90173022",
+    "default_delivery_weeks": 2,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.312Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 5,
+  "fields": {
+    "name": "Plain Plug Gauge",
+    "code": "PPG",
+    "category": "Gauge",
+    "hsn_code": "90173021",
+    "default_delivery_weeks": 2,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.332Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 6,
+  "fields": {
+    "name": "Plain Ring Gauge",
+    "code": "PRG",
+    "category": "Gauge",
+    "hsn_code": "90173022",
+    "default_delivery_weeks": 2,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.345Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 7,
+  "fields": {
+    "name": "Wear Check Plug",
+    "code": "Wear Check Plug",
+    "category": "Gauge",
+    "hsn_code": "90173021",
+    "default_delivery_weeks": 2,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.364Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 8,
+  "fields": {
+    "name": "Wear Check Ring",
+    "code": "Wear Check Ring",
+    "category": "Gauge",
+    "hsn_code": "90173022",
+    "default_delivery_weeks": 2,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.374Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 9,
+  "fields": {
+    "name": "unit Std Air",
+    "code": "unit Std Air",
+    "category": "Unit",
+    "hsn_code": "90173029",
+    "default_delivery_weeks": 3,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.386Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 10,
+  "fields": {
+    "name": "unit SPC Air",
+    "code": "unit SPC Air",
+    "category": "Unit",
+    "hsn_code": "90173029",
+    "default_delivery_weeks": 3,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.402Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 11,
+  "fields": {
+    "name": "unit Std lvdt",
+    "code": "unit Std lvdt",
+    "category": "Unit",
+    "hsn_code": "90318000",
+    "default_delivery_weeks": 3,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.414Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 12,
+  "fields": {
+    "name": "unit SPC lvdt",
+    "code": "unit SPC lvdt",
+    "category": "Unit",
+    "hsn_code": "90318000",
+    "default_delivery_weeks": 3,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.428Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 13,
+  "fields": {
+    "name": "Carbide Air Caliper",
+    "code": "Carbide Air Caliper",
+    "category": "Gauge",
+    "hsn_code": "90173029",
+    "default_delivery_weeks": 4,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.442Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 14,
+  "fields": {
+    "name": "Carbide APG",
+    "code": "Carbide APG",
+    "category": "Gauge",
+    "hsn_code": "90173029",
+    "default_delivery_weeks": 4,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.452Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 15,
+  "fields": {
+    "name": "Carbide ARG",
+    "code": "Carbide ARG",
+    "category": "Gauge",
+    "hsn_code": "90173029",
+    "default_delivery_weeks": 4,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.468Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 16,
+  "fields": {
+    "name": "Master Setting Rings",
+    "code": "Master Setting Rings",
+    "category": "Gauge",
+    "hsn_code": "90173023",
+    "default_delivery_weeks": 3,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.478Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 17,
+  "fields": {
+    "name": "Multi-Gauge",
+    "code": "Multi-Gauge",
+    "category": "Gauge",
+    "hsn_code": "90318000",
+    "default_delivery_weeks": 3,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.493Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 18,
+  "fields": {
+    "name": "AMC",
+    "code": "AMC",
+    "category": "Service",
+    "hsn_code": "998719",
+    "default_delivery_weeks": 1,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.508Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 19,
+  "fields": {
+    "name": "Service",
+    "code": "Service",
+    "category": "Service",
+    "hsn_code": "998349",
+    "default_delivery_weeks": 1,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.526Z"
+  }
+},
+{
+  "model": "products.producttype",
+  "pk": 20,
+  "fields": {
+    "name": "Spares",
+    "code": "Spares",
+    "category": "Spares",
+    "hsn_code": "90179000",
+    "default_delivery_weeks": 2,
+    "is_active": true,
+    "created_at": "2026-09-03T10:48:33.541Z"
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 1,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": null,
+    "is_required": true,
+    "placeholder": "e.g. 10.00 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 2,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, D2",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 3,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Measuring Load",
+    "field_key": "Measuring load",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Standard",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 4,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Type of ID",
+    "field_key": "Type of ID",
+    "field_type": "select",
+    "select_options": "Blind, Through",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 5,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Depth Collar",
+    "field_key": "Depth collar",
+    "field_type": "select",
+    "select_options": "Yes, No",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 6,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Extension",
+    "field_key": "Extension",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 50 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 7,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Jet from Face",
+    "field_key": "Jet from face",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 3 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 8,
+  "fields": {
+    "product_type": 1,
+    "field_label": "No. of Jets",
+    "field_key": "No. of jets",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 2",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 9,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, 1.5 mm, 1 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 10,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Gauge Type",
+    "field_key": "Gauge Type",
+    "field_type": "select",
+    "select_options": "Hand held, Unit mount, Bench mount",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 10
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 11,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Bench Mount Details",
+    "field_key": "Bench mount details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Enter Bench Mount details",
+    "depends_on_field": "Gauge Type",
+    "depends_on_value": "Bench mount",
+    "sort_order": 11
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 12,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Pull / Chopper",
+    "field_key": "Pull / Chopper",
+    "field_type": "select",
+    "select_options": "Yes, No",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 12
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 13,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 13
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 14,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Packaging (MABC)",
+    "field_key": "Packaging",
+    "field_type": "select",
+    "select_options": "MABC: Required, MABC: Not required",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 14
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 15,
+  "fields": {
+    "product_type": 1,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 15
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 16,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 10.00 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 17,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, D2",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 18,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Measuring Load",
+    "field_key": "Measuring load",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Standard",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 19,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Type of OD",
+    "field_key": "Type of OD",
+    "field_type": "select",
+    "select_options": "Plain, Stepper",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 20,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Jet from Face",
+    "field_key": "Jet from face",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 3 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 21,
+  "fields": {
+    "product_type": 2,
+    "field_label": "No. of Jets",
+    "field_key": "No. of jets",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 2",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 22,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, 1.5 mm, 1 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 23,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Gauge Type",
+    "field_key": "Gauge Type",
+    "field_type": "select",
+    "select_options": "Hand held, Unit mount, Bench mount",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 24,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Bench Mount Details",
+    "field_key": "Bench mount details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Enter Bench Mount details",
+    "depends_on_field": "Gauge Type",
+    "depends_on_value": "Bench mount",
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 25,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Pull / Chopper",
+    "field_key": "Pull / Chopper",
+    "field_type": "select",
+    "select_options": "Yes, No",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 10
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 26,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 11
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 27,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Packaging (MABC)",
+    "field_key": "Packaging",
+    "field_type": "select",
+    "select_options": "MABC: Required, MABC: Not required",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 12
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 28,
+  "fields": {
+    "product_type": 2,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 13
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 29,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Product Name",
+    "field_key": "Product Name",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Air Electronic Unit",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 30,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Display",
+    "field_key": "Display",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Digital LCD Display",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 31,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Features & Accessories",
+    "field_key": "Features & Accessories",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Standard accessories",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 32,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Unit Principle",
+    "field_key": "Unit Principle",
+    "field_type": "select",
+    "select_options": "Differential, Piezo-electric, LVDT",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 33,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, Single Channel, Dual Channel",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 34,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Least Count",
+    "field_key": "Least Count",
+    "field_type": "select",
+    "select_options": "0.001 mm, 0.0005 mm, 0.0001 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 35,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Additional Features",
+    "field_key": "Additional Features",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": false,
+    "placeholder": "Extra custom features",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 36,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Tag Number",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 37,
+  "fields": {
+    "product_type": 18,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 38,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 10.00 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 39,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, D2",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 40,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Measuring Load",
+    "field_key": "Measuring load",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Standard",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 41,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Type of OD",
+    "field_key": "Type of OD",
+    "field_type": "select",
+    "select_options": "Plain, Stepper",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 42,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Jet from Face",
+    "field_key": "Jet from face",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 3 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 43,
+  "fields": {
+    "product_type": 13,
+    "field_label": "No. of Jets",
+    "field_key": "No. of jets",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 2",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 44,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, 1.5 mm, 1 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 45,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Gauge Type",
+    "field_key": "Gauge Type",
+    "field_type": "select",
+    "select_options": "Hand held, Unit mount, Bench mount",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 46,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Bench Mount Details",
+    "field_key": "Bench mount details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Enter Bench Mount details",
+    "depends_on_field": "Gauge Type",
+    "depends_on_value": "Bench mount",
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 47,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Pull / Chopper",
+    "field_key": "Pull / Chopper",
+    "field_type": "select",
+    "select_options": "Yes, No",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 10
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 48,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 11
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 49,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Packaging (MABC)",
+    "field_key": "Packaging",
+    "field_type": "select",
+    "select_options": "MABC: Required, MABC: Not required",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 12
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 50,
+  "fields": {
+    "product_type": 13,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 13
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 51,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 10.00 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 52,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, D2",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 53,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Measuring Load",
+    "field_key": "Measuring load",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Standard",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 54,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Type of ID",
+    "field_key": "Type of ID",
+    "field_type": "select",
+    "select_options": "Blind, Through",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 55,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Depth Collar",
+    "field_key": "Depth collar",
+    "field_type": "select",
+    "select_options": "Yes, No",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 56,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Extension",
+    "field_key": "Extension",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 50 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 57,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Jet from Face",
+    "field_key": "Jet from face",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 3 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 58,
+  "fields": {
+    "product_type": 14,
+    "field_label": "No. of Jets",
+    "field_key": "No. of jets",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 2",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 59,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, 1.5 mm, 1 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 60,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Gauge Type",
+    "field_key": "Gauge Type",
+    "field_type": "select",
+    "select_options": "Hand held, Unit mount, Bench mount",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 10
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 61,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Bench Mount Details",
+    "field_key": "Bench mount details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Enter Bench Mount details",
+    "depends_on_field": "Gauge Type",
+    "depends_on_value": "Bench mount",
+    "sort_order": 11
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 62,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Pull / Chopper",
+    "field_key": "Pull / Chopper",
+    "field_type": "select",
+    "select_options": "Yes, No",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 12
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 63,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 13
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 64,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Packaging (MABC)",
+    "field_key": "Packaging",
+    "field_type": "select",
+    "select_options": "MABC: Required, MABC: Not required",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 14
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 65,
+  "fields": {
+    "product_type": 14,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 15
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 66,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 10.00 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 67,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, D2",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 68,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Measuring Load",
+    "field_key": "Measuring load",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Standard",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 69,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Type of OD",
+    "field_key": "Type of OD",
+    "field_type": "select",
+    "select_options": "Plain, Stepper",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 70,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Jet from Face",
+    "field_key": "Jet from face",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 3 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 71,
+  "fields": {
+    "product_type": 15,
+    "field_label": "No. of Jets",
+    "field_key": "No. of jets",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 2",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 72,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, 1.5 mm, 1 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 73,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Gauge Type",
+    "field_key": "Gauge Type",
+    "field_type": "select",
+    "select_options": "Hand held, Unit mount, Bench mount",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 74,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Bench Mount Details",
+    "field_key": "Bench mount details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Enter Bench Mount details",
+    "depends_on_field": "Gauge Type",
+    "depends_on_value": "Bench mount",
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 75,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Pull / Chopper",
+    "field_key": "Pull / Chopper",
+    "field_type": "select",
+    "select_options": "Yes, No",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 10
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 76,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 11
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 77,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Packaging (MABC)",
+    "field_key": "Packaging",
+    "field_type": "select",
+    "select_options": "MABC: Required, MABC: Not required",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 12
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 78,
+  "fields": {
+    "product_type": 15,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 13
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 79,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 10.00 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 80,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, D2",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 81,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Measuring Load",
+    "field_key": "Measuring load",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Standard",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 82,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Type of OD",
+    "field_key": "Type of OD",
+    "field_type": "select",
+    "select_options": "Plain, Stepper",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 83,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Jet from Face",
+    "field_key": "Jet from face",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 3 mm",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 84,
+  "fields": {
+    "product_type": 16,
+    "field_label": "No. of Jets",
+    "field_key": "No. of jets",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. 2",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 85,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, 1.5 mm, 1 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 86,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Gauge Type",
+    "field_key": "Gauge Type",
+    "field_type": "select",
+    "select_options": "Hand held, Unit mount, Bench mount",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 87,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Bench Mount Details",
+    "field_key": "Bench mount details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Enter Bench Mount details",
+    "depends_on_field": "Gauge Type",
+    "depends_on_value": "Bench mount",
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 88,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Pull / Chopper",
+    "field_key": "Pull / Chopper",
+    "field_type": "select",
+    "select_options": "Yes, No",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 10
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 89,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 11
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 90,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Packaging (MABC)",
+    "field_key": "Packaging",
+    "field_type": "select",
+    "select_options": "MABC: Required, MABC: Not required",
+    "is_required": false,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 12
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 91,
+  "fields": {
+    "product_type": 16,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 13
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 92,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Product Name",
+    "field_key": "Product Name",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Air Electronic Unit",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 93,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Display",
+    "field_key": "Display",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Digital LCD Display",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 94,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Features & Accessories",
+    "field_key": "Features & Accessories",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Standard accessories",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 95,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Unit Principle",
+    "field_key": "Unit Principle",
+    "field_type": "select",
+    "select_options": "Differential, Piezo-electric, LVDT",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 96,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, Single Channel, Dual Channel",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 97,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Least Count",
+    "field_key": "Least Count",
+    "field_type": "select",
+    "select_options": "0.001 mm, 0.0005 mm, 0.0001 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 98,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Additional Features",
+    "field_key": "Additional Features",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": false,
+    "placeholder": "Extra custom features",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 99,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Tag Number",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 100,
+  "fields": {
+    "product_type": 17,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 101,
+  "fields": {
+    "product_type": 5,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. M10 x 1.5 - 6H",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 102,
+  "fields": {
+    "product_type": 5,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, OHNS",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 103,
+  "fields": {
+    "product_type": 5,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 104,
+  "fields": {
+    "product_type": 5,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 105,
+  "fields": {
+    "product_type": 6,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. M10 x 1.5 - 6H",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 106,
+  "fields": {
+    "product_type": 6,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, OHNS",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 107,
+  "fields": {
+    "product_type": 6,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 108,
+  "fields": {
+    "product_type": 6,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 109,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Product Name",
+    "field_key": "Product Name",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Air Electronic Unit",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 110,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Display",
+    "field_key": "Display",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Digital LCD Display",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 111,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Features & Accessories",
+    "field_key": "Features & Accessories",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Standard accessories",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 112,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Unit Principle",
+    "field_key": "Unit Principle",
+    "field_type": "select",
+    "select_options": "Differential, Piezo-electric, LVDT",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 113,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, Single Channel, Dual Channel",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 114,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Least Count",
+    "field_key": "Least Count",
+    "field_type": "select",
+    "select_options": "0.001 mm, 0.0005 mm, 0.0001 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 115,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Additional Features",
+    "field_key": "Additional Features",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": false,
+    "placeholder": "Extra custom features",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 116,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Tag Number",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 117,
+  "fields": {
+    "product_type": 19,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 118,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Product Name",
+    "field_key": "Product Name",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Air Electronic Unit",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 119,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Display",
+    "field_key": "Display",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Digital LCD Display",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 120,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Features & Accessories",
+    "field_key": "Features & Accessories",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Standard accessories",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 121,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Unit Principle",
+    "field_key": "Unit Principle",
+    "field_type": "select",
+    "select_options": "Differential, Piezo-electric, LVDT",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 122,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, Single Channel, Dual Channel",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 123,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Least Count",
+    "field_key": "Least Count",
+    "field_type": "select",
+    "select_options": "0.001 mm, 0.0005 mm, 0.0001 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 124,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Additional Features",
+    "field_key": "Additional Features",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": false,
+    "placeholder": "Extra custom features",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 125,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Tag Number",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 126,
+  "fields": {
+    "product_type": 20,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 127,
+  "fields": {
+    "product_type": 3,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. M10 x 1.5 - 6H",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 128,
+  "fields": {
+    "product_type": 3,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, OHNS",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 129,
+  "fields": {
+    "product_type": 3,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 130,
+  "fields": {
+    "product_type": 3,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 131,
+  "fields": {
+    "product_type": 4,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. M10 x 1.5 - 6H",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 132,
+  "fields": {
+    "product_type": 4,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, OHNS",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 133,
+  "fields": {
+    "product_type": 4,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 134,
+  "fields": {
+    "product_type": 4,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 135,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Product Name",
+    "field_key": "Product Name",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Air Electronic Unit",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 136,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Display",
+    "field_key": "Display",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Digital LCD Display",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 137,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Features & Accessories",
+    "field_key": "Features & Accessories",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Standard accessories",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 138,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Unit Principle",
+    "field_key": "Unit Principle",
+    "field_type": "select",
+    "select_options": "Differential, Piezo-electric, LVDT",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 139,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, Single Channel, Dual Channel",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 140,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Least Count",
+    "field_key": "Least Count",
+    "field_type": "select",
+    "select_options": "0.001 mm, 0.0005 mm, 0.0001 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 141,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Additional Features",
+    "field_key": "Additional Features",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": false,
+    "placeholder": "Extra custom features",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 142,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Tag Number",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 143,
+  "fields": {
+    "product_type": 10,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 144,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Product Name",
+    "field_key": "Product Name",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Air Electronic Unit",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 145,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Display",
+    "field_key": "Display",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Digital LCD Display",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 146,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Features & Accessories",
+    "field_key": "Features & Accessories",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Standard accessories",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 147,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Unit Principle",
+    "field_key": "Unit Principle",
+    "field_type": "select",
+    "select_options": "Differential, Piezo-electric, LVDT",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 148,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, Single Channel, Dual Channel",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 149,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Least Count",
+    "field_key": "Least Count",
+    "field_type": "select",
+    "select_options": "0.001 mm, 0.0005 mm, 0.0001 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 150,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Additional Features",
+    "field_key": "Additional Features",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": false,
+    "placeholder": "Extra custom features",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 151,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Tag Number",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 152,
+  "fields": {
+    "product_type": 12,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 153,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Product Name",
+    "field_key": "Product Name",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Air Electronic Unit",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 154,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Display",
+    "field_key": "Display",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Digital LCD Display",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 155,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Features & Accessories",
+    "field_key": "Features & Accessories",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Standard accessories",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 156,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Unit Principle",
+    "field_key": "Unit Principle",
+    "field_type": "select",
+    "select_options": "Differential, Piezo-electric, LVDT",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 157,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, Single Channel, Dual Channel",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 158,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Least Count",
+    "field_key": "Least Count",
+    "field_type": "select",
+    "select_options": "0.001 mm, 0.0005 mm, 0.0001 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 159,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Additional Features",
+    "field_key": "Additional Features",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": false,
+    "placeholder": "Extra custom features",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 160,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Tag Number",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 161,
+  "fields": {
+    "product_type": 9,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 162,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Product Name",
+    "field_key": "Product Name",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Air Electronic Unit",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 163,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Display",
+    "field_key": "Display",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Digital LCD Display",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 164,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Features & Accessories",
+    "field_key": "Features & Accessories",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Standard accessories",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 165,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Unit Principle",
+    "field_key": "Unit Principle",
+    "field_type": "select",
+    "select_options": "Differential, Piezo-electric, LVDT",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 166,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Module",
+    "field_key": "Module",
+    "field_type": "select",
+    "select_options": "1A, 2A, Single Channel, Dual Channel",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 5
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 167,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Least Count",
+    "field_key": "Least Count",
+    "field_type": "select",
+    "select_options": "0.001 mm, 0.0005 mm, 0.0001 mm",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 6
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 168,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Additional Features",
+    "field_key": "Additional Features",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": false,
+    "placeholder": "Extra custom features",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 7
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 169,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Tag Number",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 8
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 170,
+  "fields": {
+    "product_type": 11,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 9
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 171,
+  "fields": {
+    "product_type": 7,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. M10 x 1.5 - 6H",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 172,
+  "fields": {
+    "product_type": 7,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, OHNS",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 173,
+  "fields": {
+    "product_type": 7,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 174,
+  "fields": {
+    "product_type": 7,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 175,
+  "fields": {
+    "product_type": 8,
+    "field_label": "Size",
+    "field_key": "Size",
+    "field_type": "text",
+    "select_options": null,
+    "is_required": true,
+    "placeholder": "e.g. M10 x 1.5 - 6H",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 1
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 176,
+  "fields": {
+    "product_type": 8,
+    "field_label": "Material",
+    "field_key": "Material",
+    "field_type": "select",
+    "select_options": "Steel, Carbide, OHNS",
+    "is_required": true,
+    "placeholder": "",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 2
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 177,
+  "fields": {
+    "product_type": 8,
+    "field_label": "Engraving Details",
+    "field_key": "Engraving details",
+    "field_type": "text",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "e.g. Marking text",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 3
+  }
+},
+{
+  "model": "products.producttypespecfield",
+  "pk": 178,
+  "fields": {
+    "product_type": 8,
+    "field_label": "Specification Remarks",
+    "field_key": "Remarks",
+    "field_type": "textarea",
+    "select_options": "",
+    "is_required": true,
+    "placeholder": "Additional specifications or remarks",
+    "depends_on_field": null,
+    "depends_on_value": null,
+    "sort_order": 4
+  }
+}
+]

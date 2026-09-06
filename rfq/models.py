@@ -13,6 +13,14 @@ class RFQ(models.Model):
     enquiry_details = models.TextField()
     remarks = models.TextField(blank=True, null=True)
     attachment = models.FileField(upload_to='rfq_attachments/', blank=True, null=True)
+    source_email = models.ForeignKey(
+        'email_classifier.EmailRecord',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rfqs',
+        help_text="Original email record from which this RFQ was created"
+    )
     
     # Email Follow-up Alert System Fields
     # Tracks when the quotation email was sent to the customer
