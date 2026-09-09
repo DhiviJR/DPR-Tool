@@ -122,10 +122,42 @@ def _format_money(value):
     return f"{Decimal(value or 0):,.2f}"
 
 
+def _quote_number_base(quotation_number):
+    return re.sub(r'_R\d+$', '', quotation_number or '')
+
+
+def _quote_number_sequence(quotation_number):
+    match = re.match(r'^MES_Q(\d+)/(\d{2}-\d{2})(?:_R\d+)?$', quotation_number or '')
+    if not match:
+        return None, None
+    return int(match.group(1)), match.group(2)
+
+
+def _get_next_mes_quote_base_no(rfq=None):
+    year = rfq.mail_date.year if (rfq and getattr(rfq, 'mail_date', None)) else timezone.localdate().year
+    year_suffix = f"{str(year)[-2:]}-{str(year + 1)[-2:]}"
+    # From 26-27 onward, quotation numbers start at 0441 (MES_Q0441/26-27) and follow from that
+    max_seq = 440 if year_suffix == '26-27' else 0
+
+    for quote_no in RFQQuotation.objects.values_list('quotation_number', flat=True):
+        seq, suffix = _quote_number_sequence(quote_no)
+        if suffix == year_suffix and seq is not None:
+            max_seq = max(max_seq, seq)
+
+    return f"MES_Q{max_seq + 1:04d}/{year_suffix}"
+
+
 def _get_mes_quote_no(rfq):
-    year = rfq.mail_date.year if rfq.mail_date else timezone.localdate().year
-    quote_seq = RFQ.objects.filter(id__lte=rfq.id).count()
-    return f"MES_Q{quote_seq:04d}/{str(year)[-2:]}-{str(year + 1)[-2:]}"
+    if rfq and getattr(rfq, 'pk', None) and hasattr(rfq, 'quotations'):
+        if hasattr(rfq, '_prefetched_objects_cache') and 'quotations' in rfq._prefetched_objects_cache:
+            quotes = sorted(rfq.quotations.all(), key=lambda q: (q.created_at, q.id), reverse=True)
+            if quotes:
+                return _quote_number_base(quotes[0].quotation_number)
+        else:
+            existing_quote = rfq.quotations.order_by('-created_at', '-id').first()
+            if existing_quote:
+                return _quote_number_base(existing_quote.quotation_number)
+    return _get_next_mes_quote_base_no(rfq)
 
 
 def _get_mes_enquiry_no(rfq):
@@ -239,31 +271,6 @@ def _get_hsn_code(product):
         return '90173029'
     return '90318000'
 
-
-
-def _quote_number_base(quotation_number):
-    return re.sub(r'_R\d+$', '', quotation_number or '')
-
-
-def _quote_number_sequence(quotation_number):
-    match = re.match(r'^MES_Q(\d{4})/(\d{2}-\d{2})(?:_R\d+)?$', quotation_number or '')
-    if not match:
-        return None, None
-    return int(match.group(1)), match.group(2)
-
-
-def _get_next_mes_quote_base_no(rfq):
-    year = rfq.mail_date.year if rfq.mail_date else timezone.localdate().year
-    year_suffix = f"{str(year)[-2:]}-{str(year + 1)[-2:]}"
-    current_seq, _ = _quote_number_sequence(_get_mes_quote_no(rfq))
-    max_seq = (current_seq or 1) - 1
-
-    for quote_no in RFQQuotation.objects.values_list('quotation_number', flat=True):
-        seq, suffix = _quote_number_sequence(quote_no)
-        if suffix == year_suffix and seq:
-            max_seq = max(max_seq, seq)
-
-    return f"MES_Q{max_seq + 1:04d}/{year_suffix}"
 
 
 def _format_mes_quote_no(rfq, revision_number=0, base_quote_no=None):
@@ -563,10 +570,11 @@ def _format_product_description_lines(product_name, specs_dict, remarks=None):
     return lines
 
 
-def _serialize_quotation_products(products, custom_terms=None):
+def _serialize_quotation_products(products, custom_terms=None, designation=None):
     serialized = []
     for product in products:
         p_terms = custom_terms if custom_terms is not None else getattr(product, 'custom_terms', None)
+        p_desig = designation if designation is not None else getattr(product, 'designation', '')
         serialized.append({
             'product_id': product.id,
             'product_name': product.product_name,
@@ -581,6 +589,7 @@ def _serialize_quotation_products(products, custom_terms=None):
             'delivery_weeks': getattr(product, 'delivery_weeks', '') or '',
             'installation_charge': getattr(product, 'installation_charge', '') or '',
             'custom_terms': p_terms if p_terms else [],
+            'designation': p_desig or '',
         })
     return serialized
 
@@ -609,6 +618,7 @@ def _deserialize_quotation_products(products_snapshot):
             delivery_weeks=item.get('delivery_weeks', ''),
             installation_charge=item.get('installation_charge', ''),
             custom_terms=item.get('custom_terms', []),
+            designation=item.get('designation', ''),
         ))
     return deserialized
 
@@ -674,6 +684,9 @@ def _determine_quotation_number_for_preview(rfq, products):
         revision_number = _next_revision_number_for_quote_base(rfq, base_quote_no)
         return _format_mes_quote_no(rfq, revision_number, base_quote_no=base_quote_no)
 
+    if product_ids and RFQQuotation.objects.filter(rfq=rfq).exists():
+        return _get_next_mes_quote_base_no(rfq)
+
     latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at', '-id').first()
     if latest_quotation:
         return latest_quotation.quotation_number
@@ -681,7 +694,7 @@ def _determine_quotation_number_for_preview(rfq, products):
     return _get_mes_quote_no(rfq)
 
 
-def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False):
+def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False, custom_terms=None, designation=None):
     overlapping_quotation = _find_latest_overlapping_quotation(rfq, product_ids)
 
     if overlapping_quotation:
@@ -702,12 +715,12 @@ def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False):
         rfq=rfq,
         quotation_number=quotation_number,
         revision_number=revision_number,
-        products_snapshot=_serialize_quotation_products(products),
+        products_snapshot=_serialize_quotation_products(products, custom_terms=custom_terms, designation=designation),
         email_sent=email_sent,
     )
     return quotation
 
-def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes_rates=None, delivery_weeks=None, installation_charge=None):
+def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes_rates=None, delivery_weeks=None, installation_charge=None, designation=None):
     selected_product_ids = {
         int(product_id)
         for product_id in product_ids
@@ -774,6 +787,7 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                     unit=getattr(product, 'unit', None) or "No's",
                     delivery_weeks=delivery_weeks,
                     installation_charge=installation_charge,
+                    designation=designation or '',
                 ))
         else:
             if custom_mes_rate is not None:
@@ -798,9 +812,27 @@ def _build_selected_quotation_products(rfq, product_ids, supplier_price_ids, mes
                 unit=getattr(product, 'unit', None) or "No's",
                 delivery_weeks=delivery_weeks,
                 installation_charge=installation_charge,
+                designation=designation or '',
             ))
 
     return quotation_products, [product.id for product in products]
+
+def _format_customer_payment_terms(payment_terms):
+    if not payment_terms:
+        return '30 Days Against Invoice'
+    terms_str = str(payment_terms).strip()
+    if not terms_str:
+        return '30 Days Against Invoice'
+    lower = terms_str.lower()
+    if 'against invoice' in lower:
+        return terms_str
+    if 'week' in lower or 'day' in lower:
+        return f"{terms_str} Against Invoice"
+    if terms_str.isdigit():
+        unit = 'Week' if terms_str == '1' else 'Weeks'
+        return f"{terms_str} {unit} Against Invoice"
+    return f"{terms_str} Against Invoice"
+
 
 def _get_default_rfq_quotation_terms(rfq, products):
     from datetime import timedelta
@@ -865,7 +897,7 @@ def _get_default_rfq_quotation_terms(rfq, products):
 
     terms = [
         delivery_str,
-        f"Payment : {customer.payment_terms} Week{'s' if str(customer.payment_terms) != '1' else ''}" if getattr(customer, 'payment_terms', None) else 'Payment : 30 Days Against Invoice',
+        f"Payment : {_format_customer_payment_terms(getattr(customer, 'payment_terms', None))}",
         'Goods & Service Tax(GST) : 18% Extra as Applicable',
         'Dispatch Mode : NIL' if has_amc_service else 'Dispatch Mode : By Courier',
         'Packing & Forwarding : 2%',
@@ -880,7 +912,20 @@ def _get_default_rfq_quotation_terms(rfq, products):
     ]
     return terms
 
-def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
+
+def _format_customer_full_address(customer):
+    if not customer:
+        return ''
+    addr = (getattr(customer, 'address', None) or '').strip()
+    region = (getattr(customer, 'region', None) or '').strip()
+    if addr and region:
+        if region.lower() not in addr.lower():
+            return f"{addr}\n{region}"
+        return addr
+    return addr or region
+
+
+def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None, designation=None):
     from xml.sax.saxutils import escape as xml_escape
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -1038,8 +1083,9 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
         return xml_escape(str(value or ''))
 
     customer = rfq.customer
-    customer_address = customer.address or ''
-    customer_phone = customer.phone_number or '-'
+    customer_address = customer.address or '' if customer else ''
+    full_address = _format_customer_full_address(customer)
+    customer_phone = customer.phone_number or '-' if customer else '-'
 
     story.append(Paragraph('<b><u>Quotation (Confidential)</u></b>', title_style))
     story.append(Spacer(1, 4))
@@ -1047,12 +1093,9 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
     story.append(Paragraph(f'Enquiry No : {enquiry_no}', normal))
     story.append(Spacer(1, 4))
     story.append(Paragraph('<b>To:</b>', normal))
-    story.append(Paragraph(f'M/s. {pdf_text(customer.customer_name)}', normal))
-    if customer_address:
-        story.append(Paragraph(pdf_text(customer_address).replace('\n', '<br/>'), normal))
-    if customer.region:
-        if customer.region.lower() not in customer_address.lower():
-            story.append(Paragraph(pdf_text(customer.region), normal))
+    story.append(Paragraph(f'M/s. {pdf_text(customer.customer_name if customer else "")}', normal))
+    if full_address:
+        story.append(Paragraph(pdf_text(full_address).replace('\n', '<br/>'), normal))
             
     # Include GSTIN from customer master or fallback to address check
     customer_gstin = (getattr(customer, 'gstin', None) or '').strip()
@@ -1072,7 +1115,33 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
         else:
             story.append(Paragraph('GSTIN : -', normal))
         
-    story.append(Paragraph('Kind Attension : -', normal))
+    customer_user_name = (getattr(customer, 'user_name', None) or '').strip() if customer else ''
+    customer_designation = (designation or '').strip()
+    if not customer_designation and products:
+        for p in products:
+            p_desig = getattr(p, 'designation', None)
+            if p_desig:
+                customer_designation = str(p_desig).strip()
+                break
+
+    if customer_designation:
+        if not (customer_designation.startswith('(') and customer_designation.endswith(')')):
+            formatted_designation = f"({customer_designation})"
+        else:
+            formatted_designation = customer_designation
+    else:
+        formatted_designation = ''
+
+    if customer_user_name and formatted_designation:
+        atten_text = f"{pdf_text(customer_user_name)} {pdf_text(formatted_designation)}"
+    elif customer_user_name:
+        atten_text = pdf_text(customer_user_name)
+    elif formatted_designation:
+        atten_text = pdf_text(formatted_designation)
+    else:
+        atten_text = '-'
+
+    story.append(Paragraph(f'Kind Attension : {atten_text}', normal))
     story.append(Paragraph(f'Phone :{pdf_text(customer_phone)}', normal))
     if customer.email:
         story.append(Paragraph(f'Email-ID :{pdf_text(customer.email)}', normal))
@@ -2259,11 +2328,11 @@ def customer_po_product_details(request):
         sps = list(product.supplierproduct_set.all())
         product.supplier_qty_ordered = sum(sp.quantity for sp in sps)
         product.supplier_qty_received = sum(sp.quantity_received for sp in sps)
-        if not sps:
+        if not sps or product.supplier_qty_received == 0:
             product.material_status_code = 'pending'
             product.material_status_label = 'Not Delivered (Pending)'
         else:
-            if all(sp.status == 'delivered' for sp in sps):
+            if all(sp.status == 'delivered' for sp in sps) or (product.supplier_qty_ordered > 0 and product.supplier_qty_received >= product.supplier_qty_ordered):
                 product.material_status_code = 'delivered'
                 product.material_status_label = 'Delivered'
             elif any(sp.status == 'partially_delivered' or sp.quantity_received > 0 for sp in sps):
@@ -2334,7 +2403,10 @@ def customer_po_product_details(request):
                     seen_inv_nos.add(inv.invoice_number)
                     group_invoices.append(inv)
 
-        any_material_received = any(p.material_status_code != 'pending' for p in prods)
+        any_material_received = any(
+            max(min(p.supplier_qty_received - (p.quantity_delivered or 0), (p.quantity_ordered or 0) - (p.quantity_delivered or 0)), 0) > 0
+            for p in prods
+        )
         is_all_delivered = (total_customer_delivered >= total_customer_ordered and total_customer_ordered > 0) or (group_status == 'delivered')
 
         product_names_display = ', '.join([p.product_name for p in prods])
@@ -3780,6 +3852,14 @@ def dpr_supplier(request, dpr_id):
             str(sp.id): sp.po_pdf_generated
             for sp in supplier_orders
         }
+        existing_product_specs = {
+            str(sp.id): sp.product_specifications
+            for sp in supplier_orders
+        }
+        existing_terms_and_conditions = {
+            str(sp.id): sp.terms_and_conditions
+            for sp in supplier_orders
+        }
 
         for i in range(len(product_ids)):
             if not product_ids[i] or not supplier_ids[i]:
@@ -3908,6 +3988,8 @@ def dpr_supplier(request, dpr_id):
                 po_attachment=po_attachment,
                 po_email_sent=preserve_email_sent,
                 po_pdf_generated=existing_pdf_generated.get(existing_id, False),
+                product_specifications=existing_product_specs.get(existing_id),
+                terms_and_conditions=existing_terms_and_conditions.get(existing_id),
             )
 
         _sync_dpr_supplier_qty_ordered(dpr)
@@ -3942,6 +4024,56 @@ def dpr_supplier(request, dpr_id):
         po_number = items[0].po_number or f'SPO-{timezone.localdate():%Y%m%d}-{dpr.id:04d}-{supplier.id:04d}'
         # po_pdf_generated is True only when the Generate PO & Update button was clicked
         supplier_po_generated = any(sp.po_pdf_generated for sp in items)
+
+        saved_terms = ''
+        for sp in items:
+            if sp.terms_and_conditions and sp.terms_and_conditions.strip():
+                saved_terms = sp.terms_and_conditions.strip()
+                break
+        if not saved_terms:
+            saved_terms = (
+                "1. Please return the duplicate copy of this order duly signed in as a token of your acceptance.\n"
+                "2. Mention our Purchase Order number in all your Delivery challans, Invoices & other correspondence documents.\n"
+                "3. Test Certificate (calibration Certificate) is Mandatory where ever applicable."
+            )
+
+        po_products = []
+        for sp in items:
+            specs_val = sp.product_specifications
+            if not specs_val:
+                raw_specs = getattr(sp.customer_product, 'product_specifications', None)
+                if not raw_specs:
+                    if dpr.quotation_number:
+                        q_rec = RFQQuotation.objects.filter(quotation_number__icontains=dpr.quotation_number.strip()).first()
+                        if q_rec and q_rec.products_snapshot:
+                            for snap in q_rec.products_snapshot:
+                                if (snap.get('product_name', '').strip().lower() == sp.customer_product.product_name.strip().lower()
+                                        or (sp.customer_product.product_type and snap.get('product_type', '').strip().lower() == sp.customer_product.product_type.strip().lower())):
+                                    raw_specs = snap.get('product_specifications')
+                                    break
+                    if not raw_specs and dpr.customer:
+                        rfq_p = RFQProduct.objects.filter(
+                            rfq__customer=dpr.customer,
+                            product_name__icontains=sp.customer_product.product_name
+                        ).order_by('-id').first()
+                        if rfq_p and rfq_p.product_specifications:
+                            raw_specs = rfq_p.product_specifications
+
+                desc_lines = _format_product_description_lines(
+                    sp.customer_product.product_name,
+                    raw_specs,
+                    sp.customer_product.remarks
+                )
+                spec_lines = [l for l in desc_lines if not (l.startswith('<b>') and l.endswith('</b>'))]
+                specs_val = '\n'.join(spec_lines)
+
+            po_products.append({
+                'supplier_product_id': sp.id,
+                'customer_product_id': sp.customer_product.id,
+                'product_name': sp.customer_product.product_name,
+                'product_specifications': specs_val,
+            })
+
         po_data_list.append({
             'supplier_id': supplier.id,
             'po_number': po_number,
@@ -3950,6 +4082,8 @@ def dpr_supplier(request, dpr_id):
             'combined_supplier': True,
             'product_count': len(items),
             'po_generated': supplier_po_generated,
+            'terms_and_conditions': saved_terms,
+            'products': po_products,
             'default_subject': f"Purchase Order - {po_number} from Metrology Engineering Solutions",
             'default_body': (
                 f"Dear Sir/Madam,\n\n"
@@ -4041,6 +4175,9 @@ def customer_details(request):
         region = request.POST.get('region', '').strip()
         email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
+        user_name = request.POST.get('user_name', '').strip()
+        user_number = request.POST.get('user_number', '').strip()
+        user_mail_id = request.POST.get('user_mail_id', '').strip()
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
         state_code = request.POST.get('state_code', '').strip().upper()
@@ -4072,6 +4209,19 @@ def customer_details(request):
             if phone_error:
                 messages.error(request, phone_error)
                 return redirect('customer_details')
+            if user_mail_id:
+                user_emails_list = [e.strip() for e in re.split(r'[,;\s]+', user_mail_id) if e.strip()]
+                for em in user_emails_list:
+                    try:
+                        validate_email(em)
+                    except ValidationError:
+                        messages.error(request, f'Enter a valid user email address ("{em}" is invalid).')
+                        return redirect('customer_details')
+                user_mail_id = ', '.join(user_emails_list)
+            user_phone_error = _validate_master_phone(user_number)
+            if user_phone_error:
+                messages.error(request, 'Enter a valid 10-digit user number.')
+                return redirect('customer_details')
 
         if action == 'add':
             new_customer = Customer.objects.create(
@@ -4079,6 +4229,9 @@ def customer_details(request):
                 region=region,
                 email=email or None,
                 phone_number=phone_number or None,
+                user_name=user_name or None,
+                user_number=user_number or None,
+                user_mail_id=user_mail_id or None,
                 address=address or None,
                 gstin=gstin or None,
                 state_code=state_code or None,
@@ -4124,12 +4277,15 @@ def customer_details(request):
             customer.region = region
             customer.email = email or None
             customer.phone_number = phone_number or None
+            customer.user_name = user_name or None
+            customer.user_number = user_number or None
+            customer.user_mail_id = user_mail_id or None
             customer.address = address or None
             customer.gstin = gstin or None
             customer.state_code = state_code or None
             customer.is_sez = is_sez
             customer.payment_terms = payment_terms or None
-            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
+            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'user_name', 'user_number', 'user_mail_id', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
             messages.success(request, 'Customer updated successfully.')
         elif action == 'delete':
             try:
@@ -4157,6 +4313,9 @@ def customer_details(request):
         'region': request.GET.get('region', '').strip(),
         'email': request.GET.get('email', '').strip(),
         'phone_number': request.GET.get('phone_number', '').strip(),
+        'user_name': request.GET.get('user_name', '').strip(),
+        'user_number': request.GET.get('user_number', '').strip(),
+        'user_mail_id': request.GET.get('user_mail_id', '').strip(),
         'state_code': request.GET.get('state_code', '').strip() or ('33' if request.GET.get('region', '').strip() in ('Chennai', 'Hosur') else ''),
         'from_email_id': request.GET.get('from_email_id', '').strip(),
         'mail_date_param': request.GET.get('mail_date_param', '').strip(),
@@ -4637,22 +4796,25 @@ def rfq_details(request):
                         if single_terms:
                             quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
 
+                    customer_designation = request.POST.get('customer_designation', '').strip()
                     if quotation_record is not None:
                         # Update the existing unsent quotation record with the newly entered quotation products snapshot
-                        quotation_record.products_snapshot = _serialize_quotation_products(quotation_products, custom_terms=quotation_terms)
+                        quotation_record.products_snapshot = _serialize_quotation_products(quotation_products, custom_terms=quotation_terms, designation=customer_designation)
                         quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
                     else:
                         quotation_record = _create_rfq_quotation_record(
                             rfq,
                             quotation_products,
                             quotation_product_ids_to_mark,
-                            email_sent=False
+                            email_sent=False,
+                            custom_terms=quotation_terms,
+                            designation=customer_designation
                         )
-                        if quotation_terms:
-                            quotation_record.products_snapshot = _serialize_quotation_products(quotation_products, custom_terms=quotation_terms)
+                        if quotation_terms or customer_designation:
+                            quotation_record.products_snapshot = _serialize_quotation_products(quotation_products, custom_terms=quotation_terms, designation=customer_designation)
                             quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
                     quote_no = quotation_record.quotation_number
-                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no, custom_terms=quotation_terms)
+                    pdf_buffer = _build_rfq_quotation_pdf(rfq, quotation_products, quote_no=quote_no, custom_terms=quotation_terms, designation=customer_designation)
 
                     filename = f"{quote_no.replace('/', '_')}.pdf"
                     attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
@@ -4801,17 +4963,45 @@ def rfq_details(request):
     for rfq in rfqs_to_display:
         row_class = rfq.row_class
         latest_quotation = rfq.quotations.order_by('-created_at', '-id').first()
+        if latest_quotation:
+            base_quote_no = _quote_number_base(latest_quotation.quotation_number)
+            next_rev = _next_revision_number_for_quote_base(rfq, base_quote_no)
+            next_rev_quote_no = _format_mes_quote_no(rfq, next_rev, base_quote_no=base_quote_no)
+        else:
+            next_rev_quote_no = _get_mes_quote_no(rfq)
+
         rfq_payloads.append({
             'id': rfq.id,
             'rfq_no': rfq.rfq_no,
             'quotation_no': rfq.quotation_no_display,
             'default_quotation_no': latest_quotation.quotation_number if latest_quotation else _get_mes_quote_no(rfq),
+            'next_revision_quotation_no': next_rev_quote_no,
+            'quotations': [
+                {
+                    'id': q.id,
+                    'quotation_number': q.quotation_number,
+                    'revision_number': q.revision_number,
+                    'email_sent': q.email_sent,
+                    'product_ids': [str(p.get('id')) for p in (q.products_snapshot or []) if isinstance(p, dict) and p.get('id')],
+                }
+                for q in rfq.quotations.order_by('-created_at', '-id')
+            ],
             'mail_date': rfq.mail_date.strftime('%Y-%m-%d') if rfq.mail_date else '',
             'customer_id': rfq.customer_id,
-            'customer_name': rfq.customer.customer_name,
-            'customer_region': rfq.customer.region or '',
-            'customer_email': rfq.customer.email or '',
-            'customer_payment_terms': getattr(rfq.customer, 'payment_terms', '') or '',
+            'customer_name': rfq.customer.customer_name if rfq.customer else '',
+            'customer_user_name': (getattr(rfq.customer, 'user_name', None) or '').strip() if rfq.customer else '',
+            'customer_address': _format_customer_full_address(rfq.customer),
+            'customer_gstin': (getattr(rfq.customer, 'gstin', None) or '').strip() if rfq.customer else '',
+            'customer_phone': (getattr(rfq.customer, 'phone_number', None) or '').strip() if rfq.customer else '',
+            'customer_region': (rfq.customer.region or '') if rfq.customer else '',
+            'customer_email': (rfq.customer.email or '') if rfq.customer else '',
+            'customer_payment_terms': (getattr(rfq.customer, 'payment_terms', '') or '') if rfq.customer else '',
+            'customer_designation': (
+                next(
+                    (p.get('designation') for p in (latest_quotation.products_snapshot or []) if isinstance(p, dict) and p.get('designation')),
+                    ''
+                ) if latest_quotation and latest_quotation.products_snapshot else ''
+            ),
             'enquiry_details': rfq.enquiry_details,
             'remarks': rfq.remarks or '',
             'attachment_url': rfq.attachment.url if rfq.attachment else '',
@@ -4945,6 +5135,7 @@ def rfq_quotation_download(request, rfq_id):
         mes_rates = request.GET.getlist('mes_rates')
         delivery_weeks = request.GET.get('delivery_weeks')
         installation_charge = request.GET.get('installation_charge')
+        customer_designation = request.GET.get('customer_designation', '').strip() or request.POST.get('customer_designation', '').strip()
 
         if req_product_ids or req_supplier_price_ids:
             products, _ = _build_selected_quotation_products(
@@ -4953,14 +5144,15 @@ def rfq_quotation_download(request, rfq_id):
                 req_supplier_price_ids,
                 mes_rates=mes_rates,
                 delivery_weeks=delivery_weeks,
-                installation_charge=installation_charge
+                installation_charge=installation_charge,
+                designation=customer_designation
             )
             quote_no = _determine_quotation_number_for_preview(rfq, products)
         elif latest_quotation:
             products = _deserialize_quotation_products(latest_quotation.products_snapshot)
             quote_no = latest_quotation.quotation_number
         else:
-            products, _ = _build_selected_quotation_products(rfq, [], [])
+            products, _ = _build_selected_quotation_products(rfq, [], [], designation=customer_designation)
             if not products:
                 products = list(rfq.products.all())
             quote_no = _determine_quotation_number_for_preview(rfq, products)
@@ -4973,7 +5165,7 @@ def rfq_quotation_download(request, rfq_id):
         if not quotation_terms:
             quotation_terms = request.GET.getlist('custom_terms') or request.POST.getlist('custom_terms')
 
-        pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
+        pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms, designation=customer_designation)
 
         filename = f"{quote_no.replace('/', '_')}.pdf"
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
@@ -4985,8 +5177,10 @@ def rfq_quotation_download(request, rfq_id):
     mes_rates = request.POST.getlist('mes_rates')
     delivery_weeks = request.POST.get('delivery_weeks')
     installation_charge = request.POST.get('installation_charge')
+    customer_designation = request.POST.get('customer_designation', '').strip()
     products, quotation_product_ids_to_mark = _build_selected_quotation_products(
-        rfq, product_ids, supplier_price_ids, mes_rates=mes_rates, delivery_weeks=delivery_weeks, installation_charge=installation_charge
+        rfq, product_ids, supplier_price_ids, mes_rates=mes_rates, delivery_weeks=delivery_weeks, installation_charge=installation_charge,
+        designation=customer_designation
     )
     if not products:
         messages.error(request, 'Select at least one product to prepare quotation.')
@@ -5013,7 +5207,9 @@ def rfq_quotation_download(request, rfq_id):
             rfq,
             products,
             quotation_product_ids_to_mark,
-            email_sent=False
+            email_sent=False,
+            custom_terms=custom_terms,
+            designation=customer_designation
         )
         quote_no = quotation_record.quotation_number
     else:
@@ -5030,7 +5226,7 @@ def rfq_quotation_download(request, rfq_id):
         if single_terms:
             custom_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
 
-    pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=custom_terms)
+    pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=custom_terms, designation=customer_designation)
     filename = f"{quote_no.replace('/', '_')}.pdf"
     response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
     if quotation_record:
@@ -5060,6 +5256,9 @@ def supplier_details(request):
         supplier_name = request.POST.get('supplier_name', '').strip()
         email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
+        user_name = request.POST.get('user_name', '').strip()
+        user_number = request.POST.get('user_number', '').strip()
+        user_mail_id = request.POST.get('user_mail_id', '').strip()
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
         state_code = request.POST.get('state_code', '').strip().upper()
@@ -5084,12 +5283,28 @@ def supplier_details(request):
             if phone_error:
                 messages.error(request, phone_error)
                 return redirect('supplier_details')
+            if user_mail_id:
+                user_emails_list = [e.strip() for e in re.split(r'[,;\s]+', user_mail_id) if e.strip()]
+                for em in user_emails_list:
+                    try:
+                        validate_email(em)
+                    except ValidationError:
+                        messages.error(request, f'Enter a valid user email address ("{em}" is invalid).')
+                        return redirect('supplier_details')
+                user_mail_id = ', '.join(user_emails_list)
+            user_phone_error = _validate_master_phone(user_number)
+            if user_phone_error:
+                messages.error(request, 'Enter a valid 10-digit user number.')
+                return redirect('supplier_details')
 
         if action == 'add':
             Supplier.objects.create(
                 supplier_name=supplier_name,
                 email=email or None,
                 phone_number=phone_number or None,
+                user_name=user_name or None,
+                user_number=user_number or None,
+                user_mail_id=user_mail_id or None,
                 address=address or None,
                 gstin=gstin or None,
                 state_code=state_code or None,
@@ -5105,12 +5320,15 @@ def supplier_details(request):
             supplier.supplier_name = supplier_name
             supplier.email = email or None
             supplier.phone_number = phone_number or None
+            supplier.user_name = user_name or None
+            supplier.user_number = user_number or None
+            supplier.user_mail_id = user_mail_id or None
             supplier.address = address or None
             supplier.gstin = gstin or None
             supplier.state_code = state_code or None
             supplier.is_sez = is_sez
             supplier.payment_terms = payment_terms or None
-            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
+            supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'user_name', 'user_number', 'user_mail_id', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
             messages.success(request, 'Supplier updated successfully.')
         elif action == 'delete':
             try:
@@ -5393,6 +5611,18 @@ def add_customer(request):
             'phone_number'
         , '').strip()
 
+        user_name = request.POST.get(
+            'user_name'
+        , '').strip()
+
+        user_number = request.POST.get(
+            'user_number'
+        , '').strip()
+
+        user_mail_id = request.POST.get(
+            'user_mail_id'
+        , '').strip()
+
         address = request.POST.get(
             'address'
         , '').strip()
@@ -5444,6 +5674,23 @@ def add_customer(request):
                 'field': 'phone_number'
             }, status=400)
 
+        if user_mail_id:
+            try:
+                validate_email(user_mail_id)
+            except ValidationError:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Enter a valid user email address.',
+                    'field': 'user_mail_id'
+                }, status=400)
+
+        if user_number and not re.fullmatch(r'\d{10}', user_number):
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Enter a valid 10-digit user mobile number.',
+                'field': 'user_number'
+            }, status=400)
+
         customer = Customer.objects.create(
 
             customer_name=customer_name,
@@ -5453,6 +5700,12 @@ def add_customer(request):
             email=email or None,
 
             phone_number=phone_number or None,
+
+            user_name=user_name or None,
+
+            user_number=user_number or None,
+
+            user_mail_id=user_mail_id or None,
 
             address=address or None,
 
@@ -5501,6 +5754,9 @@ def add_supplier(request):
         supplier_name = request.POST.get('supplier_name', '').strip()
         email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
+        user_name = request.POST.get('user_name', '').strip()
+        user_number = request.POST.get('user_number', '').strip()
+        user_mail_id = request.POST.get('user_mail_id', '').strip()
         address = request.POST.get('address', '').strip()
 
         if not supplier_name:
@@ -5509,9 +5765,47 @@ def add_supplier(request):
                 'message': 'Supplier Name is required'
             }, status=400)
 
+        if email:
+            try:
+                validate_email(email)
+            except ValidationError:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Enter a valid supplier email address.',
+                    'field': 'email'
+                }, status=400)
+
+        if phone_number and not re.fullmatch(r'\d{10}', phone_number):
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Enter a valid 10-digit mobile number.',
+                'field': 'phone_number'
+            }, status=400)
+
+        if user_mail_id:
+            try:
+                validate_email(user_mail_id)
+            except ValidationError:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Enter a valid user email address.',
+                    'field': 'user_mail_id'
+                }, status=400)
+
+        if user_number and not re.fullmatch(r'\d{10}', user_number):
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Enter a valid 10-digit user mobile number.',
+                'field': 'user_number'
+            }, status=400)
+
         supplier = Supplier.objects.create(
             supplier_name=supplier_name,
+            email=email or None,
             phone_number=phone_number or None,
+            user_name=user_name or None,
+            user_number=user_number or None,
+            user_mail_id=user_mail_id or None,
             address=address or None
         )
 
@@ -5997,36 +6291,56 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         line_total = sp.po_value or (qty * rate)
         basic_total += line_total
         
-        raw_specs = getattr(sp.customer_product, 'product_specifications', None)
-        if not raw_specs:
-            if dpr.quotation_number:
-                q_rec = RFQQuotation.objects.filter(quotation_number__icontains=dpr.quotation_number.strip()).first()
-                if q_rec and q_rec.products_snapshot:
-                    for snap in q_rec.products_snapshot:
-                        if (snap.get('product_name', '').strip().lower() == sp.customer_product.product_name.strip().lower()
-                                or (sp.customer_product.product_type and snap.get('product_type', '').strip().lower() == sp.customer_product.product_type.strip().lower())):
-                            raw_specs = snap.get('product_specifications')
-                            break
-            if not raw_specs and dpr.customer:
-                rfq_p = RFQProduct.objects.filter(
-                    rfq__customer=dpr.customer,
-                    product_name__icontains=sp.customer_product.product_name
-                ).order_by('-id').first()
-                if rfq_p and rfq_p.product_specifications:
-                    raw_specs = rfq_p.product_specifications
+        if sp.product_specifications and sp.product_specifications.strip():
+            custom_lines = [l.strip() for l in sp.product_specifications.strip().splitlines() if l.strip()]
+            pname = sp.customer_product.product_name.strip()
+            escaped_desc = []
+            first_line_is_pname = False
+            if custom_lines and custom_lines[0].lower() in (pname.lower(), f"<b>{pname.lower()}</b>"):
+                first_line_is_pname = True
 
-        desc_lines = _format_product_description_lines(
-            sp.customer_product.product_name,
-            raw_specs,
-            sp.customer_product.remarks
-        )
-        escaped_desc = []
-        for line in desc_lines:
-            if line.startswith('<b>') and line.endswith('</b>'):
-                escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
-            else:
-                escaped_desc.append(pdf_text(line))
-        desc_para = Paragraph('<br/>'.join(escaped_desc), normal_style)
+            if not first_line_is_pname and pname:
+                escaped_desc.append(f"<b>{pdf_text(pname.upper())}</b>")
+
+            for line in custom_lines:
+                if line.startswith('<b>') and line.endswith('</b>'):
+                    escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+                elif first_line_is_pname and line == custom_lines[0]:
+                    escaped_desc.append(f"<b>{pdf_text(line.upper())}</b>")
+                else:
+                    escaped_desc.append(pdf_text(line))
+            desc_para = Paragraph('<br/>'.join(escaped_desc), normal_style)
+        else:
+            raw_specs = getattr(sp.customer_product, 'product_specifications', None)
+            if not raw_specs:
+                if dpr.quotation_number:
+                    q_rec = RFQQuotation.objects.filter(quotation_number__icontains=dpr.quotation_number.strip()).first()
+                    if q_rec and q_rec.products_snapshot:
+                        for snap in q_rec.products_snapshot:
+                            if (snap.get('product_name', '').strip().lower() == sp.customer_product.product_name.strip().lower()
+                                    or (sp.customer_product.product_type and snap.get('product_type', '').strip().lower() == sp.customer_product.product_type.strip().lower())):
+                                raw_specs = snap.get('product_specifications')
+                                break
+                if not raw_specs and dpr.customer:
+                    rfq_p = RFQProduct.objects.filter(
+                        rfq__customer=dpr.customer,
+                        product_name__icontains=sp.customer_product.product_name
+                    ).order_by('-id').first()
+                    if rfq_p and rfq_p.product_specifications:
+                        raw_specs = rfq_p.product_specifications
+
+            desc_lines = _format_product_description_lines(
+                sp.customer_product.product_name,
+                raw_specs,
+                sp.customer_product.remarks
+            )
+            escaped_desc = []
+            for line in desc_lines:
+                if line.startswith('<b>') and line.endswith('</b>'):
+                    escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+                else:
+                    escaped_desc.append(pdf_text(line))
+            desc_para = Paragraph('<br/>'.join(escaped_desc), normal_style)
         hsn = _get_hsn(sp.customer_product.product_name)
         uom = _get_uom(sp.customer_product.product_name)
         
@@ -6054,13 +6368,30 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
 
     # 6. Remarks & Totals Table
     is_sez_supplier = (getattr(supplier, 'is_sez', 'No') or 'No').strip().upper() == 'YES'
-    remarks_col = Paragraph(
-        '<b>REMARKS :</b><br/>'
-        '1. Please return the duplicate copy of this order duly signed in as a token of your acceptance.<br/>'
-        '2. Mention our Purchase Order number in all your Delivery challans, Invoices & other correspondence documents.<br/>'
-        '3. Test Certificate (calibration Certificate) is Mandatory where ever applicable.',
-        normal_style
-    )
+
+    saved_terms = ''
+    for sp in items:
+        if sp.terms_and_conditions and sp.terms_and_conditions.strip():
+            saved_terms = sp.terms_and_conditions.strip()
+            break
+
+    if saved_terms:
+        term_lines = [l.strip() for l in saved_terms.splitlines() if l.strip()]
+        formatted_terms = []
+        for idx, t_line in enumerate(term_lines, start=1):
+            if re.match(r'^\d+[\.\)\-]\s*', t_line):
+                formatted_terms.append(pdf_text(t_line))
+            else:
+                formatted_terms.append(f"{idx}. {pdf_text(t_line)}")
+        remarks_html = '<b>REMARKS :</b><br/>' + '<br/>'.join(formatted_terms)
+    else:
+        remarks_html = (
+            '<b>REMARKS :</b><br/>'
+            '1. Please return the duplicate copy of this order duly signed in as a token of your acceptance.<br/>'
+            '2. Mention our Purchase Order number in all your Delivery challans, Invoices & other correspondence documents.<br/>'
+            '3. Test Certificate (calibration Certificate) is Mandatory where ever applicable.'
+        )
+    remarks_col = Paragraph(remarks_html, normal_style)
 
     if is_sez_supplier:
         gst_amount = Decimal('0.00')
@@ -6500,6 +6831,52 @@ def send_supplier_po_email(request, dpr_id):
     return redirect('dpr_supplier', dpr_id=dpr_id)
 
 
+@role_required('ADMIN', 'PURCHASE')
+def save_supplier_po_details(request, dpr_id):
+    """Save custom product specifications and terms & conditions for a supplier PO."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST method required.'}, status=405)
+    try:
+        dpr = DPR.objects.get(pk=dpr_id)
+    except DPR.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'DPR not found.'}, status=404)
+
+    import json
+    from products.models import SupplierProduct
+
+    supplier_id = request.POST.get('supplier_id')
+    terms_and_conditions = request.POST.get('terms_and_conditions')
+    raw_specs_json = request.POST.get('product_specs', '{}')
+
+    try:
+        product_specs_map = json.loads(raw_specs_json) if raw_specs_json else {}
+    except Exception:
+        product_specs_map = {}
+
+    supplier_products = SupplierProduct.objects.filter(customer_product__dpr=dpr)
+    if supplier_id:
+        supplier_products = supplier_products.filter(supplier_id=supplier_id)
+
+    if not supplier_products.exists():
+        return JsonResponse({'status': 'error', 'message': 'No supplier products found.'}, status=404)
+
+    if terms_and_conditions is not None:
+        supplier_products.update(terms_and_conditions=terms_and_conditions.strip())
+
+    for sp in supplier_products:
+        spec_text = None
+        if str(sp.id) in product_specs_map:
+            spec_text = product_specs_map[str(sp.id)]
+        elif str(sp.customer_product_id) in product_specs_map:
+            spec_text = product_specs_map[str(sp.customer_product_id)]
+
+        if spec_text is not None:
+            sp.product_specifications = spec_text.strip()
+            sp.save(update_fields=['product_specifications'])
+
+    return JsonResponse({'status': 'success', 'message': 'PO details saved successfully.'})
+
+
 @role_required('ADMIN', 'SALES', 'PURCHASE')
 def check_customer_po_number(request):
     """AJAX endpoint: checks if a customer PO number already exists (for duplicate validation)."""
@@ -6638,23 +7015,39 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
                 super().showPage()
             super().save()
 
-    comp_header = (
-        "<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>"
-        "NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,<br/>"
-        "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri,<br/>"
-        "Tamilnadu - 635109,<br/>"
-        "Contact: 9655778871, 9655778807<br/>"
-        f"Email : {settings.DEFAULT_FROM_EMAIL}<br/>"
-        "GSTIN : 33ABKFM1033E1ZS"
-    )
+    from xml.sax.saxutils import escape as xml_escape
+    if custom_data and custom_data.get('company_address') is not None:
+        comp_addr_raw = custom_data.get('company_address').strip()
+        comp_addr_lines = [xml_escape(l.strip()) for l in comp_addr_raw.splitlines() if l.strip()]
+        comp_addr_html = '<br/>'.join(comp_addr_lines)
+        comp_header = f"<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>{comp_addr_html}" if comp_addr_html else "<b>METROLOGY ENGINEERING SOLUTIONS</b>"
+    else:
+        comp_header = (
+            "<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>"
+            "NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,<br/>"
+            "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri,<br/>"
+            "Tamilnadu - 635109,<br/>"
+            "Contact: 9655778871, 9655778807<br/>"
+            f"Email : {settings.DEFAULT_FROM_EMAIL}<br/>"
+            "GSTIN : 33ABKFM1033E1ZS"
+        )
 
     first_email = re.split(r'[,;\s]+', customer.email)[0].strip() if customer.email else ''
     cust_atten = first_email.split('@')[0] if (first_email and '@' in first_email) else (customer.customer_name or "Mr.Nizamuddeen S")
+
+    from xml.sax.saxutils import escape as xml_escape
+    if custom_data and custom_data.get('customer_address') is not None:
+        cust_addr_raw = custom_data.get('customer_address').strip()
+        cust_addr_lines = [xml_escape(l.strip()) for l in cust_addr_raw.splitlines() if l.strip()]
+        cust_addr_html = '<br/>'.join(cust_addr_lines)
+    else:
+        addr_parts = [p.strip() for p in [customer.address or '', customer.region or ''] if p.strip()]
+        cust_addr_html = '<br/>'.join(xml_escape(p) for p in addr_parts)
+
     cust_info = (
         f"Kindly Atten : {cust_atten}<br/>"
         f"<b>M/s. {customer.customer_name}</b><br/>"
-        f"{customer.address or ''}<br/>"
-        f"{customer.region or ''}<br/>"
+        f"{cust_addr_html + '<br/>' if cust_addr_html else ''}"
         f"Contact Number : {customer.phone_number or ''}<br/>"
         f"Mail Id : {customer.email or ''}<br/>"
         f"GSTIN : {customer.gstin or '-'}"
@@ -6737,8 +7130,7 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
 
     headers = [
         Paragraph("<b>S.No</b>", center_bold),
-        Paragraph("<b>Product</b>", center_bold),
-        Paragraph("<b>Description</b>", center_bold),
+        Paragraph("<b>Product Description</b>", center_bold),
         Paragraph("<b>HSN/SAC</b>", center_bold),
         Paragraph("<b>Qty</b>", center_bold),
         Paragraph("<b>Unit</b>", center_bold),
@@ -6852,7 +7244,6 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
 
         row = [
             Paragraph(str(idx), center_align),
-            Paragraph(pdf_text(prod_type_val), center_align),
             Paragraph(desc_text, normal),
             Paragraph(hsn, center_align),
             Paragraph(str(qty), center_align),
@@ -6875,12 +7266,12 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
         tax_total = Decimal('0.00')
 
         tax_rows = [
-            ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
-            ["", "", Paragraph("SGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("CGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-            ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
+            ["", Paragraph("SGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", Paragraph("CGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+            ["", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
         ]
     else:
         if state_code_clean:
@@ -6899,12 +7290,12 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
             tax_total = sgst_amt + cgst_amt
 
             tax_rows = [
-                ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
-                ["", "", Paragraph("SGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
-                ["", "", Paragraph("CGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
-                ["", "", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-                ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-                ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
+                ["", Paragraph("SGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {sgst_amt:,.2f}", right_align)],
+                ["", Paragraph("CGST", right_align), Paragraph("9%", center_align), "", "", "", Paragraph(f"Rs. {cgst_amt:,.2f}", right_align)],
+                ["", Paragraph("IGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
             ]
         else:
             igst_rate = Decimal('18.00')
@@ -6914,24 +7305,24 @@ def _build_customer_invoice_pdf(product_id, invoice_id=None, selected_product_id
             tax_total = igst_amt
 
             tax_rows = [
-                ["", "", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
-                ["", "", Paragraph("SGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-                ["", "", Paragraph("CGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-                ["", "", Paragraph("IGST", right_align), Paragraph("18%", center_align), "", "", "", Paragraph(f"Rs. {igst_amt:,.2f}", right_align)],
-                ["", "", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
-                ["", "", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", Paragraph("Sub Total", right_bold), "", "", "", "", Paragraph(f"<b>Rs. {subtotal:,.2f}</b>", right_bold)],
+                ["", Paragraph("SGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", Paragraph("CGST", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", Paragraph("IGST", right_align), Paragraph("18%", center_align), "", "", "", Paragraph(f"Rs. {igst_amt:,.2f}", right_align)],
+                ["", Paragraph("P & F", right_align), Paragraph("0%", center_align), "", "", "", Paragraph("Rs. 0.00", right_align)],
+                ["", Paragraph("R.OF", right_align), "", "", "", "", Paragraph("Rs. 0.00", right_align)],
             ]
 
     grand_total = subtotal + tax_total
     prod_table_data.extend(tax_rows)
 
     prod_table_data.append([
-        "", "", Paragraph("<b>Total</b>", right_bold), "",
+        "", Paragraph("<b>Total</b>", right_bold), "",
         Paragraph(f"<b>{total_qty}</b>", center_bold), "", "",
         Paragraph(f"<b>Rs. {grand_total:,.2f}</b>", right_bold)
     ])
 
-    col_widths = [10 * mm, 26 * mm, 68 * mm, 18 * mm, 10 * mm, 12 * mm, 22 * mm, 24 * mm]
+    col_widths = [10 * mm, 94 * mm, 18 * mm, 10 * mm, 12 * mm, 22 * mm, 24 * mm]
 
     t_style = [
         ('BOX', (0,0), (-1,-1), 1, colors.black),
@@ -7278,25 +7669,30 @@ def customer_invoice_modal_data(request, product_id):
                 plain_desc_lines.append(clean_l)
         formatted_desc_text = '\n'.join(plain_desc_lines)
 
-        rem_qty = max(prod.quantity_ordered - (prod.quantity_delivered or 0), 0)
+        cust_remaining = max(prod.quantity_ordered - (prod.quantity_delivered or 0), 0)
         prod_rate = prod.mes_rate_per_unit if (prod.mes_rate_per_unit and prod.mes_rate_per_unit > 0) else (prod.rate_per_unit or Decimal('0.00'))
 
         sps = list(prod.supplierproduct_set.all())
         supplier_qty_ordered = sum(sp.quantity for sp in sps)
         supplier_qty_received = sum(sp.quantity_received for sp in sps)
+        supplier_available = max(supplier_qty_received - (prod.quantity_delivered or 0), 0)
+        invoicable_qty = min(cust_remaining, supplier_available)
 
-        if not sps:
+        if not sps or supplier_qty_received == 0:
             material_received = False
             material_status_label = 'The product was not received from the supplier'
-        elif all(sp.status == 'delivered' for sp in sps) or (supplier_qty_ordered > 0 and supplier_qty_received >= supplier_qty_ordered):
+        elif invoicable_qty == 0 and (prod.quantity_delivered or 0) >= prod.quantity_ordered:
             material_received = True
-            material_status_label = 'Received from supplier'
-        elif any(sp.status == 'partially_delivered' or sp.quantity_received > 0 for sp in sps):
+            material_status_label = f'Fully delivered to customer ({prod.quantity_delivered}/{prod.quantity_ordered})'
+        elif invoicable_qty == 0 and supplier_available == 0:
+            material_received = False
+            material_status_label = f'All received items ({supplier_qty_received}) already invoiced'
+        elif supplier_qty_ordered > 0 and supplier_qty_received >= supplier_qty_ordered:
+            material_received = True
+            material_status_label = f'Received from supplier ({supplier_qty_received}/{supplier_qty_ordered})'
+        else:
             material_received = True
             material_status_label = f'Partially received ({supplier_qty_received}/{supplier_qty_ordered})'
-        else:
-            material_received = False
-            material_status_label = 'The product was not received from the supplier'
 
         data.append({
             'id': prod.id,
@@ -7308,8 +7704,8 @@ def customer_invoice_modal_data(request, product_id):
             'rate': f"{prod_rate:.2f}",
             'quantity_ordered': prod.quantity_ordered,
             'quantity_delivered': prod.quantity_delivered or 0,
-            'remaining_qty': rem_qty,
-            'invoice_qty': rem_qty,
+            'remaining_qty': invoicable_qty,
+            'invoice_qty': invoicable_qty,
             'supplier_qty_ordered': supplier_qty_ordered,
             'supplier_qty_received': supplier_qty_received,
             'material_received': material_received,
@@ -7357,6 +7753,15 @@ def customer_invoice_modal_data(request, product_id):
     return JsonResponse({
         'status': 'success',
         'dpr_serial': dpr.serial_number,
+        'company_name': 'METROLOGY ENGINEERING SOLUTIONS',
+        'company_address': (
+            "NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,\n"
+            "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri,\n"
+            "Tamilnadu - 635109,\n"
+            "Contact: 9655778871, 9655778807\n"
+            f"Email : {settings.DEFAULT_FROM_EMAIL}\n"
+            "GSTIN : 33ABKFM1033E1ZS"
+        ),
         'customer_name': customer.customer_name if customer else '',
         'customer_address': customer.address or '' if customer else '',
         'customer_region': customer.region or '' if customer else '',
@@ -7413,9 +7818,17 @@ def generate_customer_invoice(request, product_id, invoice_id=None):
             # Update delivered quantity and status for selected items
             for p in all_products:
                 if p.id in selected_product_ids:
-                    rem_qty = max(p.quantity_ordered - (p.quantity_delivered or 0), 0)
-                    raw_invoiced_qty = custom_qtys.get(p.id, p.quantity_ordered)
-                    invoiced_qty = min(raw_invoiced_qty, rem_qty) if rem_qty > 0 else raw_invoiced_qty
+                    sps = list(p.supplierproduct_set.all())
+                    supplier_qty_received = sum(sp.quantity_received for sp in sps)
+                    supplier_available = max(supplier_qty_received - (p.quantity_delivered or 0), 0)
+                    cust_remaining = max(p.quantity_ordered - (p.quantity_delivered or 0), 0)
+                    rem_qty = min(cust_remaining, supplier_available)
+
+                    raw_invoiced_qty = custom_qtys.get(p.id, rem_qty)
+                    invoiced_qty = min(raw_invoiced_qty, rem_qty) if rem_qty > 0 else 0
+                    if invoiced_qty <= 0:
+                        continue
+                    custom_qtys[p.id] = invoiced_qty
                     p.quantity_delivered = min((p.quantity_delivered or 0) + invoiced_qty, p.quantity_ordered)
 
                     if p.quantity_delivered >= p.quantity_ordered and p.quantity_delivered > 0:
@@ -7796,6 +8209,7 @@ def send_rfq_email_reply(request, rfq_id):
         mes_rates = request.POST.getlist('mes_rates')
         delivery_weeks = request.POST.get('delivery_weeks', '').strip()
         installation_charge = request.POST.get('installation_charge', '').strip()
+        customer_designation = request.POST.get('customer_designation', '').strip()
 
         quotation_record = None
         quotation_product_ids_to_mark = []
@@ -7804,7 +8218,8 @@ def send_rfq_email_reply(request, rfq_id):
                 rfq, product_ids, supplier_price_ids,
                 mes_rates=mes_rates,
                 delivery_weeks=delivery_weeks,
-                installation_charge=installation_charge
+                installation_charge=installation_charge,
+                designation=customer_designation
             )
         else:
             latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
@@ -7812,7 +8227,7 @@ def send_rfq_email_reply(request, rfq_id):
                 products = _deserialize_quotation_products(latest_quotation.products_snapshot)
                 quotation_product_ids_to_mark = [str(getattr(p, 'id', '')) for p in products if getattr(p, 'id', None)]
             else:
-                products, quotation_product_ids_to_mark = _build_selected_quotation_products(rfq, [], [])
+                products, quotation_product_ids_to_mark = _build_selected_quotation_products(rfq, [], [], designation=customer_designation)
                 if not products:
                     products = list(rfq.products.all())
                     quotation_product_ids_to_mark = [str(p.id) for p in products if hasattr(p, 'id') and p.id]
@@ -7835,21 +8250,23 @@ def send_rfq_email_reply(request, rfq_id):
                 email_sent=False
             )
             if quotation_record is not None:
-                quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms)
+                quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms, designation=customer_designation)
                 quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
             else:
                 quotation_record = _create_rfq_quotation_record(
                     rfq,
                     products,
                     quotation_product_ids_to_mark,
-                    email_sent=False
+                    email_sent=False,
+                    custom_terms=quotation_terms,
+                    designation=customer_designation
                 )
-                if quotation_terms:
-                    quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms)
+                if quotation_terms or customer_designation:
+                    quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms, designation=customer_designation)
                     quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
 
             quote_no = quotation_record.quotation_number
-            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
+            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms, designation=customer_designation)
 
             filename = f"{quote_no.replace('/', '_')}.pdf"
             attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))

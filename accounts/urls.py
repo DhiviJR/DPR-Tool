@@ -26,6 +26,7 @@ urlpatterns = [
     path('dpr/<int:dpr_id>/products/', views.dpr_products, name='dpr_products'),
     path('dpr/<int:dpr_id>/documents/download/', views.dpr_documents_download, name='dpr_documents_download'),
     path('dpr/<int:dpr_id>/generate-po/', views.generate_supplier_po, name='generate_supplier_po'),
+    path('dpr/<int:dpr_id>/save-supplier-po-details/', views.save_supplier_po_details, name='save_supplier_po_details'),
     path('dpr/<int:dpr_id>/send-po-email/', views.send_supplier_po_email, name='send_supplier_po_email'),
     path('dpr/<int:dpr_id>/supplier-email-thread/', views.get_supplier_email_thread, name='get_supplier_email_thread'),
     path('dpr/<int:dpr_id>/send-supplier-reply/', views.send_supplier_email_reply, name='send_supplier_email_reply'),

@@ -184,22 +184,24 @@
   </div>
 </div>
 
-<!-- Delivery Address Selection Modal -->
+<!-- Delivery Address & PO Setup Modal -->
 <div class="modal fade" id="deliveryAddressModal" tabindex="-1" aria-labelledby="deliveryAddressModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
     <div class="modal-content shadow border-0">
       <div class="modal-header bg-primary text-white">
         <h5 class="modal-title fw-bold" id="deliveryAddressModalLabel">
-          <i class="bi bi-geo-alt me-2"></i>Select Delivery Address for Purchase Order
+          <i class="bi bi-file-earmark-text me-2"></i>Purchase Order Setup - <span id="modalSupplierTitle">Supplier</span>
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body p-4">
-        <p class="text-secondary mb-3">
+        <!-- 1. Delivery Address Selection -->
+        <h6 class="fw-bold text-dark mb-2"><i class="bi bi-geo-alt text-primary me-1"></i> Delivery Address</h6>
+        <p class="text-secondary small mb-3">
           Please select the <strong>DELIVERY ADDRESS</strong> to generate on the Purchase Order PDF. <span class="text-muted">(Invoice Address remains fixed).</span>
         </p>
 
-        <div class="row g-3">
+        <div class="row g-3 mb-4">
           <!-- Option 1: Hosur Address -->
           <div class="col-md-6">
             <div class="card h-100 border-2 delivery-address-card active-delivery-card" id="cardHosurAddr" style="cursor: pointer; border-color: #0d6efd; background-color: #f8f9fa;">
@@ -243,9 +245,42 @@
             </div>
           </div>
         </div>
+
+        <hr class="my-3">
+
+        <!-- 2. Product Specifications -->
+        <div class="mb-4">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-card-checklist text-primary me-1"></i> Product Specifications</h6>
+            <span class="badge bg-primary-subtle text-primary border small">Editable for PO</span>
+          </div>
+          <p class="text-secondary small mb-3">
+            Review or edit specifications line-by-line for each product. These appear under <strong>ITEM DISCRIPTION</strong> on the PO PDF.
+          </p>
+          <div id="modalProductSpecsContainer" class="d-flex flex-column gap-3">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <!-- 3. Terms & Conditions -->
+        <div class="mb-2">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-journal-text text-primary me-1"></i> Terms & Conditions (Remarks)</h6>
+            <span class="badge bg-primary-subtle text-primary border small">Editable for PO</span>
+          </div>
+          <p class="text-secondary small mb-2">
+            Each numbered line will appear under <strong>REMARKS</strong> on the Purchase Order PDF.
+          </p>
+          <textarea class="form-control" id="modalTermsAndConditions" rows="4" style="font-size: 0.85rem; line-height: 1.5;" placeholder="Enter terms and conditions line by line..."></textarea>
+        </div>
       </div>
       <div class="modal-footer bg-light">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-outline-primary fw-bold" id="modalPreviewPoBtn">
+          <i class="bi bi-eye me-1"></i> Preview PO
+        </button>
         <button type="button" class="btn btn-primary px-4 fw-bold" id="modalConfirmGeneratePoBtn">
           <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
         </button>
@@ -514,6 +549,15 @@ function updateSupplierEmailButtons() {
       const btnGroup = document.createElement('div');
       btnGroup.className = 'd-inline-flex gap-1 flex-wrap justify-content-center';
 
+      const poDetailsBtn = document.createElement('button');
+      poDetailsBtn.type = 'button';
+      poDetailsBtn.className = 'btn btn-outline-secondary btn-sm shadow-sm';
+      poDetailsBtn.innerHTML = '<i class="bi bi-file-earmark-text me-1"></i>PO Details';
+      poDetailsBtn.title = 'Edit PO Specs & Terms or Preview PO';
+      poDetailsBtn.addEventListener('click', function() {
+        triggerPoSetupModal(matchingPo, 'preview_only');
+      });
+
       const newMailBtn = document.createElement('button');
       newMailBtn.type = 'button';
       newMailBtn.className = 'btn btn-outline-primary btn-sm shadow-sm';
@@ -532,6 +576,7 @@ function updateSupplierEmailButtons() {
         openSupplierEmailChainModal(matchingPo);
       });
 
+      btnGroup.appendChild(poDetailsBtn);
       btnGroup.appendChild(newMailBtn);
       btnGroup.appendChild(replyMailBtn);
       emailTd.appendChild(btnGroup);
@@ -893,28 +938,163 @@ updateQuantityLimits();
 updateSupplierRowValues();
 updateOverallSupplierQty();
 
-// Delivery Address Modal Logic & State for Generate PO and New Email
+// Delivery Address & PO Setup Modal Logic & State
 let pendingAddressAction = 'generate_po';
 let pendingEmailPo = null;
 let pendingIsReply = false;
 let currentChosenDeliveryAddress = 'hosur';
 
-function triggerNewEmailWithAddressPrompt(matchingPo, isReply = false) {
-  pendingAddressAction = 'new_email';
+function updateCardSelection(selected) {
+  const radioHosurAddr = document.getElementById('radioHosurAddr');
+  const radioChennaiAddr = document.getElementById('radioChennaiAddr');
+  const cardHosurAddr = document.getElementById('cardHosurAddr');
+  const cardChennaiAddr = document.getElementById('cardChennaiAddr');
+
+  if (selected === 'hosur') {
+    if (radioHosurAddr) radioHosurAddr.checked = true;
+    if (cardHosurAddr) {
+      cardHosurAddr.style.borderColor = '#0d6efd';
+      cardHosurAddr.style.backgroundColor = '#f8f9fa';
+    }
+    if (cardChennaiAddr) {
+      cardChennaiAddr.style.borderColor = '#dee2e6';
+      cardChennaiAddr.style.backgroundColor = '#ffffff';
+    }
+  } else {
+    if (radioChennaiAddr) radioChennaiAddr.checked = true;
+    if (cardChennaiAddr) {
+      cardChennaiAddr.style.borderColor = '#0d6efd';
+      cardChennaiAddr.style.backgroundColor = '#f8f9fa';
+    }
+    if (cardHosurAddr) {
+      cardHosurAddr.style.borderColor = '#dee2e6';
+      cardHosurAddr.style.backgroundColor = '#ffffff';
+    }
+  }
+}
+
+function triggerPoSetupModal(matchingPo, action = 'new_email', isReply = false) {
+  pendingAddressAction = action;
   pendingEmailPo = matchingPo;
   pendingIsReply = isReply;
+
+  // Title
+  const titleEl = document.getElementById('modalSupplierTitle');
+  if (titleEl) {
+    titleEl.textContent = matchingPo ? `${matchingPo.supplier_name} (${matchingPo.po_number || ''})` : 'Supplier';
+  }
+
+  // Address selection
+  const defaultAddr = (matchingPo && matchingPo.delivery_address) ? matchingPo.delivery_address : currentChosenDeliveryAddress || 'hosur';
+  updateCardSelection(defaultAddr);
+
+  // Terms & Conditions
+  const termsTextarea = document.getElementById('modalTermsAndConditions');
+  if (termsTextarea) {
+    termsTextarea.value = (matchingPo && matchingPo.terms_and_conditions) ? matchingPo.terms_and_conditions : (
+      "1. Please return the duplicate copy of this order duly signed in as a token of your acceptance.\n" +
+      "2. Mention our Purchase Order number in all your Delivery challans, Invoices & other correspondence documents.\n" +
+      "3. Test Certificate (calibration Certificate) is Mandatory where ever applicable."
+    );
+  }
+
+  // Product Specifications
+  const specsContainer = document.getElementById('modalProductSpecsContainer');
+  if (specsContainer) {
+    specsContainer.innerHTML = '';
+    const prods = (matchingPo && matchingPo.products) ? matchingPo.products : [];
+    if (prods.length > 0) {
+      prods.forEach((prod, idx) => {
+        const itemCard = document.createElement('div');
+        itemCard.className = 'border rounded p-3 bg-light shadow-sm';
+        itemCard.innerHTML = `
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold text-dark small"><i class="bi bi-box-seam me-1 text-primary"></i>${idx + 1}. ${escapeHtml(prod.product_name)}</span>
+            <span class="badge bg-secondary-subtle text-secondary small">Product Spec</span>
+          </div>
+          <textarea class="form-control form-control-sm po-item-spec-input" rows="3" data-sp-id="${prod.supplier_product_id || ''}" data-cp-id="${prod.customer_product_id || ''}" placeholder="Enter product specifications line by line...">${escapeHtml(prod.product_specifications || '')}</textarea>
+        `;
+        specsContainer.appendChild(itemCard);
+      });
+    } else {
+      specsContainer.innerHTML = '<div class="text-muted small">No products found for this supplier order.</div>';
+    }
+  }
+
+  // Adjust confirm button text based on action
+  const confirmBtn = document.getElementById('modalConfirmGeneratePoBtn');
+  if (confirmBtn) {
+    if (action === 'preview_only') {
+      confirmBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Save Details';
+    } else {
+      confirmBtn.innerHTML = '<i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO';
+    }
+  }
+
   const deliveryAddressModal = document.getElementById('deliveryAddressModal');
   if (deliveryAddressModal) {
     const modal = bootstrap.Modal.getOrCreateInstance(deliveryAddressModal);
     modal.show();
-  } else {
-    openSupplierPoEmailModal(matchingPo, isReply, currentChosenDeliveryAddress);
   }
+}
+
+function triggerNewEmailWithAddressPrompt(matchingPo, isReply = false) {
+  triggerPoSetupModal(matchingPo, 'new_email', isReply);
+}
+
+async function handleModalSave(supplierId, selectedAddress) {
+  const terms = document.getElementById('modalTermsAndConditions')?.value || '';
+  const specMap = {};
+  document.querySelectorAll('#modalProductSpecsContainer .po-item-spec-input').forEach(ta => {
+    const spId = ta.dataset.spId;
+    const cpId = ta.dataset.cpId;
+    const key = spId || cpId;
+    if (key) {
+      specMap[key] = ta.value;
+    }
+  });
+
+  const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+  const formData = new URLSearchParams();
+  formData.append('supplier_id', supplierId);
+  formData.append('delivery_address', selectedAddress);
+  formData.append('terms_and_conditions', terms);
+  formData.append('product_specs', JSON.stringify(specMap));
+
+  try {
+    const resp = await fetch(`/dpr/{{ dpr.id }}/save-supplier-po-details/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRFToken': csrfToken
+      },
+      body: formData.toString()
+    });
+    const result = await resp.json();
+    if (result.status === 'success') {
+      if (pendingEmailPo) {
+        pendingEmailPo.terms_and_conditions = terms;
+        if (pendingEmailPo.products) {
+          pendingEmailPo.products.forEach(p => {
+            const key = p.supplier_product_id || p.customer_product_id;
+            if (key && specMap[key] !== undefined) {
+              p.product_specifications = specMap[key];
+            }
+          });
+        }
+      }
+      return true;
+    }
+  } catch (err) {
+    console.error('Error saving PO details:', err);
+  }
+  return false;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
   const generatePoBtn = document.getElementById('generatePoBtn');
   const deliveryAddressModal = document.getElementById('deliveryAddressModal');
+  const modalPreviewPoBtn = document.getElementById('modalPreviewPoBtn');
   const modalConfirmGeneratePoBtn = document.getElementById('modalConfirmGeneratePoBtn');
   const cardHosurAddr = document.getElementById('cardHosurAddr');
   const cardChennaiAddr = document.getElementById('cardChennaiAddr');
@@ -957,34 +1137,64 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  function updateCardSelection(selected) {
-    if (selected === 'hosur') {
-      radioHosurAddr.checked = true;
-      cardHosurAddr.style.borderColor = '#0d6efd';
-      cardHosurAddr.style.backgroundColor = '#f8f9fa';
-      cardChennaiAddr.style.borderColor = '#dee2e6';
-      cardChennaiAddr.style.backgroundColor = '#ffffff';
-    } else {
-      radioChennaiAddr.checked = true;
-      cardChennaiAddr.style.borderColor = '#0d6efd';
-      cardChennaiAddr.style.backgroundColor = '#f8f9fa';
-      cardHosurAddr.style.borderColor = '#dee2e6';
-      cardHosurAddr.style.backgroundColor = '#ffffff';
-    }
-  }
-
   if (cardHosurAddr) cardHosurAddr.addEventListener('click', () => updateCardSelection('hosur'));
   if (cardChennaiAddr) cardChennaiAddr.addEventListener('click', () => updateCardSelection('chennai'));
   if (radioHosurAddr) radioHosurAddr.addEventListener('change', () => updateCardSelection('hosur'));
   if (radioChennaiAddr) radioChennaiAddr.addEventListener('change', () => updateCardSelection('chennai'));
 
-  if (modalConfirmGeneratePoBtn) {
-    modalConfirmGeneratePoBtn.addEventListener('click', function() {
+  if (modalPreviewPoBtn) {
+    modalPreviewPoBtn.addEventListener('click', async function() {
+      const btn = this;
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Saving...';
+
       const selectedAddress = document.querySelector('input[name="modalDeliveryAddressChoice"]:checked')?.value || 'hosur';
       currentChosenDeliveryAddress = selectedAddress;
+      const supplierId = pendingEmailPo ? pendingEmailPo.supplier_id : '';
+      const poNumber = pendingEmailPo ? pendingEmailPo.po_number : '';
+
+      if (supplierId) {
+        await handleModalSave(supplierId, selectedAddress);
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+
+      const dprId = "{{ dpr.id }}";
+      const params = new URLSearchParams({
+        supplier_id: supplierId,
+        po_number: poNumber,
+        delivery_address: selectedAddress
+      });
+      window.open(`/dpr/${dprId}/generate-po/?${params.toString()}`, '_blank');
+    });
+  }
+
+  if (modalConfirmGeneratePoBtn) {
+    modalConfirmGeneratePoBtn.addEventListener('click', async function() {
+      const selectedAddress = document.querySelector('input[name="modalDeliveryAddressChoice"]:checked')?.value || 'hosur';
+      currentChosenDeliveryAddress = selectedAddress;
+      const supplierId = pendingEmailPo ? pendingEmailPo.supplier_id : '';
+
+      const btn = this;
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Saving...';
+
+      if (supplierId) {
+        await handleModalSave(supplierId, selectedAddress);
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
 
       const modal = bootstrap.Modal.getInstance(deliveryAddressModal);
       if (modal) modal.hide();
+
+      if (pendingAddressAction === 'preview_only') {
+        return;
+      }
 
       if (pendingAddressAction === 'new_email') {
         openSupplierPoEmailModal(pendingEmailPo, pendingIsReply, selectedAddress);

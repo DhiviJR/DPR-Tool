@@ -38,6 +38,18 @@
                 <input type="tel" name="phone_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric">
             </div>
             <div class="col-lg">
+                <label class="form-label">User Name</label>
+                <input type="text" name="user_name" class="form-control">
+            </div>
+            <div class="col-lg">
+                <label class="form-label">User Number</label>
+                <input type="tel" name="user_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric">
+            </div>
+            <div class="col-lg">
+                <label class="form-label">User Mail ID</label>
+                <input type="text" name="user_mail_id" class="form-control" placeholder="e.g. user@example.com">
+            </div>
+            <div class="col-lg">
                 <label class="form-label">GSTIN</label>
                 <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
             </div>
@@ -97,6 +109,9 @@
                         <th>Supplier Name</th>
                         <th>Email</th>
                         <th>Phone Number</th>
+                        <th>User Name</th>
+                        <th>User Number</th>
+                        <th>User Mail ID</th>
                         <th>GSTIN</th>
                         <th>State Code</th>
                         <th>SEZ</th>
@@ -122,6 +137,15 @@
                         </td>
                         <td>
                             <input type="tel" name="phone_number" form="form-{{ supplier.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ supplier.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
+                        </td>
+                        <td>
+                            <input type="text" name="user_name" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.user_name|default:'' }}" disabled>
+                        </td>
+                        <td>
+                            <input type="tel" name="user_number" form="form-{{ supplier.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ supplier.user_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
+                        </td>
+                        <td>
+                            <input type="text" name="user_mail_id" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.user_mail_id|default:'' }}" disabled>
                         </td>
                         <td>
                             <input type="text" name="gstin" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field js-gstin-input text-uppercase" value="{{ supplier.gstin|default:''|upper }}" maxlength="15" disabled>
@@ -167,7 +191,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="11" class="text-center">No supplier records found.</td>
+                        <td colspan="14" class="text-center">No supplier records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

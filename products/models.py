@@ -182,6 +182,8 @@ class SupplierProduct(models.Model):
     po_attachment = models.FileField(upload_to='supplier_po/', blank=True, null=True)
     po_email_sent = models.BooleanField(default=False)
     po_pdf_generated = models.BooleanField(default=False)  # True only after Generate PO & Update is clicked
+    product_specifications = models.TextField(blank=True, null=True)
+    terms_and_conditions = models.TextField(blank=True, null=True)
     PAYMENT_STATUS_CHOICES = (
         ('not_received', 'Not Received'),
         ('partially_received', 'Partially Received'),

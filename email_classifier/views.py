@@ -1169,6 +1169,7 @@ def add_rfq_from_email(request, record_id):
             'email': sender_email if not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS) else '',
             'phone_number': extracted_phone or '',
             'region': ext_region or '',
+            'address': ext_region or '',
             'state_code': '33' if ext_region in ('Chennai', 'Hosur') else '',
             'from_email_id': record.id,
             'mail_date_param': mail_date_str,
@@ -1336,6 +1337,7 @@ def add_po_from_email(request, record_id):
             email=sender_email if not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS) else None,
             phone_number=extracted_phone or None,
             region=ext_region or None,
+            address=ext_region or None,
             state_code='33' if ext_region in ('Chennai', 'Hosur') else None,
             is_sez='No',
         )

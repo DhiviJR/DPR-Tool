@@ -198,8 +198,8 @@
                             <div class="d-inline-flex align-items-center gap-1 text-nowrap">
                                 <div class="d-inline-flex flex-column gap-1">
                                     {% if not row.any_material_received %}
-                                    <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="The item is not received from supplier">
-                                        <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed; pointer-events: none;" data-product-id="{{ row.first_product_id }}" disabled title="The item is not received from supplier">
+                                    <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{% if row.total_supplier_qty_received > 0 %}All received supplier items have already been invoiced{% else %}The item is not received from supplier{% endif %}">
+                                        <button type="button" class="btn btn-sm text-nowrap btn-generate-invoice text-white" style="background-color: #22c55e; border-color: #22c55e; opacity: 0.85; cursor: not-allowed; pointer-events: none;" data-product-id="{{ row.first_product_id }}" disabled title="{% if row.total_supplier_qty_received > 0 %}All received supplier items have already been invoiced{% else %}The item is not received from supplier{% endif %}">
                                             Generate Invoice
                                         </button>
                                     </span>
@@ -859,7 +859,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const headerInfo = document.getElementById('invoiceModalHeaderInfo');
 
         if (step1Body) {
-            step1Body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Loading products...</td></tr>';
+            step1Body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Loading products...</td></tr>';
         }
         if (headerInfo) {
             headerInfo.innerHTML = 'Loading order details...';
@@ -896,24 +896,27 @@ document.addEventListener('DOMContentLoaded', function() {
                         let rowsHtml = '';
                         data.products.forEach((p, idx) => {
                             const deliveredQty = p.quantity_delivered || 0;
-                            const remainingQty = (p.remaining_qty !== undefined) ? p.remaining_qty : Math.max(p.quantity_ordered - deliveredQty, 0);
-                            const isMaterialReceived = (p.material_received !== undefined) ? p.material_received : true;
+                            const maxInvoicable = (p.remaining_qty !== undefined) ? p.remaining_qty : 0;
+                            const isMaterialReceived = (p.material_received !== undefined) ? p.material_received : false;
 
-                            let isAvailable = remainingQty > 0;
+                            let isAvailable = maxInvoicable > 0 && isMaterialReceived;
                             let statusNotice = '';
 
-                            if (!isMaterialReceived) {
+                            if (!isMaterialReceived || (p.supplier_qty_received || 0) === 0) {
                                 isAvailable = false;
-                                statusNotice = `<div class="text-danger small mt-1 fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>The product was not received from the supplier.</div>`;
+                                statusNotice = `<div class="text-danger small mt-1 fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>${p.material_status_label || 'The product was not received from the supplier.'}</div>`;
                             } else if (deliveredQty >= p.quantity_ordered) {
                                 isAvailable = false;
                                 statusNotice = `<div class="text-success small mt-1 fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-check-circle-fill me-1"></i>Fully delivered to customer (${deliveredQty}/${p.quantity_ordered}).</div>`;
-                            } else if (deliveredQty > 0) {
-                                statusNotice = `<div class="text-muted small mt-1" style="font-size: 0.8rem;"><i class="bi bi-info-circle text-primary me-1"></i>Partially delivered: ${deliveredQty} / ${p.quantity_ordered}</div>`;
+                            } else if (maxInvoicable === 0) {
+                                isAvailable = false;
+                                statusNotice = `<div class="text-warning small mt-1 fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-exclamation-circle me-1"></i>${p.material_status_label || 'All received items already invoiced.'}</div>`;
+                            } else {
+                                statusNotice = `<div class="text-muted small mt-1" style="font-size: 0.8rem;"><i class="bi bi-info-circle text-primary me-1"></i>Available to invoice: <strong>${maxInvoicable}</strong></div>`;
                             }
 
                             const isChecked = isAvailable;
-                            const defaultQty = isAvailable ? remainingQty : 0;
+                            const defaultQty = isAvailable ? maxInvoicable : 0;
 
                             rowsHtml += `
                                 <tr class="${!isAvailable ? 'table-light opacity-75' : ''}">
@@ -927,8 +930,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </td>
                                     <td class="text-center">${p.quantity_ordered}</td>
                                     <td class="text-center">${deliveredQty}</td>
+                                    <td class="text-center fw-semibold text-primary">${p.supplier_qty_received || 0}</td>
                                     <td class="text-center">
-                                        <input type="number" value="${defaultQty}" min="${isAvailable ? 1 : 0}" max="${remainingQty}" class="form-control form-control-sm text-center step1-qty-input" style="max-width: 80px; margin: 0 auto;" data-prod-id="${p.id}" ${!isAvailable ? 'disabled' : ''}>
+                                        <input type="number" value="${defaultQty}" min="${isAvailable ? 1 : 0}" max="${maxInvoicable}" class="form-control form-control-sm text-center step1-qty-input" style="max-width: 80px; margin: 0 auto;" data-prod-id="${p.id}" data-max-qty="${maxInvoicable}" data-prod-name="${p.product_name}" ${!isAvailable ? 'disabled' : ''}>
+                                        <div class="step1-qty-warning text-danger fw-semibold mt-1 d-none" style="font-size: 0.75rem; line-height: 1.1;"></div>
                                     </td>
                                 </tr>
                             `;
@@ -945,22 +950,90 @@ document.addEventListener('DOMContentLoaded', function() {
                                     const qInput = document.querySelector(`.step1-qty-input[data-prod-id="${pid}"]`);
                                     if (qInput) qInput.disabled = !cb.checked;
                                 });
+                                validateStep1QtyInputs(false);
                             };
                         }
+                        validateStep1QtyInputs(false);
                     }
                 } else {
                     if (step1Body) {
-                        step1Body.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Failed to load products.</td></tr>';
+                        step1Body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Failed to load products.</td></tr>';
                     }
                 }
             })
             .catch(err => {
                 console.error(err);
                 if (step1Body) {
-                    step1Body.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Error loading products.</td></tr>';
+                    step1Body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Error loading products.</td></tr>';
                 }
             });
     });
+
+    function validateStep1QtyInputs(showAlert = false) {
+        let hasError = false;
+        let errorMessage = '';
+        const btnNext = document.getElementById('btnProceedToInvoicePreview');
+        const rows = document.querySelectorAll('#invoiceModalStep1Body tr');
+
+        rows.forEach(tr => {
+            const cb = tr.querySelector('.step1-prod-select');
+            const input = tr.querySelector('.step1-qty-input');
+            const warningEl = tr.querySelector('.step1-qty-warning');
+            if (!input) return;
+
+            const isChecked = cb && cb.checked && !cb.disabled;
+            const maxVal = parseInt(input.getAttribute('data-max-qty'), 10) || 0;
+            const prodName = input.getAttribute('data-prod-name') || 'product';
+            const enteredVal = parseInt(input.value, 10);
+
+            if (isChecked) {
+                if (isNaN(enteredVal) || enteredVal <= 0) {
+                    input.classList.add('is-invalid');
+                    if (warningEl) {
+                        warningEl.textContent = 'Min quantity is 1';
+                        warningEl.classList.remove('d-none');
+                    }
+                    hasError = true;
+                    if (!errorMessage) errorMessage = `Please enter a valid quantity greater than 0 for "${prodName}".`;
+                } else if (enteredVal > maxVal) {
+                    input.classList.add('is-invalid');
+                    if (warningEl) {
+                        warningEl.textContent = `Max received qty is ${maxVal}!`;
+                        warningEl.classList.remove('d-none');
+                    }
+                    hasError = true;
+                    if (!errorMessage) errorMessage = `Quantity for "${prodName}" cannot exceed available supplier received quantity (${maxVal}). You entered ${enteredVal}.`;
+                } else {
+                    input.classList.remove('is-invalid');
+                    if (warningEl) {
+                        warningEl.textContent = '';
+                        warningEl.classList.add('d-none');
+                    }
+                }
+            } else {
+                input.classList.remove('is-invalid');
+                if (warningEl) {
+                    warningEl.textContent = '';
+                    warningEl.classList.add('d-none');
+                }
+            }
+        });
+
+        if (btnNext) {
+            btnNext.disabled = hasError;
+            if (hasError) {
+                btnNext.title = 'Please correct invalid quantities before proceeding.';
+            } else {
+                btnNext.title = '';
+            }
+        }
+
+        if (hasError && showAlert && errorMessage) {
+            alert(errorMessage);
+        }
+
+        return !hasError;
+    }
 
     document.addEventListener('change', function(e) {
         if (e.target && e.target.classList.contains('step1-prod-select')) {
@@ -969,10 +1042,26 @@ document.addEventListener('DOMContentLoaded', function() {
             if (qInput) {
                 qInput.disabled = !e.target.checked;
             }
+            validateStep1QtyInputs(false);
+        }
+        if (e.target && e.target.classList.contains('step1-qty-input')) {
+            const maxVal = parseInt(e.target.getAttribute('data-max-qty'), 10) || 0;
+            const enteredVal = parseInt(e.target.value, 10);
+            const prodName = e.target.getAttribute('data-prod-name') || 'product';
+            if (enteredVal > maxVal) {
+                alert(`Warning: Quantity for "${prodName}" cannot exceed available supplier received quantity (${maxVal}). The quantity has been reset to ${maxVal}.`);
+                e.target.value = maxVal;
+            } else if (enteredVal < 1 && e.target.value !== '') {
+                e.target.value = 1;
+            }
+            validateStep1QtyInputs(false);
         }
     });
 
     document.addEventListener('input', function(e) {
+        if (e.target && e.target.classList.contains('step1-qty-input')) {
+            validateStep1QtyInputs(false);
+        }
         if (e.target && (e.target.classList.contains('sheet-live-qty') || e.target.classList.contains('sheet-live-rate'))) {
             calculateSheetTotals();
         }
@@ -990,6 +1079,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            if (!validateStep1QtyInputs(true)) {
+                return;
+            }
+
             const selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.getAttribute('data-prod-id'), 10));
             const selectedProducts = currentInvoiceData.products.filter(p => selectedIds.includes(p.id));
 
@@ -1004,10 +1097,12 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             // Populate Sheet Header Data safely
+            const defaultCompanyAddress = `NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,\n2nd Cross, Dharga, Opposite to Sathya mess, Hosur,\nKrishnagiri, Tamilnadu - 635109,\nContact: 9655778871, 9655778807\nEmail : info@mesinstruments.co.in\nGSTIN : 33ABKFM1033E1ZS`;
+            setVal('sheetCompanyAddress', currentInvoiceData.company_address || defaultCompanyAddress);
             setText('sheetCustAtten', currentInvoiceData.customer_atten || 'Mr.Nizamuddeen S');
             setText('sheetCustName', currentInvoiceData.customer_name || '');
-            setText('sheetCustAddress', currentInvoiceData.customer_address || '');
-            setText('sheetCustRegion', currentInvoiceData.customer_region || '');
+            const custFullAddr = [currentInvoiceData.customer_address, currentInvoiceData.customer_region].filter(Boolean).join('\n');
+            setVal('sheetCustAddress', custFullAddr);
             setText('sheetCustPhone', currentInvoiceData.customer_phone || '');
             setText('sheetCustEmail', currentInvoiceData.customer_email || '');
             setText('sheetCustGstin', currentInvoiceData.customer_gstin || '-');
@@ -1051,9 +1146,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         <td class="text-center align-top p-1 fw-semibold" style="border: 1px solid #000; width: 35px;">
                             ${idx + 1}
                             <input type="hidden" name="selected_products" value="${p.id}">
-                        </td>
-                        <td class="text-center align-top p-1 fw-bold" style="border: 1px solid #000; width: 100px; font-size: 0.78rem;">
-                            ${p.product_type || 'P0011'}
                             <input type="hidden" name="product_type_${p.id}" value="${p.product_type || 'P0011'}">
                         </td>
                         <td class="align-top p-1" style="border: 1px solid #000;">
@@ -1130,6 +1222,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const shipEl = document.getElementById('sheetShippingAddress');
         if (shipEl) shipEl.value = currentInvoiceData.shipping_address || '';
+
+        const addrEl = document.getElementById('sheetCustAddress');
+        if (addrEl) addrEl.value = [currentInvoiceData.customer_address, currentInvoiceData.customer_region].filter(Boolean).join('\n');
+
+        const compAddrEl = document.getElementById('sheetCompanyAddress');
+        const defaultCompanyAddress = `NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,\n2nd Cross, Dharga, Opposite to Sathya mess, Hosur,\nKrishnagiri, Tamilnadu - 635109,\nContact: 9655778871, 9655778807\nEmail : info@mesinstruments.co.in\nGSTIN : 33ABKFM1033E1ZS`;
+        if (compAddrEl) compAddrEl.value = currentInvoiceData.company_address || defaultCompanyAddress;
 
         // Reset Product Descriptions / Specs
         if (currentInvoiceData.products && currentInvoiceData.products.length > 0) {
@@ -1339,9 +1438,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </th>
                                     <th style="width: 55px;" class="text-center">S.No</th>
                                     <th>Product Name</th>
-                                    <th style="width: 110px;" class="text-center">Qty Ordered</th>
-                                    <th style="width: 110px;" class="text-center">Qty Delivered</th>
-                                    <th style="width: 130px;" class="text-center">Invoice Qty</th>
+                                    <th style="width: 115px;" class="text-center">Customer Ordered Qty</th>
+                                    <th style="width: 120px;" class="text-center">Qty Delivered to customer</th>
+                                    <th style="width: 125px;" class="text-center">Qty received from supplier</th>
+                                    <th style="width: 120px;" class="text-center">Invoice Qty</th>
                                 </tr>
                             </thead>
                             <tbody id="invoiceModalStep1Body">
@@ -1387,20 +1487,21 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <div class="col-md-5 border-end border-dark p-2 d-flex flex-column justify-content-between" style="border-right: 1px solid #000 !important; font-size: 0.78rem;">
                                         <div>
                                             <div class="fw-bold text-uppercase mb-1" style="font-size: 0.88rem;">METROLOGY ENGINEERING SOLUTIONS</div>
-                                            <div style="line-height: 1.35; color: #222;">
-                                                NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,<br>
-                                                2nd Cross, Dharga, Opposite to Sathya mess, Hosur,<br>
-                                                Krishnagiri, Tamilnadu - 635109,<br>
-                                                Contact: 9655778871, 9655778807<br>
-                                                Email : info@mesinstruments.co.in<br>
-                                                GSTIN : 33ABKFM1033E1ZS
+                                            <div class="mb-1">
+                                                <textarea name="company_address" id="sheetCompanyAddress" class="invoice-textarea-clean" rows="6" placeholder="Company Address" style="font-size: 0.78rem; width: 100%; line-height: 1.35;">NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,
+2nd Cross, Dharga, Opposite to Sathya mess, Hosur,
+Krishnagiri, Tamilnadu - 635109,
+Contact: 9655778871, 9655778807
+Email : info@mesinstruments.co.in
+GSTIN : 33ABKFM1033E1ZS</textarea>
                                             </div>
                                         </div>
                                         <div class="border-top border-dark pt-2 mt-2" style="border-top: 1px solid #000 !important;">
                                             <div>Kindly Atten : <span id="sheetCustAtten" class="fw-semibold"></span></div>
                                             <div class="fw-bold fs-6 text-dark mt-1">M/s. <span id="sheetCustName"></span></div>
-                                            <div id="sheetCustAddress" style="color: #333;"></div>
-                                            <div id="sheetCustRegion" class="text-muted mb-1"></div>
+                                            <div class="my-1">
+                                                <textarea name="customer_address" id="sheetCustAddress" class="invoice-textarea-clean" rows="3" placeholder="Customer Address" style="font-size: 0.78rem; width: 100%;"></textarea>
+                                            </div>
                                             <div>Contact Number : <span id="sheetCustPhone"></span></div>
                                             <div>Mail Id : <span id="sheetCustEmail"></span></div>
                                             <div>GSTIN : <span id="sheetCustGstin" class="fw-bold"></span></div>
@@ -1475,8 +1576,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <thead style="background-color: #f1f5f9; color: #000; border-bottom: 1px solid #000;">
                                         <tr class="text-center align-middle">
                                             <th style="width: 35px; border: 1px solid #000;">S.No</th>
-                                            <th style="width: 100px; border: 1px solid #000;">Product</th>
-                                            <th style="border: 1px solid #000;">Description</th>
+                                            <th style="border: 1px solid #000;">Product Description</th>
                                             <th style="width: 80px; border: 1px solid #000;">HSN/SAC</th>
                                             <th style="width: 45px; border: 1px solid #000;">Qty</th>
                                             <th style="width: 50px; border: 1px solid #000;">Unit</th>
@@ -1489,31 +1589,31 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </tbody>
                                     <tfoot style="border-top: 1px solid #000;">
                                         <tr>
-                                            <td colspan="6" class="text-end fw-bold py-1" style="border: 1px solid #000;">Sub Total</td>
+                                            <td colspan="5" class="text-end fw-bold py-1" style="border: 1px solid #000;">Sub Total</td>
                                             <td colspan="2" class="text-end fw-bold py-1 pe-2 text-primary" style="border: 1px solid #000;" id="sheetSubTotal">Rs. 0.00</td>
                                         </tr>
                                         <tr>
-                                            <td colspan="6" class="text-end py-1" style="border: 1px solid #000;">SGST (<span id="sheetSgstRate">9%</span>)</td>
+                                            <td colspan="5" class="text-end py-1" style="border: 1px solid #000;">SGST (<span id="sheetSgstRate">9%</span>)</td>
                                             <td colspan="2" class="text-end py-1 pe-2" style="border: 1px solid #000;" id="sheetSgstAmt">Rs. 0.00</td>
                                         </tr>
                                         <tr>
-                                            <td colspan="6" class="text-end py-1" style="border: 1px solid #000;">CGST (<span id="sheetCgstRate">9%</span>)</td>
+                                            <td colspan="5" class="text-end py-1" style="border: 1px solid #000;">CGST (<span id="sheetCgstRate">9%</span>)</td>
                                             <td colspan="2" class="text-end py-1 pe-2" style="border: 1px solid #000;" id="sheetCgstAmt">Rs. 0.00</td>
                                         </tr>
                                         <tr>
-                                            <td colspan="6" class="text-end py-1" style="border: 1px solid #000;">IGST (<span id="sheetIgstRate">0%</span>)</td>
+                                            <td colspan="5" class="text-end py-1" style="border: 1px solid #000;">IGST (<span id="sheetIgstRate">0%</span>)</td>
                                             <td colspan="2" class="text-end py-1 pe-2" style="border: 1px solid #000;" id="sheetIgstAmt">Rs. 0.00</td>
                                         </tr>
                                         <tr>
-                                            <td colspan="6" class="text-end py-1" style="border: 1px solid #000;">P &amp; F (0%)</td>
+                                            <td colspan="5" class="text-end py-1" style="border: 1px solid #000;">P &amp; F (0%)</td>
                                             <td colspan="2" class="text-end py-1 pe-2" style="border: 1px solid #000;">Rs. 0.00</td>
                                         </tr>
                                         <tr>
-                                            <td colspan="6" class="text-end py-1" style="border: 1px solid #000;">R.OF</td>
+                                            <td colspan="5" class="text-end py-1" style="border: 1px solid #000;">R.OF</td>
                                             <td colspan="2" class="text-end py-1 pe-2" style="border: 1px solid #000;">Rs. 0.00</td>
                                         </tr>
                                         <tr style="background-color: #f8fafc; font-weight: bold;">
-                                            <td colspan="4" class="text-end py-1" style="border: 1px solid #000;">Total</td>
+                                            <td colspan="3" class="text-end py-1" style="border: 1px solid #000;">Total</td>
                                             <td class="text-center py-1 fw-bold" style="border: 1px solid #000;" id="sheetTotalQty">0</td>
                                             <td colspan="2" class="text-end py-1" style="border: 1px solid #000;"></td>
                                             <td class="text-end py-1 pe-2 text-success fs-6 fw-bold" style="border: 1px solid #000;" id="sheetGrandTotal">Rs. 0.00</td>

@@ -63,6 +63,18 @@
                 <input type="tel" name="phone_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric" value="{{ prefill_data.phone_number|default:'' }}">
             </div>
             <div class="col-lg">
+                <label class="form-label">User Name</label>
+                <input type="text" name="user_name" class="form-control" value="{{ prefill_data.user_name|default:'' }}">
+            </div>
+            <div class="col-lg">
+                <label class="form-label">User Number</label>
+                <input type="tel" name="user_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric" value="{{ prefill_data.user_number|default:'' }}">
+            </div>
+            <div class="col-lg">
+                <label class="form-label">User Mail ID</label>
+                <input type="text" name="user_mail_id" class="form-control" placeholder="e.g. user@example.com" value="{{ prefill_data.user_mail_id|default:'' }}">
+            </div>
+            <div class="col-lg">
                 <label class="form-label">GSTIN</label>
                 <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
             </div>
@@ -86,7 +98,7 @@
             </div>
             <div class="col-lg">
                 <label class="form-label">Address</label>
-                <input type="text" name="address" class="form-control">
+                <input type="text" name="address" class="form-control" value="{{ prefill_data.address|default:'' }}">
             </div>
             <div class="col-lg-2">
                 <button type="submit" class="btn btn-success w-100">
@@ -123,6 +135,9 @@
                         <th>Region</th>
                         <th>Email</th>
                         <th>Phone Number</th>
+                        <th>User Name</th>
+                        <th>User Number</th>
+                        <th>User Mail ID</th>
                         <th>GSTIN</th>
                         <th>State Code</th>
                         <th>SEZ</th>
@@ -155,6 +170,15 @@
                         </td>
                         <td>
                             <input type="tel" name="phone_number" form="form-{{ customer.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ customer.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
+                        </td>
+                        <td>
+                            <input type="text" name="user_name" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.user_name|default:'' }}" disabled>
+                        </td>
+                        <td>
+                            <input type="tel" name="user_number" form="form-{{ customer.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ customer.user_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
+                        </td>
+                        <td>
+                            <input type="text" name="user_mail_id" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.user_mail_id|default:'' }}" disabled>
                         </td>
                         <td>
                             <input type="text" name="gstin" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field js-gstin-input text-uppercase" value="{{ customer.gstin|default:''|upper }}" maxlength="15" disabled>
@@ -200,7 +224,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="text-center">No customer records found.</td>
+                        <td colspan="15" class="text-center">No customer records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
