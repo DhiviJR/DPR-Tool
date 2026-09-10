@@ -1651,12 +1651,19 @@ def dashboard(request):
     for p in cust_products:
         inv_date = p.invoice_date or (p.dpr.po_date if p.dpr else None) or (p.dpr.created_at.date() if p.dpr and p.dpr.created_at else today)
         cust = p.dpr.customer if p.dpr else None
-        terms_str = (cust.payment_terms or '').lower() if cust else ''
+        terms_str = (cust.payment_terms or '').strip().lower() if cust else ''
         days = 30
         match = re.search(r'(\d+)', terms_str)
         if match:
             try:
-                days = int(match.group(1))
+                val = int(match.group(1))
+                if 'day' in terms_str:
+                    days = val
+                elif 'month' in terms_str:
+                    days = val * 30
+                else:
+                    # Customer payment terms in Master is entered in Weeks (e.g. 2 -> 14 days)
+                    days = val * 7
             except ValueError:
                 pass
         terms_date = inv_date + timedelta(days=days) if inv_date else today
@@ -2816,12 +2823,19 @@ def accounts_details(request):
             inv_no = f"MES-F{product.id:04d}"
 
         cust = product.dpr.customer
-        terms_str = (cust.payment_terms or '').lower() if cust else ''
+        terms_str = (cust.payment_terms or '').strip().lower() if cust else ''
         days = 30
         match = re.search(r'(\d+)', terms_str)
         if match:
             try:
-                days = int(match.group(1))
+                val = int(match.group(1))
+                if 'day' in terms_str:
+                    days = val
+                elif 'month' in terms_str:
+                    days = val * 30
+                else:
+                    # Customer payment terms in Master is entered in Weeks (e.g. 2 -> 14 days)
+                    days = val * 7
             except ValueError:
                 pass
         
@@ -4072,13 +4086,45 @@ def dpr_supplier(request, dpr_id):
                 'customer_product_id': sp.customer_product.id,
                 'product_name': sp.customer_product.product_name,
                 'product_specifications': specs_val,
+                'quantity': sp.quantity or 0,
+                'rate_per_unit': float(sp.rate_per_unit or 0),
+                'po_value': float(sp.po_value or ((sp.quantity or 0) * (sp.rate_per_unit or 0))),
+                'hsn': _get_hsn(sp.customer_product.product_name),
+                'uom': _get_uom(sp.customer_product.product_name),
             })
+
+        supplier_gstin = (getattr(supplier, 'gstin', None) or '').strip()
+        if not supplier_gstin and supplier.address:
+            gst_match = re.search(r'GST(?:IN)?\s*[:\-]?\s*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1})', supplier.address, re.IGNORECASE)
+            if gst_match:
+                supplier_gstin = gst_match.group(1)
+            else:
+                gst_match_alt = re.search(r'\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}\b', supplier.address)
+                if gst_match_alt:
+                    supplier_gstin = gst_match_alt.group(0)
+
+        is_igst = False
+        if supplier_gstin and len(supplier_gstin) >= 2 and supplier_gstin[:2].isdigit():
+            is_igst = (supplier_gstin[:2] != '33')
+        elif supplier.address:
+            addr_lower = supplier.address.lower()
+            if 'tamil nadu' not in addr_lower and 'tamilnadu' not in addr_lower and 'hosur' not in addr_lower and 'chennai' not in addr_lower and ('karnataka' in addr_lower or 'bangalore' in addr_lower or 'bengaluru' in addr_lower or 'maharashtra' in addr_lower or 'mumbai' in addr_lower or 'pune' in addr_lower or 'delhi' in addr_lower or 'gujarat' in addr_lower or 'andhra' in addr_lower or 'telangana' in addr_lower or 'kerala' in addr_lower):
+                is_igst = True
 
         po_data_list.append({
             'supplier_id': supplier.id,
             'po_number': po_number,
+            'po_date': items[0].po_date.strftime('%d-%m-%Y') if items[0].po_date else timezone.localdate().strftime('%d-%m-%Y'),
+            'po_validity': items[0].po_validity.strftime('%d-%m-%Y') if items[0].po_validity else (dpr.po_validity.strftime('%d-%m-%Y') if dpr.po_validity else '-'),
             'supplier_name': supplier.supplier_name,
+            'supplier_address': supplier.address or '',
+            'supplier_phone': supplier.phone_number or '',
             'supplier_email': supplier.email or '',
+            'supplier_gstin': supplier_gstin,
+            'contact_person': supplier.user_name or '',
+            'contact_number': supplier.user_number or '',
+            'is_sez': (getattr(supplier, 'is_sez', 'No') or 'No').strip().upper() == 'YES',
+            'is_igst': is_igst,
             'combined_supplier': True,
             'product_count': len(items),
             'po_generated': supplier_po_generated,
@@ -4160,6 +4206,27 @@ def _validate_master_phone(phone_number):
     return None
 
 
+def _validate_master_phone_list(phone_str):
+    if not phone_str:
+        return None, ''
+    raw_tokens = [t.strip() for t in re.split(r'[,;\n]+', phone_str) if t.strip()]
+    cleaned_numbers = []
+    for token in raw_tokens:
+        clean = re.sub(r'[\s\-()]+', '', token)
+        if clean.startswith('+91'):
+            clean = clean[3:]
+        elif clean.startswith('0') and len(clean) == 11:
+            clean = clean[1:]
+        if len(clean) > 10 and len(clean) % 10 == 0 and clean.isdigit():
+            for i in range(0, len(clean), 10):
+                cleaned_numbers.append(clean[i:i+10])
+        elif not re.fullmatch(r'\d{10}', clean):
+            return f'Enter valid 10-digit contact number(s) ("{token}" is invalid).', ''
+        else:
+            cleaned_numbers.append(clean)
+    return None, ', '.join(cleaned_numbers)
+
+
 def _validate_customer_region(region):
     if region not in ('Chennai', 'Hosur'):
         return 'Region is required.'
@@ -4218,10 +4285,12 @@ def customer_details(request):
                         messages.error(request, f'Enter a valid user email address ("{em}" is invalid).')
                         return redirect('customer_details')
                 user_mail_id = ', '.join(user_emails_list)
-            user_phone_error = _validate_master_phone(user_number)
-            if user_phone_error:
-                messages.error(request, 'Enter a valid 10-digit user number.')
-                return redirect('customer_details')
+            if user_number:
+                user_phone_error, cleaned_user_number = _validate_master_phone_list(user_number)
+                if user_phone_error:
+                    messages.error(request, user_phone_error)
+                    return redirect('customer_details')
+                user_number = cleaned_user_number
 
         if action == 'add':
             new_customer = Customer.objects.create(
@@ -5315,7 +5384,7 @@ def supplier_details(request):
 
         if action in ('add', 'edit'):
             if not supplier_name:
-                messages.error(request, 'Supplier Name is required.')
+                messages.error(request, 'Supplier Company Name is required.')
                 return redirect('supplier_details')
             if email:
                 emails_list = [e.strip() for e in re.split(r'[,;\s]+', email) if e.strip()]
@@ -5339,10 +5408,12 @@ def supplier_details(request):
                         messages.error(request, f'Enter a valid user email address ("{em}" is invalid).')
                         return redirect('supplier_details')
                 user_mail_id = ', '.join(user_emails_list)
-            user_phone_error = _validate_master_phone(user_number)
-            if user_phone_error:
-                messages.error(request, 'Enter a valid 10-digit user number.')
-                return redirect('supplier_details')
+            if user_number:
+                user_phone_error, cleaned_user_number = _validate_master_phone_list(user_number)
+                if user_phone_error:
+                    messages.error(request, user_phone_error)
+                    return redirect('supplier_details')
+                user_number = cleaned_user_number
 
         if action == 'add':
             Supplier.objects.create(
@@ -5809,7 +5880,7 @@ def add_supplier(request):
         if not supplier_name:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Supplier Name is required'
+                'message': 'Supplier Company Name is required'
             }, status=400)
 
         if email:
@@ -5839,12 +5910,15 @@ def add_supplier(request):
                     'field': 'user_mail_id'
                 }, status=400)
 
-        if user_number and not re.fullmatch(r'\d{10}', user_number):
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Enter a valid 10-digit user mobile number.',
-                'field': 'user_number'
-            }, status=400)
+        if user_number:
+            phone_err, cleaned_user_number = _validate_master_phone_list(user_number)
+            if phone_err:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': phone_err,
+                    'field': 'user_number'
+                }, status=400)
+            user_number = cleaned_user_number
 
         supplier = Supplier.objects.create(
             supplier_name=supplier_name,
@@ -6510,7 +6584,8 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         'Tamilnadu-635109.     Phone : +91-965-577-8807',
         normal_style
     )
-    if str(delivery_address).lower() == 'chennai':
+    norm_addr = str(delivery_address).strip()
+    if norm_addr.lower() == 'chennai':
         delivery_addr = Paragraph(
             '<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>'
             '14/65, 6th Street, Kamaraj Nagar, Korratur,<br/>'
@@ -6518,7 +6593,7 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
             'Phone : +91-965-577-8807',
             normal_style
         )
-    else:
+    elif norm_addr.lower() == 'hosur':
         delivery_addr = Paragraph(
             '<b>METROLOGY ENGINEERING SOLUTIONS</b><br/>'
             'NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br/>'
@@ -6526,6 +6601,9 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
             'Tamilnadu-635109.     Phone : +91-965-577-8807',
             normal_style
         )
+    else:
+        delivery_lines = [pdf_text(l) for l in norm_addr.splitlines() if l.strip()]
+        delivery_addr = Paragraph('<br/>'.join(delivery_lines), normal_style)
     
     addr_data = [
         [Paragraph('<b>INVOICE ADDRESS :</b>', bold_style), Paragraph('<b>DELIVERY ADDRESS :</b>', bold_style)],
@@ -6892,8 +6970,17 @@ def save_supplier_po_details(request, dpr_id):
     from products.models import SupplierProduct
 
     supplier_id = request.POST.get('supplier_id')
+    supplier_address = request.POST.get('supplier_address')
     terms_and_conditions = request.POST.get('terms_and_conditions')
     raw_specs_json = request.POST.get('product_specs', '{}')
+
+    if supplier_address is not None and supplier_id:
+        try:
+            sup = Supplier.objects.get(pk=supplier_id)
+            sup.address = supplier_address.strip()
+            sup.save(update_fields=['address'])
+        except Exception:
+            pass
 
     try:
         product_specs_map = json.loads(raw_specs_json) if raw_specs_json else {}

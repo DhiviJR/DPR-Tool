@@ -7,9 +7,9 @@ class Supplier(models.Model):
         ('Yes', 'Yes'),
     )
 
-    supplier_name = models.CharField(max_length=255)
-    user_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="User Name")
-    user_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="User Number")
+    supplier_name = models.CharField(max_length=255, verbose_name="Supplier Company Name")
+    user_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="Contact Person")
+    user_number = models.CharField(max_length=500, blank=True, null=True, verbose_name="Contact Number")
     user_mail_id = models.CharField(max_length=500, blank=True, null=True, verbose_name="User Mail ID")
     email = models.CharField(max_length=500, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)

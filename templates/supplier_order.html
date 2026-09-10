@@ -184,105 +184,225 @@
   </div>
 </div>
 
-<!-- Delivery Address & PO Setup Modal -->
+<style>
+#deliveryAddressModal .modal-body {
+    overflow-y: auto !important;
+    max-height: calc(100vh - 110px);
+}
+#deliveryAddressModal .modal-body::-webkit-scrollbar {
+    width: 12px;
+}
+#deliveryAddressModal .modal-body::-webkit-scrollbar-track {
+    background: #cbd5e1;
+    border-radius: 6px;
+}
+#deliveryAddressModal .modal-body::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 6px;
+    border: 2px solid #cbd5e1;
+}
+#deliveryAddressModal .modal-body::-webkit-scrollbar-thumb:hover {
+    background: #0f172a;
+}
+</style>
+
+<!-- Complete Purchase Order Document Editor Modal (Matching RFQ Quotation Document Style) -->
 <div class="modal fade" id="deliveryAddressModal" tabindex="-1" aria-labelledby="deliveryAddressModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-    <div class="modal-content shadow border-0">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title fw-bold" id="deliveryAddressModalLabel">
-          <i class="bi bi-file-earmark-text me-2"></i>Purchase Order Setup - <span id="modalSupplierTitle">Supplier</span>
+  <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
+    <div class="modal-content border-0">
+      <div class="modal-header bg-dark text-white py-2 px-3 flex-shrink-0">
+        <h5 class="modal-title fs-6" id="deliveryAddressModalLabel">
+          <i class="bi bi-file-earmark-text me-2"></i>Edit Purchase Order Document - <span id="modalSupplierTitle">Supplier</span>
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body p-4">
-        <!-- 1. Delivery Address Selection -->
-        <h6 class="fw-bold text-dark mb-2"><i class="bi bi-geo-alt text-primary me-1"></i> Delivery Address</h6>
-        <p class="text-secondary small mb-3">
-          Please select the <strong>DELIVERY ADDRESS</strong> to generate on the Purchase Order PDF. <span class="text-muted">(Invoice Address remains fixed).</span>
-        </p>
+      <div class="modal-body bg-secondary-subtle p-3 flex-grow-1">
+        <!-- Complete PO Paper Document Container -->
+        <div class="po-paper shadow border bg-white p-4 mx-auto" style="max-width: 960px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 0.84rem; color: #111; border-radius: 4px;">
 
-        <div class="row g-3 mb-4">
-          <!-- Option 1: Hosur Address -->
-          <div class="col-md-6">
-            <div class="card h-100 border-2 delivery-address-card active-delivery-card" id="cardHosurAddr" style="cursor: pointer; border-color: #0d6efd; background-color: #f8f9fa;">
-              <div class="card-body">
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="modalDeliveryAddressChoice" id="radioHosurAddr" value="hosur" checked>
-                  <label class="form-check-label fw-bold text-primary fs-6" for="radioHosurAddr">
-                    Option 1: Hosur Address
-                  </label>
-                </div>
-                <hr class="my-2">
-                <div class="small text-dark lh-sm">
-                  <strong>METROLOGY ENGINEERING SOLUTIONS</strong><br>
-                  NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar ,<br>
+          <!-- Header Row with Logo & Company Info -->
+          <div class="row align-items-center pb-2 mb-2 border-bottom border-dark border-2">
+            <div class="col-auto">
+              {% load static %}
+              <img src="{% static 'images/mes_logo.jpg' %}" alt="MES Logo" style="max-height: 65px; width: auto;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+              <div class="bg-dark text-white fw-bold px-3 py-2 fs-4 text-center rounded" style="display:none;">MES</div>
+            </div>
+            <div class="col text-center">
+              <h5 class="fw-bold mb-1 text-uppercase text-dark" style="letter-spacing: 0.5px; font-size: 1.15rem;">METROLOGY ENGINEERING SOLUTIONS</h5>
+              <div style="font-size: 0.76rem; line-height: 1.35; color: #333;">
+                NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar, 2nd Cross, Dharga, Opp. Sathya Mess, Hosur, Krishnagiri, TN - 635109<br>
+                Phone: +91-965-577-8807 | Email: {{ DEFAULT_FROM_EMAIL|default:"mesinstruments@gmail.com" }}<br>
+                GSTIN: 33BIKPG0091L1ZU | PAN: ABKFM1033E | Web: www.mesinstruments.co.in
+              </div>
+            </div>
+          </div>
+
+          <!-- Document Reference Bar -->
+          <div class="d-flex justify-content-between align-items-center py-1 px-3 bg-light border-bottom mb-3 fw-bold" style="font-size: 0.82rem;">
+            <div>PO NO: <span id="docPoNo" class="text-primary fw-bold">-</span></div>
+            <div>DATE: <span id="docPoDate">-</span></div>
+            <div>PO VALIDITY: <span id="docPoValidity" class="text-secondary">-</span></div>
+          </div>
+
+          <!-- Document Title -->
+          <h5 class="text-center fw-bold text-decoration-underline mb-3" style="font-size: 1.05rem; letter-spacing: 1px;">PURCHASE ORDER</h5>
+
+          <!-- Buyer & Vendor Information Box -->
+          <div class="row g-2 mb-3" style="font-size: 0.82rem;">
+            <!-- BUYER -->
+            <div class="col-md-6">
+              <div class="p-2 border rounded bg-light h-100">
+                <div class="fw-bold text-dark border-bottom pb-1 mb-1"><i class="bi bi-building me-1"></i>BUYER</div>
+                <div class="fw-bold text-dark">METROLOGY ENGINEERING SOLUTIONS</div>
+                <div class="text-secondary" style="font-size: 0.78rem; line-height: 1.35;">
+                  NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,<br>
                   2nd Cross,Dharga, Opposite to Sathya mess,Hosur,Krishnagiri,<br>
-                  Tamilnadu-635109.<br>
-                  Phone : +91-965-577-8807
+                  Tamilnadu-635109. Phone : +91-965-577-8807<br>
+                  <strong>GSTIN:</strong> 33BIKPG0091L1ZU
+                </div>
+              </div>
+            </div>
+            <!-- VENDOR -->
+            <div class="col-md-6">
+              <div class="p-2 border rounded bg-light h-100">
+                <div class="fw-bold text-dark border-bottom pb-1 mb-1"><i class="bi bi-truck me-1"></i>VENDOR / SUPPLIER</div>
+                <div class="fw-bold text-dark fs-6 text-uppercase" id="docVendorName">-</div>
+                <div class="my-1">
+                  <label for="docVendorAddress" class="form-label mb-0 text-muted" style="font-size: 0.71rem; font-weight: 600;">Address (Editable for PO):</label>
+                  <textarea id="docVendorAddress" name="supplier_address" class="form-control form-control-sm bg-white" rows="2" style="font-size: 0.78rem; line-height: 1.35; resize: vertical;" placeholder="Enter supplier address..."></textarea>
+                </div>
+                <div style="font-size: 0.78rem;">
+                  <div><strong>GSTIN:</strong> <span id="docVendorGstin">-</span></div>
+                  <div id="docVendorContactRow"><strong>Contact Person:</strong> <span id="docVendorContactPerson">-</span> | <strong>Contact Number:</strong> <span id="docVendorContactNumber">-</span></div>
+                  <div><strong>Phone:</strong> <span id="docVendorPhone">-</span> | <strong>Email:</strong> <span id="docVendorEmail">-</span></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Option 2: Chennai Address -->
-          <div class="col-md-6">
-            <div class="card h-100 border-2 delivery-address-card" id="cardChennaiAddr" style="cursor: pointer; border-color: #dee2e6; background-color: #ffffff;">
-              <div class="card-body">
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="modalDeliveryAddressChoice" id="radioChennaiAddr" value="chennai">
-                  <label class="form-check-label fw-bold text-primary fs-6" for="radioChennaiAddr">
-                    Option 2: Chennai Address
-                  </label>
+          <!-- Delivery Address Selection Card -->
+          <div class="p-2 my-3 bg-light border rounded">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold small text-dark"><i class="bi bi-geo-alt-fill text-primary me-1"></i>Delivery Address (on PO PDF):</span>
+              <span class="badge bg-primary-subtle text-primary border small">Click option or edit text below</span>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-6">
+                <div class="card h-100 border-2 delivery-address-card" id="cardHosurAddr" style="cursor: pointer; border-color: #0d6efd; background-color: #f8f9fa;">
+                  <div class="card-body p-2">
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="modalDeliveryAddressChoice" id="radioHosurAddr" value="hosur" checked>
+                      <label class="form-check-label fw-bold small text-primary" for="radioHosurAddr">Option 1: Hosur Address</label>
+                    </div>
+                    <div class="text-secondary mt-1 lh-sm" style="font-size: 0.74rem; padding-left: 1.4rem;">
+                      <strong>METROLOGY ENGINEERING SOLUTIONS</strong><br>
+                      NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar, 2nd Cross, Dharga, Opp. Sathya mess, Hosur - 635109. Phone: +91-965-577-8807
+                    </div>
+                  </div>
                 </div>
-                <hr class="my-2">
-                <div class="small text-dark lh-sm">
-                  <strong>METROLOGY ENGINEERING SOLUTIONS</strong><br>
-                  14/65, 6th Street, Kamaraj Nagar, Korratur,<br>
-                  Chennai, Tamil Nadu, India-600 080<br>
-                  Phone : +91-965-577-8807
+              </div>
+              <div class="col-md-6">
+                <div class="card h-100 border-2 delivery-address-card" id="cardChennaiAddr" style="cursor: pointer; border-color: #dee2e6; background-color: #ffffff;">
+                  <div class="card-body p-2">
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="modalDeliveryAddressChoice" id="radioChennaiAddr" value="chennai">
+                      <label class="form-check-label fw-bold small text-primary" for="radioChennaiAddr">Option 2: Chennai Address</label>
+                    </div>
+                    <div class="text-secondary mt-1 lh-sm" style="font-size: 0.74rem; padding-left: 1.4rem;">
+                      <strong>METROLOGY ENGINEERING SOLUTIONS</strong><br>
+                      14/65, 6th Street, Kamaraj Nagar, Korratur, Chennai - 600 080. Phone: +91-965-577-8807
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+            <div class="border-top pt-2 mt-1">
+              <label for="modalDeliveryAddressText" class="form-label mb-1 text-secondary" style="font-size: 0.73rem; font-weight: 600;">Delivery Address Details (Editable for PO):</label>
+              <textarea class="form-control form-control-sm bg-white" id="modalDeliveryAddressText" rows="2" style="font-size: 0.78rem; line-height: 1.35; resize: vertical;" placeholder="Delivery address printed on PO..."></textarea>
+            </div>
           </div>
-        </div>
 
-        <hr class="my-3">
-
-        <!-- 2. Product Specifications -->
-        <div class="mb-4">
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-card-checklist text-primary me-1"></i> Product Specifications</h6>
-            <span class="badge bg-primary-subtle text-primary border small">Editable for PO</span>
+          <!-- Purchase Order Products Table -->
+          <div class="my-3">
+            <h6 class="fw-bold text-center text-decoration-underline mb-2" style="font-size: 0.95rem;">PURCHASE ORDER PRODUCTS</h6>
+            <div class="table-responsive">
+              <table class="table table-bordered align-middle mb-1" id="modalPoProductsTable" style="font-size: 0.8rem;">
+                <thead style="background-color: #a7d3ef; color: #000;">
+                  <tr class="text-center align-middle">
+                    <th style="width: 45px;">SL/NO</th>
+                    <th>ITEM DESCRIPTION & SPECIFICATIONS (Editable for PO)</th>
+                    <th style="width: 100px;">HSN / SAC</th>
+                    <th style="width: 65px;">QTY</th>
+                    <th style="width: 65px;">UOM</th>
+                    <th style="width: 110px;">RATE (Rs.)</th>
+                    <th style="width: 120px;">TOTAL (Rs.)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Populated dynamically via JS -->
+                </tbody>
+                <tfoot>
+                  <tr class="table-light">
+                    <td colspan="5" class="text-end fw-bold">BASIC:</td>
+                    <td colspan="2" class="text-end fw-bold fs-6" id="docPoBasicTotal">₹ 0.00</td>
+                  </tr>
+                  <tr class="table-light" id="docPoIgstRow">
+                    <td colspan="5" class="text-end fw-bold" id="docPoIgstLabel">IGST 18%:</td>
+                    <td colspan="2" class="text-end fw-bold" id="docPoIgstValue">₹ 0.00</td>
+                  </tr>
+                  <tr class="table-light d-none" id="docPoCgstRow">
+                    <td colspan="5" class="text-end fw-bold">CGST 9%:</td>
+                    <td colspan="2" class="text-end fw-bold" id="docPoCgstValue">₹ 0.00</td>
+                  </tr>
+                  <tr class="table-light d-none" id="docPoSgstRow">
+                    <td colspan="5" class="text-end fw-bold">SGST 9%:</td>
+                    <td colspan="2" class="text-end fw-bold" id="docPoSgstValue">₹ 0.00</td>
+                  </tr>
+                  <tr class="table-secondary">
+                    <td colspan="5" class="text-end fw-bold fs-6">GRAND TOTAL:</td>
+                    <td colspan="2" class="text-end fw-bold fs-6 text-success" id="docPoGrandTotal">₹ 0.00</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div class="p-2 border rounded bg-light small mb-3">
+              <strong>Amount in words:</strong> <span id="docPoAmountInWords" class="fst-italic text-dark">-</span>
+            </div>
           </div>
-          <p class="text-secondary small mb-3">
-            Review or edit specifications line-by-line for each product. These appear under <strong>ITEM DISCRIPTION</strong> on the PO PDF.
-          </p>
-          <div id="modalProductSpecsContainer" class="d-flex flex-column gap-3">
-            <!-- Populated dynamically via JS -->
-          </div>
-        </div>
 
-        <hr class="my-3">
-
-        <!-- 3. Terms & Conditions -->
-        <div class="mb-2">
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-journal-text text-primary me-1"></i> Terms & Conditions (Remarks)</h6>
-            <span class="badge bg-primary-subtle text-primary border small">Editable for PO</span>
+          <!-- Terms & Conditions (Remarks) Section -->
+          <div class="mt-4 pt-2 border-top">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="fw-bold text-decoration-underline mb-0" style="font-size: 0.9rem;">Terms & Conditions (Remarks)</h6>
+              <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" id="addPoCustomTermBtn" style="font-size:0.75rem;">
+                <i class="bi bi-plus-lg me-1"></i>Add Term
+              </button>
+            </div>
+            <p class="text-secondary small mb-2">
+              Each numbered line will appear under <strong>REMARKS</strong> on the Purchase Order PDF.
+            </p>
+            <div id="poTermsListContainer" class="d-flex flex-column gap-1">
+              <!-- Populated dynamically by JS -->
+            </div>
           </div>
-          <p class="text-secondary small mb-2">
-            Each numbered line will appear under <strong>REMARKS</strong> on the Purchase Order PDF.
-          </p>
-          <textarea class="form-control" id="modalTermsAndConditions" rows="4" style="font-size: 0.85rem; line-height: 1.5;" placeholder="Enter terms and conditions line by line..."></textarea>
-        </div>
+
+          <!-- Authorized Signatory Footer -->
+          <div class="d-flex justify-content-end text-end mt-4 pt-3 border-top">
+            <div>
+              <div class="fw-bold text-dark" style="font-size: 0.85rem;">For METROLOGY ENGINEERING SOLUTIONS</div>
+              <div class="mt-4 pt-2 text-muted small" style="font-size:0.75rem;">[ Authorized Signatory ]</div>
+            </div>
+          </div>
+
+        </div><!-- end po-paper -->
       </div>
-      <div class="modal-footer bg-light">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-outline-primary fw-bold" id="modalPreviewPoBtn">
-          <i class="bi bi-eye me-1"></i> Preview PO
+      <div class="modal-footer bg-light py-2 px-3 flex-shrink-0 border-top">
+        <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-outline-primary btn-sm px-3 fw-bold" id="modalPreviewPoBtn">
+          <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF / Preview PO
         </button>
-        <button type="button" class="btn btn-primary px-4 fw-bold" id="modalConfirmGeneratePoBtn">
-          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO
+        <button type="button" class="btn btn-success btn-sm px-4 fw-bold" id="modalConfirmGeneratePoBtn">
+          <i class="bi bi-check-circle me-1"></i>Generate PO
         </button>
       </div>
     </div>
@@ -551,7 +671,8 @@ function updateSupplierEmailButtons() {
 
       const poDetailsBtn = document.createElement('button');
       poDetailsBtn.type = 'button';
-      poDetailsBtn.className = 'btn btn-outline-secondary btn-sm shadow-sm';
+      poDetailsBtn.className = 'btn btn-outline-secondary btn-sm shadow-sm d-none';
+      poDetailsBtn.style.display = 'none';
       poDetailsBtn.innerHTML = '<i class="bi bi-file-earmark-text me-1"></i>PO Details';
       poDetailsBtn.title = 'Edit PO Specs & Terms or Preview PO';
       poDetailsBtn.addEventListener('click', function() {
@@ -944,23 +1065,18 @@ let pendingEmailPo = null;
 let pendingIsReply = false;
 let currentChosenDeliveryAddress = 'hosur';
 
-function updateCardSelection(selected) {
+const defaultHosurDeliveryText = "METROLOGY ENGINEERING SOLUTIONS\nNO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar, 2nd Cross, Dharga, Opp. Sathya mess, Hosur - 635109. Phone: +91-965-577-8807";
+const defaultChennaiDeliveryText = "METROLOGY ENGINEERING SOLUTIONS\n14/65, 6th Street, Kamaraj Nagar, Korratur, Chennai - 600 080. Phone: +91-965-577-8807";
+
+function updateCardSelection(selected, customText = null) {
   const radioHosurAddr = document.getElementById('radioHosurAddr');
   const radioChennaiAddr = document.getElementById('radioChennaiAddr');
   const cardHosurAddr = document.getElementById('cardHosurAddr');
   const cardChennaiAddr = document.getElementById('cardChennaiAddr');
+  const modalDeliveryAddressText = document.getElementById('modalDeliveryAddressText');
 
-  if (selected === 'hosur') {
-    if (radioHosurAddr) radioHosurAddr.checked = true;
-    if (cardHosurAddr) {
-      cardHosurAddr.style.borderColor = '#0d6efd';
-      cardHosurAddr.style.backgroundColor = '#f8f9fa';
-    }
-    if (cardChennaiAddr) {
-      cardChennaiAddr.style.borderColor = '#dee2e6';
-      cardChennaiAddr.style.backgroundColor = '#ffffff';
-    }
-  } else {
+  const norm = String(selected || '').trim().toLowerCase();
+  if (norm === 'chennai') {
     if (radioChennaiAddr) radioChennaiAddr.checked = true;
     if (cardChennaiAddr) {
       cardChennaiAddr.style.borderColor = '#0d6efd';
@@ -970,7 +1086,163 @@ function updateCardSelection(selected) {
       cardHosurAddr.style.borderColor = '#dee2e6';
       cardHosurAddr.style.backgroundColor = '#ffffff';
     }
+    if (modalDeliveryAddressText) {
+      modalDeliveryAddressText.value = customText !== null ? customText : defaultChennaiDeliveryText;
+    }
+  } else if (norm === 'hosur') {
+    if (radioHosurAddr) radioHosurAddr.checked = true;
+    if (cardHosurAddr) {
+      cardHosurAddr.style.borderColor = '#0d6efd';
+      cardHosurAddr.style.backgroundColor = '#f8f9fa';
+    }
+    if (cardChennaiAddr) {
+      cardChennaiAddr.style.borderColor = '#dee2e6';
+      cardChennaiAddr.style.backgroundColor = '#ffffff';
+    }
+    if (modalDeliveryAddressText) {
+      modalDeliveryAddressText.value = customText !== null ? customText : defaultHosurDeliveryText;
+    }
+  } else {
+    // Custom address string
+    if (radioHosurAddr) radioHosurAddr.checked = false;
+    if (radioChennaiAddr) radioChennaiAddr.checked = false;
+    if (cardHosurAddr) {
+      cardHosurAddr.style.borderColor = '#dee2e6';
+      cardHosurAddr.style.backgroundColor = '#ffffff';
+    }
+    if (cardChennaiAddr) {
+      cardChennaiAddr.style.borderColor = '#dee2e6';
+      cardChennaiAddr.style.backgroundColor = '#ffffff';
+    }
+    if (modalDeliveryAddressText) {
+      modalDeliveryAddressText.value = customText !== null ? customText : selected;
+    }
   }
+}
+
+function getEffectiveDeliveryAddress() {
+  const modalDeliveryAddressText = document.getElementById('modalDeliveryAddressText');
+  const textVal = modalDeliveryAddressText ? modalDeliveryAddressText.value.trim() : '';
+  if (!textVal) {
+    const checkedRadio = document.querySelector('input[name="modalDeliveryAddressChoice"]:checked')?.value;
+    return checkedRadio || 'hosur';
+  }
+  if (textVal === defaultHosurDeliveryText.trim()) {
+    return 'hosur';
+  }
+  if (textVal === defaultChennaiDeliveryText.trim()) {
+    return 'chennai';
+  }
+  return textVal;
+}
+
+// Number to words converter (Indian currency format)
+function numberToWords(num) {
+  if (num === null || num === undefined || isNaN(num)) return '';
+  const val = parseFloat(num);
+  if (val === 0) return 'Zero Rupees Only.';
+
+  const under20 = [
+    'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
+  ];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  function convertBelowThousand(n) {
+    if (n < 20) return under20[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 === 0 ? '' : ' ' + under20[n % 10]);
+    const remainder = n % 100;
+    return under20[Math.floor(n / 100)] + ' Hundred' + (remainder === 0 ? '' : ' ' + convertBelowThousand(remainder));
+  }
+
+  function convert(n) {
+    if (n === 0) return 'Zero';
+    let remaining = n;
+    const parts = [];
+    if (remaining >= 10000000) {
+      parts.push(convertBelowThousand(Math.floor(remaining / 10000000)) + ' Crore');
+      remaining %= 10000000;
+    }
+    if (remaining >= 100000) {
+      parts.push(convertBelowThousand(Math.floor(remaining / 100000)) + ' Lakh');
+      remaining %= 100000;
+    }
+    if (remaining >= 1000) {
+      parts.push(convertBelowThousand(Math.floor(remaining / 1000)) + ' Thousand');
+      remaining %= 1000;
+    }
+    if (remaining > 0) {
+      parts.push(convertBelowThousand(remaining));
+    }
+    return parts.join(' ');
+  }
+
+  const rounded = val.toFixed(2);
+  const parts = rounded.split('.');
+  const integerPart = parseInt(parts[0], 10);
+  const decimalPart = parseInt(parts[1] || '0', 10);
+
+  let words = '';
+  if (integerPart === 0) {
+    words = 'Zero Rupees';
+  } else {
+    words = convert(integerPart) + ' Rupees';
+  }
+
+  if (decimalPart > 0) {
+    words += ' and ' + convert(decimalPart) + ' Paise';
+  }
+
+  words += ' Only.';
+  return words;
+}
+
+function addPoTermRow(text = '') {
+  const container = document.getElementById('poTermsListContainer');
+  if (!container) return;
+
+  const div = document.createElement('div');
+  div.className = 'd-flex align-items-center gap-2 mb-1 po-term-row';
+
+  const index = container.children.length + 1;
+  div.innerHTML = `
+    <span class="badge bg-light text-dark border po-term-num fw-bold" style="min-width: 32px; font-size: 0.78rem;">${index}.</span>
+    <input type="text" class="form-control form-control-sm po-term-input" value="${escapeHtml(text)}" placeholder="Enter condition / remark details..." style="font-size: 0.8rem;">
+    <button type="button" class="btn btn-outline-danger btn-sm px-2 py-0 po-remove-term" style="font-size: 0.75rem;" title="Delete term"><i class="bi bi-trash"></i></button>
+  `;
+  container.appendChild(div);
+}
+
+function renumberPoTerms() {
+  const container = document.getElementById('poTermsListContainer');
+  if (!container) return;
+  Array.from(container.children).forEach((row, idx) => {
+    const numSpan = row.querySelector('.po-term-num');
+    if (numSpan) numSpan.textContent = (idx + 1) + '.';
+  });
+}
+
+function renderPoTerms(rawTerms) {
+  const container = document.getElementById('poTermsListContainer');
+  if (!container) return;
+  container.innerHTML = '';
+
+  let termsList = [];
+  if (rawTerms && rawTerms.trim()) {
+    termsList = rawTerms.split('\n').map(t => t.trim()).filter(Boolean);
+  }
+  if (termsList.length === 0) {
+    termsList = [
+      "Please return the duplicate copy of this order duly signed in as a token of your acceptance.",
+      "Mention our Purchase Order number in all your Delivery challans, Invoices & other correspondence documents.",
+      "Test Certificate (calibration Certificate) is Mandatory where ever applicable."
+    ];
+  }
+
+  termsList.forEach(t => {
+    const cleanText = t.replace(/^\d+[\.\)\-]\s*/, '');
+    addPoTermRow(cleanText);
+  });
 }
 
 function triggerPoSetupModal(matchingPo, action = 'new_email', isReply = false) {
@@ -988,36 +1260,143 @@ function triggerPoSetupModal(matchingPo, action = 'new_email', isReply = false) 
   const defaultAddr = (matchingPo && matchingPo.delivery_address) ? matchingPo.delivery_address : currentChosenDeliveryAddress || 'hosur';
   updateCardSelection(defaultAddr);
 
-  // Terms & Conditions
-  const termsTextarea = document.getElementById('modalTermsAndConditions');
-  if (termsTextarea) {
-    termsTextarea.value = (matchingPo && matchingPo.terms_and_conditions) ? matchingPo.terms_and_conditions : (
-      "1. Please return the duplicate copy of this order duly signed in as a token of your acceptance.\n" +
-      "2. Mention our Purchase Order number in all your Delivery challans, Invoices & other correspondence documents.\n" +
-      "3. Test Certificate (calibration Certificate) is Mandatory where ever applicable."
-    );
-  }
+  if (matchingPo) {
+    // Document Reference Bar
+    const docPoNo = document.getElementById('docPoNo');
+    if (docPoNo) docPoNo.textContent = matchingPo.po_number || '-';
 
-  // Product Specifications
-  const specsContainer = document.getElementById('modalProductSpecsContainer');
-  if (specsContainer) {
-    specsContainer.innerHTML = '';
-    const prods = (matchingPo && matchingPo.products) ? matchingPo.products : [];
-    if (prods.length > 0) {
-      prods.forEach((prod, idx) => {
-        const itemCard = document.createElement('div');
-        itemCard.className = 'border rounded p-3 bg-light shadow-sm';
-        itemCard.innerHTML = `
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <span class="fw-bold text-dark small"><i class="bi bi-box-seam me-1 text-primary"></i>${idx + 1}. ${escapeHtml(prod.product_name)}</span>
-            <span class="badge bg-secondary-subtle text-secondary small">Product Spec</span>
-          </div>
-          <textarea class="form-control form-control-sm po-item-spec-input" rows="3" data-sp-id="${prod.supplier_product_id || ''}" data-cp-id="${prod.customer_product_id || ''}" placeholder="Enter product specifications line by line...">${escapeHtml(prod.product_specifications || '')}</textarea>
-        `;
-        specsContainer.appendChild(itemCard);
-      });
-    } else {
-      specsContainer.innerHTML = '<div class="text-muted small">No products found for this supplier order.</div>';
+    const docPoDate = document.getElementById('docPoDate');
+    if (docPoDate) docPoDate.textContent = matchingPo.po_date || todayDisplay || '-';
+
+    const docPoValidity = document.getElementById('docPoValidity');
+    if (docPoValidity) docPoValidity.textContent = matchingPo.po_validity || '-';
+
+    // Vendor Information Box
+    const docVendorName = document.getElementById('docVendorName');
+    if (docVendorName) docVendorName.textContent = matchingPo.supplier_name || '-';
+
+    const docVendorAddress = document.getElementById('docVendorAddress');
+    if (docVendorAddress) docVendorAddress.value = (matchingPo && matchingPo.supplier_address) ? matchingPo.supplier_address : '';
+
+    const docVendorGstin = document.getElementById('docVendorGstin');
+    if (docVendorGstin) docVendorGstin.textContent = matchingPo.supplier_gstin || '-';
+
+    const docVendorContactPerson = document.getElementById('docVendorContactPerson');
+    if (docVendorContactPerson) docVendorContactPerson.textContent = matchingPo.contact_person || '-';
+
+    const docVendorContactNumber = document.getElementById('docVendorContactNumber');
+    if (docVendorContactNumber) docVendorContactNumber.textContent = matchingPo.contact_number || '-';
+
+    const docVendorPhone = document.getElementById('docVendorPhone');
+    if (docVendorPhone) docVendorPhone.textContent = matchingPo.supplier_phone || '-';
+
+    const docVendorEmail = document.getElementById('docVendorEmail');
+    if (docVendorEmail) docVendorEmail.textContent = matchingPo.supplier_email || '-';
+
+    // Terms & Conditions
+    renderPoTerms(matchingPo.terms_and_conditions);
+
+    // Products Table
+    const tbody = document.querySelector('#modalPoProductsTable tbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      const prods = matchingPo.products || [];
+      let basicTotal = 0;
+
+      const tableRows = document.querySelectorAll('#supplierTable tbody tr');
+
+      if (prods.length > 0) {
+        prods.forEach((prod, idx) => {
+          let foundQty = null;
+          let foundRate = null;
+          tableRows.forEach(tr => {
+            const sDrop = tr.querySelector('.supplier-dropdown');
+            const pSel = tr.querySelector('.product-select');
+            if (sDrop && String(sDrop.value) === String(matchingPo.supplier_id) && pSel && String(pSel.value) === String(prod.customer_product_id)) {
+              const qIn = tr.querySelector('.quantity-input');
+              const rIn = tr.querySelector('.rate-input');
+              if (qIn && qIn.value) foundQty = parseInt(qIn.value, 10);
+              if (rIn && rIn.value) foundRate = parseFloat(rIn.value);
+            }
+          });
+
+          const qty = (foundQty !== null && !isNaN(foundQty)) ? foundQty : (prod.quantity || 0);
+          const rate = (foundRate !== null && !isNaN(foundRate)) ? foundRate : (prod.rate_per_unit || 0);
+          const lineTotal = qty * rate;
+          basicTotal += lineTotal;
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="text-center align-top fw-bold pt-2">${idx + 1}</td>
+            <td class="align-top">
+              <div class="fw-bold text-dark mb-1" style="font-size: 0.85rem;">${escapeHtml(prod.product_name || '')}</div>
+              <div class="small text-secondary mb-1" style="font-size: 0.74rem;">Specification (Printed on PO):</div>
+              <textarea class="form-control form-control-sm po-item-spec-input" rows="3" data-sp-id="${prod.supplier_product_id || ''}" data-cp-id="${prod.customer_product_id || ''}" placeholder="Enter product specifications line by line...">${escapeHtml(prod.product_specifications || '')}</textarea>
+            </td>
+            <td class="text-center align-top pt-2">${escapeHtml(prod.hsn || '8543')}</td>
+            <td class="text-center align-top pt-2 fw-bold">${qty}</td>
+            <td class="text-center align-top pt-2">${escapeHtml(prod.uom || 'Nos')}</td>
+            <td class="text-end align-top pt-2">₹ ${rate.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+            <td class="text-end align-top pt-2 fw-bold text-dark">₹ ${lineTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } else {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No products found for this purchase order.</td></tr>';
+      }
+
+      // Totals calculation
+      const isSez = !!matchingPo.is_sez;
+      const isIgst = !!matchingPo.is_igst;
+
+      let grandTotal = basicTotal;
+      const docPoBasicTotal = document.getElementById('docPoBasicTotal');
+      if (docPoBasicTotal) {
+        docPoBasicTotal.textContent = `₹ ${basicTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      }
+
+      const docPoIgstRow = document.getElementById('docPoIgstRow');
+      const docPoIgstLabel = document.getElementById('docPoIgstLabel');
+      const docPoIgstValue = document.getElementById('docPoIgstValue');
+      const docPoCgstRow = document.getElementById('docPoCgstRow');
+      const docPoCgstValue = document.getElementById('docPoCgstValue');
+      const docPoSgstRow = document.getElementById('docPoSgstRow');
+      const docPoSgstValue = document.getElementById('docPoSgstValue');
+
+      if (isSez) {
+        if (docPoIgstRow) docPoIgstRow.classList.remove('d-none');
+        if (docPoIgstLabel) docPoIgstLabel.textContent = 'IGST 0%:';
+        if (docPoIgstValue) docPoIgstValue.textContent = '₹ 0.00';
+        if (docPoCgstRow) docPoCgstRow.classList.add('d-none');
+        if (docPoSgstRow) docPoSgstRow.classList.add('d-none');
+        grandTotal = basicTotal;
+      } else if (isIgst) {
+        const igstVal = Math.round(basicTotal * 18) / 100;
+        if (docPoIgstRow) docPoIgstRow.classList.remove('d-none');
+        if (docPoIgstLabel) docPoIgstLabel.textContent = 'IGST 18%:';
+        if (docPoIgstValue) docPoIgstValue.textContent = `₹ ${igstVal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        if (docPoCgstRow) docPoCgstRow.classList.add('d-none');
+        if (docPoSgstRow) docPoSgstRow.classList.add('d-none');
+        grandTotal = basicTotal + igstVal;
+      } else {
+        const halfGst = Math.round(basicTotal * 9) / 100;
+        if (docPoIgstRow) docPoIgstRow.classList.add('d-none');
+        if (docPoCgstRow) docPoCgstRow.classList.remove('d-none');
+        if (docPoCgstValue) docPoCgstValue.textContent = `₹ ${halfGst.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        if (docPoSgstRow) docPoSgstRow.classList.remove('d-none');
+        if (docPoSgstValue) docPoSgstValue.textContent = `₹ ${halfGst.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        grandTotal = basicTotal + (halfGst * 2);
+      }
+
+      const docPoGrandTotal = document.getElementById('docPoGrandTotal');
+      if (docPoGrandTotal) {
+        docPoGrandTotal.textContent = `₹ ${grandTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      }
+
+      const docPoAmountInWords = document.getElementById('docPoAmountInWords');
+      if (docPoAmountInWords) {
+        docPoAmountInWords.textContent = numberToWords(grandTotal);
+      }
     }
   }
 
@@ -1026,6 +1405,8 @@ function triggerPoSetupModal(matchingPo, action = 'new_email', isReply = false) 
   if (confirmBtn) {
     if (action === 'preview_only') {
       confirmBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Save Details';
+    } else if (action === 'new_email') {
+      confirmBtn.innerHTML = '<i class="bi bi-envelope-check me-1"></i> Save & Compose Email';
     } else {
       confirmBtn.innerHTML = '<i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO';
     }
@@ -1043,9 +1424,21 @@ function triggerNewEmailWithAddressPrompt(matchingPo, isReply = false) {
 }
 
 async function handleModalSave(supplierId, selectedAddress) {
-  const terms = document.getElementById('modalTermsAndConditions')?.value || '';
+  const termInputs = document.querySelectorAll('#poTermsListContainer .po-term-input');
+  const termsArray = [];
+  termInputs.forEach((input, idx) => {
+    const val = input.value.trim();
+    if (val) {
+      termsArray.push(`${idx + 1}. ${val}`);
+    }
+  });
+  const terms = termsArray.join('\n');
+
+  const docVendorAddress = document.getElementById('docVendorAddress');
+  const supplierAddress = docVendorAddress ? docVendorAddress.value.trim() : '';
+
   const specMap = {};
-  document.querySelectorAll('#modalProductSpecsContainer .po-item-spec-input').forEach(ta => {
+  document.querySelectorAll('#modalPoProductsTable .po-item-spec-input').forEach(ta => {
     const spId = ta.dataset.spId;
     const cpId = ta.dataset.cpId;
     const key = spId || cpId;
@@ -1058,6 +1451,7 @@ async function handleModalSave(supplierId, selectedAddress) {
   const formData = new URLSearchParams();
   formData.append('supplier_id', supplierId);
   formData.append('delivery_address', selectedAddress);
+  formData.append('supplier_address', supplierAddress);
   formData.append('terms_and_conditions', terms);
   formData.append('product_specs', JSON.stringify(specMap));
 
@@ -1074,6 +1468,8 @@ async function handleModalSave(supplierId, selectedAddress) {
     if (result.status === 'success') {
       if (pendingEmailPo) {
         pendingEmailPo.terms_and_conditions = terms;
+        pendingEmailPo.delivery_address = selectedAddress;
+        pendingEmailPo.supplier_address = supplierAddress;
         if (pendingEmailPo.products) {
           pendingEmailPo.products.forEach(p => {
             const key = p.supplier_product_id || p.customer_product_id;
@@ -1082,6 +1478,12 @@ async function handleModalSave(supplierId, selectedAddress) {
             }
           });
         }
+      }
+      const pItem = poEmailData.find(item => String(item.supplier_id) === String(supplierId));
+      if (pItem) {
+        pItem.terms_and_conditions = terms;
+        pItem.delivery_address = selectedAddress;
+        pItem.supplier_address = supplierAddress;
       }
       return true;
     }
@@ -1100,6 +1502,27 @@ document.addEventListener('DOMContentLoaded', function() {
   const cardChennaiAddr = document.getElementById('cardChennaiAddr');
   const radioHosurAddr = document.getElementById('radioHosurAddr');
   const radioChennaiAddr = document.getElementById('radioChennaiAddr');
+  const addPoCustomTermBtn = document.getElementById('addPoCustomTermBtn');
+  const poTermsListContainer = document.getElementById('poTermsListContainer');
+
+  if (addPoCustomTermBtn) {
+    addPoCustomTermBtn.addEventListener('click', function() {
+      addPoTermRow('');
+    });
+  }
+
+  if (poTermsListContainer) {
+    poTermsListContainer.addEventListener('click', function(e) {
+      const removeBtn = e.target.closest('.po-remove-term');
+      if (removeBtn) {
+        const row = removeBtn.closest('.po-term-row');
+        if (row) {
+          row.remove();
+          renumberPoTerms();
+        }
+      }
+    });
+  }
 
   if (generatePoBtn) {
     generatePoBtn.addEventListener('click', function(e) {
@@ -1132,8 +1555,15 @@ document.addEventListener('DOMContentLoaded', function() {
       }
 
       pendingAddressAction = 'generate_po';
-      const modal = bootstrap.Modal.getOrCreateInstance(deliveryAddressModal);
-      modal.show();
+      let matchingPo = null;
+      const firstSupplierDropdown = document.querySelector('#supplierTable tbody .supplier-dropdown');
+      if (firstSupplierDropdown && firstSupplierDropdown.value) {
+        matchingPo = poEmailData.find(item => String(item.supplier_id) === String(firstSupplierDropdown.value));
+      }
+      if (!matchingPo && poEmailData.length > 0) {
+        matchingPo = poEmailData[0];
+      }
+      triggerPoSetupModal(matchingPo, 'generate_po');
     });
   }
 
@@ -1149,7 +1579,7 @@ document.addEventListener('DOMContentLoaded', function() {
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Saving...';
 
-      const selectedAddress = document.querySelector('input[name="modalDeliveryAddressChoice"]:checked')?.value || 'hosur';
+      const selectedAddress = getEffectiveDeliveryAddress();
       currentChosenDeliveryAddress = selectedAddress;
       const supplierId = pendingEmailPo ? pendingEmailPo.supplier_id : '';
       const poNumber = pendingEmailPo ? pendingEmailPo.po_number : '';
@@ -1173,7 +1603,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (modalConfirmGeneratePoBtn) {
     modalConfirmGeneratePoBtn.addEventListener('click', async function() {
-      const selectedAddress = document.querySelector('input[name="modalDeliveryAddressChoice"]:checked')?.value || 'hosur';
+      const selectedAddress = getEffectiveDeliveryAddress();
       currentChosenDeliveryAddress = selectedAddress;
       const supplierId = pendingEmailPo ? pendingEmailPo.supplier_id : '';
 

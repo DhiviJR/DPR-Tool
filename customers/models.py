@@ -14,8 +14,8 @@ class Customer(models.Model):
 
     customer_name = models.CharField(max_length=255)
     region = models.CharField(max_length=20, choices=REGION_CHOICES, blank=True, null=True)
-    user_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="User Name")
-    user_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="User Number")
+    user_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="Contact Person")
+    user_number = models.CharField(max_length=500, blank=True, null=True, verbose_name="Contact Number")
     user_mail_id = models.CharField(max_length=500, blank=True, null=True, verbose_name="User Mail ID")
     email = models.CharField(max_length=500, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)

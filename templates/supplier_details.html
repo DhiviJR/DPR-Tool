@@ -19,66 +19,118 @@
     {% endfor %}
 {% endif %}
 
-<div class="dpr-card mb-4">
+<style>
+    .master-form-card .card-body {
+        overflow-x: auto;
+    }
+    .master-form-row {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: flex-end;
+        gap: 0.5rem;
+        min-width: 1200px;
+    }
+    .master-form-col {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+    }
+    .master-form-label {
+        min-height: 2.6rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        margin-bottom: 0.35rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1.2;
+        color: #334155;
+    }
+    .master-form-label small {
+        font-size: 0.67rem;
+        font-weight: 400;
+        color: #64748b;
+        margin-top: 2px;
+    }
+    .master-form-spacer {
+        min-height: 2.6rem;
+        margin-bottom: 0.35rem;
+    }
+    .master-form-row .form-control,
+    .master-form-row .form-select,
+    .master-form-row .input-group-text,
+    .master-form-row .btn {
+        font-size: 0.84rem;
+        height: 38px;
+    }
+</style>
+
+<div class="dpr-card master-form-card mb-4">
     <div class="card-body">
-        <form method="post" class="row g-3 align-items-end">
+        <form method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
-            <div class="col-lg">
-                <label class="form-label">Supplier Name *</label>
-                <input type="text" name="supplier_name" class="form-control" required>
-            </div>
-            <div class="col-lg">
-                <label class="form-label">Email</label>
-                <input type="text" name="email" class="form-control" placeholder="e.g. supp1@example.com, supp2@example.com">
-                <div class="form-text text-muted" style="font-size: 0.72rem;">(Separate multiple emails with commas)</div>
-            </div>
-            <div class="col-lg">
-                <label class="form-label">Phone Number</label>
-                <input type="tel" name="phone_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric">
-            </div>
-            <div class="col-lg">
-                <label class="form-label">User Name</label>
-                <input type="text" name="user_name" class="form-control">
-            </div>
-            <div class="col-lg">
-                <label class="form-label">User Number</label>
-                <input type="tel" name="user_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric">
-            </div>
-            <div class="col-lg">
-                <label class="form-label">User Mail ID</label>
-                <input type="text" name="user_mail_id" class="form-control" placeholder="e.g. user@example.com">
-            </div>
-            <div class="col-lg">
-                <label class="form-label">GSTIN</label>
-                <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
-            </div>
-            <div class="col-lg">
-                <label class="form-label">State Code</label>
-                <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10">
-            </div>
-            <div class="col-lg">
-                <label class="form-label">SEZ</label>
-                <select name="is_sez" class="form-select">
-                    <option value="No" selected>No</option>
-                    <option value="Yes">Yes</option>
-                </select>
-            </div>
-            <div class="col-lg">
-                <label class="form-label">Payment Terms</label>
-                <div class="input-group">
-                    <input type="number" name="payment_terms" class="form-control" min="0">
-                    <span class="input-group-text">Weeks</span>
+            <div class="master-form-row">
+                <div class="master-form-col" style="flex: 1.4 1 140px; min-width: 130px;">
+                    <label class="master-form-label">Supplier Company Name *</label>
+                    <input type="text" name="supplier_name" class="form-control" required>
                 </div>
-            </div>
-            <div class="col-lg">
-                <label class="form-label">Address</label>
-                <input type="text" name="address" class="form-control">
-            </div>
-            <div class="col-lg-2">
-                <button type="submit" class="btn btn-success w-100">
-                    <i class="bi bi-plus-lg me-1"></i>Add Supplier
-                </button>
+                <div class="master-form-col" style="flex: 1.3 1 130px; min-width: 120px;">
+                    <label class="master-form-label">
+                        Email <small>(comma separated)</small>
+                    </label>
+                    <input type="text" name="email" class="form-control" placeholder="e.g. supp1@ex.com, supp2@ex.com">
+                </div>
+                <div class="master-form-col" style="flex: 1 1 105px; min-width: 95px;">
+                    <label class="master-form-label">Phone Number</label>
+                    <input type="tel" name="phone_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric">
+                </div>
+                <div class="master-form-col" style="flex: 1.1 1 115px; min-width: 105px;">
+                    <label class="master-form-label">Contact Person</label>
+                    <input type="text" name="user_name" class="form-control">
+                </div>
+                <div class="master-form-col" style="flex: 1.3 1 130px; min-width: 120px;">
+                    <label class="master-form-label">
+                        Contact Number <small>(comma separated)</small>
+                    </label>
+                    <input type="text" name="user_number" class="form-control js-multi-phone-input" placeholder="e.g. 9876543210, 9876543211">
+                </div>
+                <div class="master-form-col" style="flex: 1.2 1 120px; min-width: 110px;">
+                    <label class="master-form-label">User Mail ID</label>
+                    <input type="text" name="user_mail_id" class="form-control" placeholder="e.g. user@example.com">
+                </div>
+                <div class="master-form-col" style="flex: 1.1 1 115px; min-width: 105px;">
+                    <label class="master-form-label">GSTIN</label>
+                    <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
+                </div>
+                <div class="master-form-col" style="flex: 0.8 1 80px; min-width: 75px;">
+                    <label class="master-form-label">State Code</label>
+                    <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10">
+                </div>
+                <div class="master-form-col" style="flex: 0.7 1 70px; min-width: 65px;">
+                    <label class="master-form-label">SEZ</label>
+                    <select name="is_sez" class="form-select">
+                        <option value="No" selected>No</option>
+                        <option value="Yes">Yes</option>
+                    </select>
+                </div>
+                <div class="master-form-col" style="flex: 1 1 105px; min-width: 100px;">
+                    <label class="master-form-label">Payment Terms</label>
+                    <div class="input-group">
+                        <input type="number" name="payment_terms" class="form-control" min="0">
+                        <span class="input-group-text px-1" style="font-size: 0.75rem;">Weeks</span>
+                    </div>
+                </div>
+                <div class="master-form-col" style="flex: 1.4 1 140px; min-width: 130px;">
+                    <label class="master-form-label">Address</label>
+                    <input type="text" name="address" class="form-control">
+                </div>
+                <div class="master-form-col" style="flex: 0 0 auto; min-width: 130px;">
+                    <div class="master-form-spacer"></div>
+                    <button type="submit" class="btn btn-success w-100 text-nowrap">
+                        <i class="bi bi-plus-lg me-1"></i>Add Supplier
+                    </button>
+                </div>
             </div>
         </form>
     </div>
@@ -91,7 +143,7 @@
                 <form method="get" action="{% url 'supplier_details' %}" id="supplierSearchForm" class="m-0">
                     <div class="input-group">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                        <input type="search" name="search" id="supplierSearchInput" class="form-control" placeholder="Search by supplier name..." value="{{ search_query|default:'' }}" autocomplete="off">
+                        <input type="search" name="search" id="supplierSearchInput" class="form-control" placeholder="Search by supplier company name..." value="{{ search_query|default:'' }}" autocomplete="off">
                     </div>
                 </form>
             </div>
@@ -106,11 +158,11 @@
                 <thead>
                     <tr>
                         <th>S.No</th>
-                        <th>Supplier Name</th>
+                        <th>Supplier Company Name</th>
                         <th>Email</th>
                         <th>Phone Number</th>
-                        <th>User Name</th>
-                        <th>User Number</th>
+                        <th>Contact Person</th>
+                        <th>Contact Number</th>
                         <th>User Mail ID</th>
                         <th>GSTIN</th>
                         <th>State Code</th>
@@ -142,7 +194,7 @@
                             <input type="text" name="user_name" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.user_name|default:'' }}" disabled>
                         </td>
                         <td>
-                            <input type="tel" name="user_number" form="form-{{ supplier.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ supplier.user_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
+                            <input type="text" name="user_number" form="form-{{ supplier.id }}" class="form-control form-control-sm js-multi-phone-input master-edit-field" value="{{ supplier.user_number|default:'' }}" disabled>
                         </td>
                         <td>
                             <input type="text" name="user_mail_id" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.user_mail_id|default:'' }}" disabled>
@@ -204,6 +256,9 @@
 document.addEventListener('input', function (e) {
     if (e.target.classList.contains('js-phone-input')) {
         e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+    }
+    if (e.target.classList.contains('js-multi-phone-input')) {
+        e.target.value = e.target.value.replace(/[^\d,\s+\-]/g, '');
     }
     if (e.target.name === 'gstin' || e.target.classList.contains('js-gstin-input')) {
         e.target.value = e.target.value.toUpperCase();
