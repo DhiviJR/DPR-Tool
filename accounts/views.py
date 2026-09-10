@@ -4756,7 +4756,7 @@ def rfq_details(request):
                     messages.error(request, 'Select valid RFQ products or supplier prices for quotation attachment.')
                     return redirect('rfq_details')
 
-            if not quotation_products and not quotation_attachment:
+            if not quotation_products and not quotation_attachment and 'selected_quotation_id' not in request.POST:
                 messages.error(request, 'Select products to auto-attach quotation or upload an attachment.')
                 return redirect('rfq_details')
 
@@ -4778,8 +4778,28 @@ def rfq_details(request):
 
             try:
                 attachments_to_send = []
-                if quotation_products:
-                    # Check if there is an unsent quotation record prepared for this exact selection
+                selected_quotation_id = request.POST.get('selected_quotation_id', '').strip()
+                selected_quotation_record = None
+
+                if selected_quotation_id.isdigit():
+                    selected_quotation_record = RFQQuotation.objects.filter(rfq=rfq, id=int(selected_quotation_id)).first()
+                elif selected_quotation_id == '' and 'selected_quotation_id' in request.POST:
+                    # User explicitly chose "None (No Quotation PDF Attachment)"
+                    selected_quotation_record = None
+
+                if selected_quotation_record:
+                    products = _deserialize_quotation_products(selected_quotation_record.products_snapshot)
+                    if not products:
+                        products = list(rfq.products.all())
+                    quote_no = selected_quotation_record.quotation_number
+                    quotation_terms = request.POST.getlist('custom_terms') or []
+                    pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms)
+                    filename = f"{quote_no.replace('/', '_')}.pdf"
+                    attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
+                    selected_quotation_record.email_sent = True
+                    selected_quotation_record.save(update_fields=['email_sent', 'updated_at'])
+                elif 'selected_quotation_id' not in request.POST and quotation_products:
+                    # Legacy fallback if selected_quotation_id form control was absent
                     quotation_record = _find_latest_matching_quotation(
                         rfq,
                         quotation_product_ids_to_mark,
@@ -4798,7 +4818,6 @@ def rfq_details(request):
 
                     customer_designation = request.POST.get('customer_designation', '').strip()
                     if quotation_record is not None:
-                        # Update the existing unsent quotation record with the newly entered quotation products snapshot
                         quotation_record.products_snapshot = _serialize_quotation_products(quotation_products, custom_terms=quotation_terms, designation=customer_designation)
                         quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
                     else:
@@ -4818,6 +4837,7 @@ def rfq_details(request):
 
                     filename = f"{quote_no.replace('/', '_')}.pdf"
                     attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
+
                 if quotation_attachment:
                     attachments_to_send.append((
                         quotation_attachment.name,
@@ -5009,6 +5029,17 @@ def rfq_details(request):
             'has_sent_email': rfq.has_sent_email,
             'has_prices': rfq.has_prices,
             'row_class': row_class,  # Row highlighting class for color-based alerts
+            'quotations': [
+                {
+                    'id': quote.id,
+                    'quotation_number': quote.quotation_number,
+                    'revision_number': quote.revision_number,
+                    'email_sent': quote.email_sent,
+                    'created_at': quote.created_at.strftime('%d-%m-%Y %H:%M') if quote.created_at else '',
+                    'product_ids': [str(p.get('id')) for p in (quote.products_snapshot or []) if isinstance(p, dict) and p.get('id')],
+                }
+                for quote in rfq.quotations.order_by('-created_at', '-id')
+            ],
             'latest_quotation_terms': (
                 next(
                     (p.get('custom_terms') for p in (rfq.quotations.order_by('-created_at').first().products_snapshot or []) if isinstance(p, dict) and p.get('custom_terms')),
@@ -5182,7 +5213,10 @@ def rfq_quotation_download(request, rfq_id):
         rfq, product_ids, supplier_price_ids, mes_rates=mes_rates, delivery_weeks=delivery_weeks, installation_charge=installation_charge,
         designation=customer_designation
     )
+    is_ajax = (request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('save_only') == '1')
     if not products:
+        if is_ajax:
+            return JsonResponse({'status': 'error', 'message': 'Select at least one product to prepare quotation.'}, status=400)
         messages.error(request, 'Select at least one product to prepare quotation.')
         return redirect('rfq_details')
 
@@ -5194,26 +5228,13 @@ def rfq_quotation_download(request, rfq_id):
     ]
 
     if invalid_products:
+        if is_ajax:
+            return JsonResponse({'status': 'error', 'message': 'Cannot prepare quotation because one or more selected products do not have a finalized price.'}, status=400)
         messages.error(
             request,
             'Cannot prepare quotation because one or more selected products do not have a finalized price.'
         )
         return redirect('rfq_details')
-
-    disposition = 'inline' if request.POST.get('preview') == '1' else 'attachment'
-    quotation_record = None
-    if disposition == 'attachment' and quotation_product_ids_to_mark:
-        quotation_record = _create_rfq_quotation_record(
-            rfq,
-            products,
-            quotation_product_ids_to_mark,
-            email_sent=False,
-            custom_terms=custom_terms,
-            designation=customer_designation
-        )
-        quote_no = quotation_record.quotation_number
-    else:
-        quote_no = _determine_quotation_number_for_preview(rfq, products)
 
     custom_terms = (
         [t.strip() for t in request.POST.getlist('custom_terms[]') if t.strip()] or
@@ -5226,9 +5247,23 @@ def rfq_quotation_download(request, rfq_id):
         if single_terms:
             custom_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
 
-    pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=custom_terms, designation=customer_designation)
-    filename = f"{quote_no.replace('/', '_')}.pdf"
-    response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+    disposition = 'inline' if request.POST.get('preview') == '1' else 'attachment'
+    quotation_record = None
+    pids_to_mark = quotation_product_ids_to_mark or [p.id for p in products if hasattr(p, 'id') and p.id]
+
+    if (disposition == 'attachment' or is_ajax) and pids_to_mark:
+        quotation_record = _create_rfq_quotation_record(
+            rfq,
+            products,
+            pids_to_mark,
+            email_sent=False,
+            custom_terms=custom_terms,
+            designation=customer_designation
+        )
+        quote_no = quotation_record.quotation_number
+    else:
+        quote_no = _determine_quotation_number_for_preview(rfq, products)
+
     if quotation_record:
         for qp in products:
             if hasattr(qp, 'id') and qp.id:
@@ -5239,10 +5274,22 @@ def rfq_quotation_download(request, rfq_id):
                 )
         RFQProduct.objects.filter(
             rfq=rfq,
-            id__in=quotation_product_ids_to_mark
+            id__in=pids_to_mark
         ).update(quotation_prepared=True)
         rfq.quotation_prepared = True
         rfq.save(update_fields=['quotation_prepared'])
+
+    if is_ajax:
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Quotation document {quote_no} saved and attached successfully.',
+            'quotation_id': quotation_record.id if quotation_record else None,
+            'quotation_number': quote_no
+        })
+
+    pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=custom_terms, designation=customer_designation)
+    filename = f"{quote_no.replace('/', '_')}.pdf"
+    response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
     response.set_cookie('rfq_quotation_downloaded', 'true', path='/')
     return response
@@ -8201,77 +8248,102 @@ def send_rfq_email_reply(request, rfq_id):
     cc_emails = [e.strip() for e in re.split(r'[;,]', cc_emails_raw) if e.strip()]
 
     attachments = []
+    quotation_record = None
+    quotation_product_ids_to_mark = []
+    quotation_terms = []
+    products = []
 
-    # 1. Automatically attach prepared quotation PDF for this RFQ
+    # 1. Attach selected quotation PDF for this RFQ (or legacy fallback)
     try:
-        product_ids = request.POST.getlist('quotation_product_ids')
-        supplier_price_ids = request.POST.getlist('quotation_supplier_price_ids')
-        mes_rates = request.POST.getlist('mes_rates')
-        delivery_weeks = request.POST.get('delivery_weeks', '').strip()
-        installation_charge = request.POST.get('installation_charge', '').strip()
-        customer_designation = request.POST.get('customer_designation', '').strip()
+        selected_quotation_id = request.POST.get('selected_quotation_id', '').strip()
+        selected_quotation_record = None
 
-        quotation_record = None
-        quotation_product_ids_to_mark = []
-        if product_ids:
-            products, quotation_product_ids_to_mark = _build_selected_quotation_products(
-                rfq, product_ids, supplier_price_ids,
-                mes_rates=mes_rates,
-                delivery_weeks=delivery_weeks,
-                installation_charge=installation_charge,
-                designation=customer_designation
-            )
-        else:
-            latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
-            if latest_quotation and latest_quotation.products_snapshot:
-                products = _deserialize_quotation_products(latest_quotation.products_snapshot)
-                quotation_product_ids_to_mark = [str(getattr(p, 'id', '')) for p in products if getattr(p, 'id', None)]
-            else:
-                products, quotation_product_ids_to_mark = _build_selected_quotation_products(rfq, [], [], designation=customer_designation)
-                if not products:
-                    products = list(rfq.products.all())
-                    quotation_product_ids_to_mark = [str(p.id) for p in products if hasattr(p, 'id') and p.id]
+        if selected_quotation_id.isdigit():
+            selected_quotation_record = RFQQuotation.objects.filter(rfq=rfq, id=int(selected_quotation_id)).first()
+        elif selected_quotation_id == '' and 'selected_quotation_id' in request.POST:
+            # User explicitly selected "None (No Quotation PDF Attachment)"
+            selected_quotation_record = None
 
-        quotation_terms = (
-            [t.strip() for t in request.POST.getlist('quotation_terms[]') if t.strip()] or
-            [t.strip() for t in request.POST.getlist('quotation_terms') if t.strip()] or
-            [t.strip() for t in request.POST.getlist('custom_terms[]') if t.strip()] or
-            [t.strip() for t in request.POST.getlist('custom_terms') if t.strip()]
-        )
-        if not quotation_terms:
-            single_terms = request.POST.get('quotation_terms', '').strip() or request.POST.get('custom_terms', '').strip()
-            if single_terms:
-                quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
-
-        if products:
-            quotation_record = _find_latest_matching_quotation(
-                rfq,
-                quotation_product_ids_to_mark,
-                email_sent=False
-            )
-            if quotation_record is not None:
-                quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms, designation=customer_designation)
-                quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
-            else:
-                quotation_record = _create_rfq_quotation_record(
-                    rfq,
-                    products,
-                    quotation_product_ids_to_mark,
-                    email_sent=False,
-                    custom_terms=quotation_terms,
-                    designation=customer_designation
-                )
-                if quotation_terms or customer_designation:
-                    quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms, designation=customer_designation)
-                    quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
-
-            quote_no = quotation_record.quotation_number
-            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms, designation=customer_designation)
-
+        if selected_quotation_record:
+            quotation_record = selected_quotation_record
+            products = _deserialize_quotation_products(selected_quotation_record.products_snapshot)
+            if not products:
+                products = list(rfq.products.all())
+            quotation_product_ids_to_mark = [str(getattr(p, 'id', '')) for p in products if getattr(p, 'id', None)]
+            quote_no = selected_quotation_record.quotation_number
+            pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
             filename = f"{quote_no.replace('/', '_')}.pdf"
             attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
+            selected_quotation_record.email_sent = True
+            selected_quotation_record.save(update_fields=['email_sent', 'updated_at'])
+        elif 'selected_quotation_id' not in request.POST:
+            # Legacy fallback if selected_quotation_id form control was absent
+            product_ids = request.POST.getlist('quotation_product_ids')
+            supplier_price_ids = request.POST.getlist('quotation_supplier_price_ids')
+            mes_rates = request.POST.getlist('mes_rates')
+            delivery_weeks = request.POST.get('delivery_weeks', '').strip()
+            installation_charge = request.POST.get('installation_charge', '').strip()
+            customer_designation = request.POST.get('customer_designation', '').strip()
+
+            if product_ids:
+                products, quotation_product_ids_to_mark = _build_selected_quotation_products(
+                    rfq, product_ids, supplier_price_ids,
+                    mes_rates=mes_rates,
+                    delivery_weeks=delivery_weeks,
+                    installation_charge=installation_charge,
+                    designation=customer_designation
+                )
+            else:
+                latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
+                if latest_quotation and latest_quotation.products_snapshot:
+                    products = _deserialize_quotation_products(latest_quotation.products_snapshot)
+                    quotation_product_ids_to_mark = [str(getattr(p, 'id', '')) for p in products if getattr(p, 'id', None)]
+                else:
+                    products, quotation_product_ids_to_mark = _build_selected_quotation_products(rfq, [], [], designation=customer_designation)
+                    if not products:
+                        products = list(rfq.products.all())
+                        quotation_product_ids_to_mark = [str(p.id) for p in products if hasattr(p, 'id') and p.id]
+
+            quotation_terms = (
+                [t.strip() for t in request.POST.getlist('quotation_terms[]') if t.strip()] or
+                [t.strip() for t in request.POST.getlist('quotation_terms') if t.strip()] or
+                [t.strip() for t in request.POST.getlist('custom_terms[]') if t.strip()] or
+                [t.strip() for t in request.POST.getlist('custom_terms') if t.strip()]
+            )
+            if not quotation_terms:
+                single_terms = request.POST.get('quotation_terms', '').strip() or request.POST.get('custom_terms', '').strip()
+                if single_terms:
+                    quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
+
+            if products:
+                quotation_record = _find_latest_matching_quotation(
+                    rfq,
+                    quotation_product_ids_to_mark,
+                    email_sent=False
+                )
+                if quotation_record is not None:
+                    quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms, designation=customer_designation)
+                    quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
+                else:
+                    quotation_record = _create_rfq_quotation_record(
+                        rfq,
+                        products,
+                        quotation_product_ids_to_mark,
+                        email_sent=False,
+                        custom_terms=quotation_terms,
+                        designation=customer_designation
+                    )
+                    if quotation_terms or customer_designation:
+                        quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms, designation=customer_designation)
+                        quotation_record.save(update_fields=['products_snapshot', 'updated_at'])
+
+                quote_no = quotation_record.quotation_number
+                pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no, custom_terms=quotation_terms, designation=customer_designation)
+
+                filename = f"{quote_no.replace('/', '_')}.pdf"
+                attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
     except Exception as e:
-        logger.warning(f"Could not auto-attach quotation PDF to reply: {e}")
+        logger.warning(f"Could not attach quotation PDF to reply: {e}")
 
     # 2. Add manual user file attachment if provided
     if reply_attachment:
@@ -8296,8 +8368,8 @@ def send_rfq_email_reply(request, rfq_id):
             for qp in products:
                 if hasattr(qp, 'id') and qp.id:
                     RFQProduct.objects.filter(id=qp.id).update(
-                        rate_per_unit=qp.rate_per_unit,
-                        value=qp.value,
+                        rate_per_unit=getattr(qp, 'rate_per_unit', 0),
+                        value=getattr(qp, 'value', 0),
                         quotation_email_sent=True,
                         quotation_prepared=True
                     )
@@ -8309,8 +8381,11 @@ def send_rfq_email_reply(request, rfq_id):
 
             if quotation_record:
                 quotation_record.email_sent = True
-                quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms)
-                quotation_record.save(update_fields=['email_sent', 'products_snapshot', 'updated_at'])
+                if quotation_terms:
+                    quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms)
+                    quotation_record.save(update_fields=['email_sent', 'products_snapshot', 'updated_at'])
+                else:
+                    quotation_record.save(update_fields=['email_sent', 'updated_at'])
 
             rfq.email_sent_date = timezone.now()
             rfq.quotation_due_date = timezone.localdate() + timedelta(days=3)
