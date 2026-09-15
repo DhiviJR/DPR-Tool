@@ -764,7 +764,7 @@
 
                         <!-- Document Reference Bar -->
                         <div class="d-flex justify-content-between align-items-center py-1 px-3 bg-light border-bottom mb-3 fw-bold" style="font-size: 0.82rem;">
-                            <div>Quote No: <span id="docQuoteNo" class="text-primary fw-bold">MES/QT/2026</span></div>
+                            <div>Quote No: <span id="docQuoteNo" class="text-primary fw-bold">-</span></div>
                             <div>Date: <span id="docQuoteDate">02-09-2026</span></div>
                         </div>
 
@@ -2012,7 +2012,8 @@ function openEditQuotationModal(mode, targetRfqId = null) {
     const validTillStr = String(validTillDate.getDate()).padStart(2, '0') + '/' + String(validTillDate.getMonth() + 1).padStart(2, '0') + '/' + validTillDate.getFullYear();
 
     const docQuoteNo = document.getElementById('docQuoteNo');
-    if (docQuoteNo) docQuoteNo.textContent = `MES/QT/${rfq.rfq_no ? rfq.rfq_no.replace('RFQ-', '') : rfq.id}`;
+    const quoteNo = (rfq.quotation_no && rfq.quotation_no !== '-') ? rfq.quotation_no : (rfq.default_quotation_no || '');
+    if (docQuoteNo) docQuoteNo.textContent = quoteNo;
 
     const docQuoteDate = document.getElementById('docQuoteDate');
     if (docQuoteDate) docQuoteDate.textContent = dateStr;
