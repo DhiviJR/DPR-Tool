@@ -141,8 +141,8 @@ def _get_next_mes_quote_base_no(rfq=None):
         year = timezone.localdate().year
     year_suffix = f"{str(year)[-2:]}-{str(year + 1)[-2:]}"
 
-    # The quotation sequence for 26-27 starts from MES_Q0450/26-27 and follows in order
-    max_seq = 449 if year_suffix == '26-27' else 0
+    # The quotation sequence for 26-27 starts from MES_Q0464/26-27 and follows in order
+    max_seq = 463 if year_suffix == '26-27' else 0
 
     for quote_no in RFQQuotation.objects.values_list('quotation_number', flat=True):
         seq, suffix = _quote_number_sequence(quote_no)
@@ -730,7 +730,7 @@ def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False, c
         while RFQQuotation.objects.filter(quotation_number=quotation_number).exists():
             seq, suffix = _quote_number_sequence(quotation_number)
             year_suffix = suffix or (f"{str(rfq.mail_date.year)[-2:]}-{str(rfq.mail_date.year + 1)[-2:]}" if rfq and getattr(rfq, 'mail_date', None) else '26-27')
-            quotation_number = f"MES_Q{(seq or 449) + 1:04d}/{year_suffix}"
+            quotation_number = f"MES_Q{(seq or 463) + 1:04d}/{year_suffix}"
 
     quotation = RFQQuotation.objects.create(
         rfq=rfq,

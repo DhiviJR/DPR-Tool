@@ -2154,7 +2154,7 @@ function getDynamicQuotationNumber(rfq, isRevision = false) {
     }
     const yearSuffix = `${String(year).slice(-2)}-${String(year + 1).slice(-2)}`;
 
-    let maxSeq = (yearSuffix === '26-27') ? 449 : 0;
+    let maxSeq = (yearSuffix === '26-27') ? 463 : 0;
 
     if (typeof rfqData !== 'undefined' && Array.isArray(rfqData)) {
         rfqData.forEach(r => {
