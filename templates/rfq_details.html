@@ -519,7 +519,7 @@
                         <td data-sort-value="{{ rfq.rfq_no|lower }}" class="text-nowrap">
                             <span class="fw-semibold">{{ rfq.rfq_no }}</span>
                         </td>
-                        <td data-sort-value="{{ rfq.quotation_no_display|lower }}" class="text-nowrap {% if not rfq.quotation_records_display %}text-center{% endif %}">
+                        <td data-sort-value="{{ rfq.quotation_no_display|lower }}" class="rfq-quote-no-cell text-nowrap {% if not rfq.quotation_records_display %}text-center{% endif %}">
                             {% if rfq.quotation_records_display %}
                                 <div class="d-flex flex-column gap-1">
                                     {% for quotation in rfq.quotation_records_display %}
@@ -622,7 +622,7 @@
                         <td data-sort-value="{{ rfq.remarks|default:''|lower }}">
                             {{ rfq.remarks|default:'-' }}
                         </td>
-                        <td data-sort-value="{% if rfq.quotation_records_display or rfq.quotation_prepared or rfq.attachment %}attached{% else %}none{% endif %}">
+                        <td class="rfq-attachment-cell" data-sort-value="{% if rfq.quotation_records_display or rfq.quotation_prepared or rfq.attachment %}attached{% else %}none{% endif %}">
                             <div class="d-flex flex-column gap-1">
                                 {% if rfq.quotation_records_display %}
                                     {% for quote in rfq.quotation_records_display %}
@@ -778,6 +778,19 @@
                                 <div class="fw-bold fs-6 text-dark" id="docCustomerName">M/s. Customer Name</div>
                                 <div id="docCustomerAddress" class="text-secondary mb-1">Address details...</div>
                                 <div><span class="fw-semibold">GSTIN:</span> <span id="docCustomerGstin">-</span></div>
+                                <div class="d-flex align-items-center flex-wrap gap-2 my-1" id="docKindAttentionContainer">
+                                    <span class="fw-semibold text-dark">Kind Attention <span class="text-danger">*</span>:</span>
+                                    <span id="docCustomerContactPerson" class="fw-bold text-primary">-</span>
+                                    <select name="user_detail_id" id="docUserDetailSelect" class="form-select form-select-sm d-none" style="max-width: 260px; font-size: 0.8rem;">
+                                        <option value="">-- Select User (Mandatory) --</option>
+                                        {% for u in user_details_list %}
+                                        <option value="{{ u.id }}" data-name="{{ u.user_name }}" data-designation="{{ u.user_designation|default:'' }}" data-number="{{ u.user_number|default:'' }}" data-email="{{ u.user_mail_id|default:'' }}">
+                                            {{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <input type="hidden" name="user_detail_id_existing" id="docUserDetailIdExisting" value="">
+                                </div>
                                 <div><span class="fw-semibold">Phone:</span> <span id="docCustomerPhone">-</span> | <span class="fw-semibold">Email:</span> <span id="docCustomerEmail">-</span></div>
                             </div>
                             <div class="col-md-5 text-end">
@@ -883,13 +896,67 @@
                 <div class="modal-footer bg-light py-2 px-3 flex-shrink-0 border-top">
                     <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-outline-primary btn-sm px-3 fw-bold" id="downloadQuotationPdfModalBtn">
-                        <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+                        <i class="bi bi-download me-1"></i>Download and Save
                     </button>
                     <button type="submit" class="btn btn-success btn-sm px-4 fw-bold" id="prepareQuotationSubmitBtn">
-                        <i class="bi bi-check-circle me-1"></i>Save & Update Attachment
+                        <i class="bi bi-check-circle me-1"></i>Update Attachment
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Quotation Attachment Selection Modal -->
+<div class="modal fade" id="attachExistingQuotationModal" tabindex="-1" aria-labelledby="attachExistingQuotationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title mb-0 fw-bold" id="attachExistingQuotationModalLabel">
+                    <i class="bi bi-paperclip me-1"></i>Attach Quotation
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-3">
+                <p class="mb-3" id="attachQuotationPromptText" style="font-size: 0.95rem;">
+                    Are you attaching this quotation to the email?
+                </p>
+
+                <!-- Single Quotation Info Box -->
+                <div id="singleQuotationBox" class="p-3 bg-light border rounded mb-2" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-muted small">Available Quotation:</span>
+                            <div class="fw-bold text-primary fs-6" id="singleQuotationNumber">-</div>
+                            <div class="text-muted small" id="singleQuotationDate"></div>
+                        </div>
+                        <a href="#" target="_blank" id="singleQuotationPreviewLink" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-eye me-1"></i>Preview
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Multiple Quotations Dropdown -->
+                <div id="multipleQuotationBox" class="mb-2" style="display: none;">
+                    <label for="existingQuotationDropdown" class="form-label fw-bold small text-muted">Select Quotation:</label>
+                    <div class="input-group">
+                        <select id="existingQuotationDropdown" class="form-select form-select-sm">
+                            <!-- Options populated dynamically -->
+                        </select>
+                        <a href="#" target="_blank" id="multiQuotationPreviewLink" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-outline-danger btn-sm px-3" id="attachQuotationNoBtn">
+                    <i class="bi bi-arrow-repeat me-1"></i>No (Revise Quotation)
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4 fw-bold" id="attachQuotationYesBtn">
+                    <i class="bi bi-check2-circle me-1"></i>Yes, Attach
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -901,6 +968,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="send_email">
                 <input type="hidden" name="rfq_id" id="quotationEmailRfqId">
+                <input type="hidden" name="selected_quotation_id" id="quotationEmailSelectedQuotationId">
                 <div id="quotationEmailProductInputs"></div>
                 <div class="modal-header">
                     <h5 class="modal-title" id="quotationEmailModalLabel">Send Quotation Email</h5>
@@ -1243,6 +1311,252 @@ function ensureSupplierPriceSelection(row, rfq) {
     };
 }
 
+function getRfqQuotations(rfq) {
+    if (!rfq) return [];
+    if (rfq.quotation_records && Array.isArray(rfq.quotation_records) && rfq.quotation_records.length > 0) {
+        return rfq.quotation_records;
+    }
+    if (rfq.quotation_no && rfq.quotation_no !== '-') {
+        return [{
+            id: null,
+            quotation_number: rfq.quotation_no,
+            revision_number: 0,
+            created_at: '',
+            download_url: `/rfq/${rfq.id}/quotation/download/`
+        }];
+    }
+    return [];
+}
+
+function extractPrepareQuotationSnapshot(form) {
+    const snapshotPayload = [];
+    if (!form) return snapshotPayload;
+    const formRows = form.querySelectorAll('#prepareQuotationTable tbody tr');
+    formRows.forEach(r => {
+        const pId = r.querySelector('input[name="product_ids"]')?.value;
+        const pType = r.querySelector('.prepare-quote-product-type')?.value || '';
+        const pName = r.querySelector('.fw-bold.text-dark')?.textContent?.trim() || '';
+        const pQty = r.querySelector('.prepare-quote-qty')?.value || '1';
+        const pUnit = r.querySelector('.prepare-quote-unit')?.value || "No's";
+        const pProfit = r.querySelector('.prepare-quote-mes-profit')?.value || '';
+        const pMesRate = r.querySelector('.prepare-quote-mes-rate')?.value || '0';
+        const pMesVal = r.querySelector('.prepare-quote-mes-value')?.value || '0';
+        if (pId) {
+            snapshotPayload.push({
+                product_id: Number(pId),
+                product_name: pName,
+                product_type: pType,
+                quantity: Number(pQty),
+                unit: pUnit,
+                profit_percentage: pProfit,
+                rate_per_unit: pMesRate,
+                value: pMesVal,
+                delivery_weeks: document.getElementById('deliveryWeeksInput')?.value || '',
+                installation_charge: document.getElementById('installationChargeInput')?.value || '',
+                custom_terms: Array.from(document.querySelectorAll('#termsListContainer .prepare-quote-term-input')).map(i => i.value.trim()).filter(Boolean)
+            });
+        }
+    });
+    return snapshotPayload;
+}
+
+function updateTableAttachment(rfqId, quoteId, quoteNo, snapshotPayload = null) {
+    const row = document.querySelector(`tr[data-rfq-id="${rfqId}"]`);
+    if (!row) return;
+
+    // Update in rfqData cache
+    const rfq = (typeof rfqData !== 'undefined') ? rfqData.find(item => item.id === Number(rfqId)) : null;
+    if (rfq) {
+        rfq.quotation_no = quoteNo;
+        if (!rfq.quotation_records) rfq.quotation_records = [];
+        const existingIdx = rfq.quotation_records.findIndex(q => q.quotation_number === quoteNo || (quoteId && q.id === Number(quoteId)));
+        const record = {
+            id: quoteId ? Number(quoteId) : null,
+            quotation_number: quoteNo,
+            revision_number: 0,
+            created_at: new Date().toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute:'2-digit'}),
+            email_sent: false,
+            download_url: `/rfq/${rfqId}/quotation/download/${quoteId ? '?quotation_id=' + quoteId : ''}`,
+            products_snapshot: snapshotPayload
+        };
+        if (existingIdx >= 0) {
+            rfq.quotation_records[existingIdx] = record;
+        } else {
+            rfq.quotation_records.unshift(record);
+        }
+        if (snapshotPayload && snapshotPayload.length > 0) {
+            rfq.latest_quotation_snapshot = snapshotPayload;
+            const terms = snapshotPayload.find(s => s.custom_terms && s.custom_terms.length > 0)?.custom_terms;
+            if (terms && terms.length > 0) {
+                rfq.latest_quotation_terms = terms;
+            }
+        }
+        if (rfq.products) {
+            rfq.products.forEach(p => { p.quotation_prepared = true; });
+        }
+    }
+
+    row.setAttribute('data-rfq-prepared', 'true');
+
+    // 1. Update DOM table cell for Quotation No (column 2)
+    const quoteNoCell = row.querySelector('.rfq-quote-no-cell') || row.children[2];
+    if (quoteNoCell && rfq && rfq.quotation_records) {
+        const downloadUrl = `/rfq/${rfqId}/quotation/download/${quoteId ? '?quotation_id=' + quoteId : ''}`;
+        let linksHtml = rfq.quotation_records.map(q => `
+            <a href="${q.download_url || downloadUrl}" class="fw-semibold text-decoration-none" target="_blank">
+                ${escapeHtml(q.quotation_number)}
+            </a>
+        `).join('');
+        quoteNoCell.innerHTML = `<div class="d-flex flex-column gap-1">${linksHtml}</div>`;
+        quoteNoCell.classList.remove('text-center');
+    }
+
+    // 2. Update DOM table cell for Attachment (column 8)
+    const attachCell = row.querySelector('.rfq-attachment-cell') || row.children[8];
+    if (attachCell && rfq && rfq.quotation_records) {
+        let quotesHtml = rfq.quotation_records.map(q => `
+            <a href="${q.download_url || ('/rfq/' + rfqId + '/quotation/download/' + (quoteId ? '?quotation_id=' + quoteId : ''))}"
+               class="fw-bold text-decoration-none text-primary small d-inline-flex align-items-center gap-1"
+               target="_blank"
+               title="Download/View Quotation PDF (${escapeHtml(q.quotation_number)})">
+                <i class="bi bi-file-earmark-pdf-fill text-danger"></i>
+                <span>${escapeHtml(q.quotation_number)}</span>
+            </a>
+        `).join('');
+
+        let existingDocHtml = '';
+        if (rfq.attachment_url) {
+            existingDocHtml = `
+                <a href="${rfq.attachment_url}"
+                   class="text-decoration-none text-secondary small d-inline-flex align-items-center gap-1 mt-1"
+                   target="_blank"
+                   title="View Original Uploaded Enquiry Document">
+                    <i class="bi bi-paperclip"></i>
+                    <span>${escapeHtml(rfq.attachment_name || "Enquiry Document")}</span>
+                </a>
+            `;
+        }
+
+        attachCell.innerHTML = `<div class="d-flex flex-column gap-1">${quotesHtml}${existingDocHtml}</div>`;
+        attachCell.setAttribute('data-sort-value', 'attached');
+    }
+}
+
+function promptAttachQuotation(mode, rfq, existingQuotes) {
+    window.activeAttachmentFlow = { mode: mode, rfqId: rfq.id };
+
+    const modalEl = document.getElementById('attachExistingQuotationModal');
+    const singleBox = document.getElementById('singleQuotationBox');
+    const multiBox = document.getElementById('multipleQuotationBox');
+    const promptText = document.getElementById('attachQuotationPromptText');
+
+    if (mode === 'reply') {
+        promptText.textContent = `A quotation already exists for this RFQ (${rfq.rfq_no || ('RFQ #' + rfq.id)}). Would you like to attach the available quotation to your reply, or generate a revised quotation?`;
+    } else {
+        promptText.textContent = `A quotation already exists for this RFQ (${rfq.rfq_no || ('RFQ #' + rfq.id)}). Would you like to attach the available quotation to your email, or generate a revised quotation?`;
+    }
+
+    if (existingQuotes.length === 1) {
+        const quote = existingQuotes[0];
+        singleBox.style.display = 'block';
+        multiBox.style.display = 'none';
+
+        document.getElementById('singleQuotationNumber').textContent = quote.quotation_number || '-';
+        document.getElementById('singleQuotationDate').textContent = quote.created_at ? `Created: ${quote.created_at}` : '';
+        document.getElementById('singleQuotationPreviewLink').href = quote.download_url || `/rfq/${rfq.id}/quotation/download/`;
+        window.activeSelectedQuotation = quote;
+    } else {
+        singleBox.style.display = 'none';
+        multiBox.style.display = 'block';
+
+        const dropdown = document.getElementById('existingQuotationDropdown');
+        dropdown.innerHTML = '';
+        existingQuotes.forEach((q, idx) => {
+            const opt = document.createElement('option');
+            opt.value = String(q.id || idx);
+            opt.textContent = `${q.quotation_number || ('Quote ' + (idx + 1))} ${q.created_at ? '(' + q.created_at + ')' : ''}`;
+            dropdown.appendChild(opt);
+        });
+
+        const updateMultiPreview = () => {
+            const selectedIdx = dropdown.selectedIndex;
+            const quote = existingQuotes[selectedIdx] || existingQuotes[0];
+            window.activeSelectedQuotation = quote;
+            document.getElementById('multiQuotationPreviewLink').href = quote.download_url || `/rfq/${rfq.id}/quotation/download/`;
+        };
+
+        dropdown.onchange = updateMultiPreview;
+        updateMultiPreview();
+    }
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+}
+
+document.getElementById('attachQuotationYesBtn')?.addEventListener('click', function () {
+    const flow = window.activeAttachmentFlow;
+    if (!flow) return;
+
+    const modalEl = document.getElementById('attachExistingQuotationModal');
+    bootstrap.Modal.getInstance(modalEl)?.hide();
+
+    const rfq = rfqData.find(item => item.id === flow.rfqId);
+    if (!rfq) return;
+
+    const quote = window.activeSelectedQuotation;
+
+    if (flow.mode === 'reply') {
+        window.activeReplySelectedQuotation = quote;
+        openEmailChainModalDirect(rfq.id, rfq.rfq_no || ('RFQ #' + rfq.id));
+    } else {
+        const emailForm = document.getElementById('quotationEmailForm');
+        emailForm.reset();
+        document.getElementById('quotationEmailRfqId').value = rfq.id;
+        document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
+        document.getElementById('quotationEmailSubject').value = `Quotation for ${quote ? quote.quotation_number : (rfq.quotation_no || rfq.rfq_no || 'RFQ')}`;
+        document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, {
+            productIds: (rfq.products || []).map(p => p.id),
+            supplierPriceIds: []
+        });
+
+        const hiddenSelId = document.getElementById('quotationEmailSelectedQuotationId');
+        if (hiddenSelId && quote && quote.id) {
+            hiddenSelId.value = String(quote.id);
+        }
+
+        const note = document.getElementById('quotationAutoAttachmentNote');
+        if (note) {
+            note.textContent = `Existing quotation (${quote ? quote.quotation_number : 'PDF'}) will be attached automatically upon sending.`;
+        }
+
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('quotationEmailModal')).show();
+    }
+});
+
+document.getElementById('attachQuotationNoBtn')?.addEventListener('click', function () {
+    const flow = window.activeAttachmentFlow;
+    if (!flow) return;
+
+    const modalEl = document.getElementById('attachExistingQuotationModal');
+    bootstrap.Modal.getInstance(modalEl)?.hide();
+
+    const rfq = rfqData.find(item => item.id === flow.rfqId);
+    if (!rfq) return;
+
+    const form = document.getElementById('prepareQuotationForm');
+    if (form) form.dataset.hasSentEmail = 'true';
+
+    if (flow.mode === 'reply') {
+        const ecInput = document.getElementById('emailChainRfqId');
+        if (ecInput) ecInput.value = String(rfq.id);
+        openEditQuotationModal('edit_reply', rfq.id);
+    } else {
+        const rfqInput = document.getElementById('quotationEmailRfqId');
+        if (rfqInput) rfqInput.value = String(rfq.id);
+        openEditQuotationModal('new', rfq.id);
+    }
+});
+
 function openQuotationEmailModal(button) {
     if (typeof hideLoading === 'function') {
         hideLoading();
@@ -1267,30 +1581,20 @@ function openQuotationEmailModal(button) {
         return;
     }
 
-    // Check if quotation mail was already sent for this RFQ (second time click)
-    const hasSentEmail = Boolean(
-        button.dataset.hasSentEmail === 'true' ||
-        (rfq && rfq.has_sent_email) ||
-        (rfq && rfq.products && rfq.products.some(p => p.quotation_email_sent)) ||
-        (rfq && rfq.quotation_no && rfq.quotation_no !== '-')
-    );
-
-    if (hasSentEmail) {
-        const confirmMsg = "The quotation mail was already sent for this RFQ. This will create and send a Revised Quotation.\n\nDo you want to continue?";
-        if (!confirm(confirmMsg)) {
-            return;
-        }
-    }
-
     row.querySelector('.rfq-quotation-selection-warning')?.remove();
 
-    const form = document.getElementById('prepareQuotationForm');
-    form.dataset.hasSentEmail = hasSentEmail ? 'true' : 'false';
+    const existingQuotes = getRfqQuotations(rfq);
+    if (existingQuotes.length > 0) {
+        promptAttachQuotation('new', rfq, existingQuotes);
+    } else {
+        const form = document.getElementById('prepareQuotationForm');
+        if (form) form.dataset.hasSentEmail = 'false';
 
-    const rfqInput = document.getElementById('quotationEmailRfqId');
-    if (rfqInput) rfqInput.value = rfq.id;
+        const rfqInput = document.getElementById('quotationEmailRfqId');
+        if (rfqInput) rfqInput.value = rfq.id;
 
-    openEditQuotationModal('new', rfq.id);
+        openEditQuotationModal('new', rfq.id);
+    }
 }
 
 document.addEventListener('click', function (e) {
@@ -1302,12 +1606,17 @@ document.addEventListener('click', function (e) {
 document.getElementById('previewQuotationAttachmentBtn')?.addEventListener('click', function () {
     const rfqId = document.getElementById('quotationEmailRfqId').value;
     if (!rfqId) return;
+    const selectedQId = document.getElementById('quotationEmailSelectedQuotationId')?.value;
+    if (selectedQId) {
+        window.open(`/rfq/${rfqId}/quotation/download/?quotation_id=${selectedQId}`, '_blank');
+        return;
+    }
+
     const prodInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_product_ids"]'));
     const spInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_supplier_price_ids"]'));
     const mesRateInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="mes_rates"]'));
     const dwInput = document.querySelector('#quotationEmailProductInputs input[name="delivery_weeks"]');
     const icInput = document.querySelector('#quotationEmailProductInputs input[name="installation_charge"]');
-
     const termInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="custom_terms"]'));
 
     const params = new URLSearchParams();
@@ -1328,39 +1637,87 @@ document.getElementById('downloadQuotationPdfModalBtn')?.addEventListener('click
     const rfqId = form.dataset.rfqId;
     if (!rfqId) return;
 
+    const rfq = (typeof rfqData !== 'undefined') ? rfqData.find(item => String(item.id) === String(rfqId)) : null;
+
+    const userDetailSelect = document.getElementById('docUserDetailSelect');
+    if (userDetailSelect && !userDetailSelect.classList.contains('d-none') && !userDetailSelect.value) {
+        alert('Please select User Details for Kind Attention (Mandatory).');
+        userDetailSelect.focus();
+        return;
+    }
+
+    if (rfq && userDetailSelect && userDetailSelect.value) {
+        const selectedOpt = userDetailSelect.options[userDetailSelect.selectedIndex];
+        if (selectedOpt) {
+            rfq.customer_user_detail_id = userDetailSelect.value;
+            const uName = selectedOpt.dataset.name || selectedOpt.text;
+            const uDesig = selectedOpt.dataset.designation;
+            rfq.customer_contact_person = uDesig ? `${uName} (${uDesig})` : uName;
+            rfq.customer_contact_number = selectedOpt.dataset.number || rfq.customer_contact_number;
+            rfq.customer_user_mail_id = selectedOpt.dataset.email || rfq.customer_user_mail_id;
+        }
+    }
+
     const rows = form.querySelectorAll('#prepareQuotationTable tbody tr');
     if (rows.length === 0) {
         alert('Please select at least one product row.');
         return;
     }
 
-    const params = new URLSearchParams();
-    rows.forEach(row => {
-        const prodIdInput = row.querySelector('input[name="product_ids"]');
-        const spIdInput = row.querySelector('input[name="supplier_price_ids"]');
-        const mesRateInput = row.querySelector('.prepare-quote-mes-rate');
-        const baseRateInput = row.querySelector('.prepare-quote-rate');
+    const btn = this;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving & Downloading...';
 
-        if (prodIdInput && prodIdInput.value) {
-            params.append('product_ids', prodIdInput.value);
-            if (spIdInput && spIdInput.value) params.append('supplier_price_ids', spIdInput.value);
-            const rateVal = mesRateInput && mesRateInput.value ? mesRateInput.value : (baseRateInput ? baseRateInput.value : '0');
-            params.append('mes_rates', rateVal);
+    const formData = new FormData(form);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]')?.value || '');
+
+    fetch(`/rfq/${rfqId}/quotation/download/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(async response => {
+        if (!response.ok) {
+            throw new Error(`Download failed (HTTP ${response.status})`);
         }
+
+        const quoteId = response.headers.get('X-Quotation-Id');
+        const quoteNo = response.headers.get('X-Quotation-Number');
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = 'quotation.pdf';
+        if (disposition && disposition.includes('filename=')) {
+            const m = disposition.match(/filename="?([^";]+)"?/);
+            if (m && m[1]) filename = m[1].trim();
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        const snapshotPayload = extractPrepareQuotationSnapshot(form);
+        const finalQuoteNo = quoteNo || filename.replace(/\.pdf$/i, '').replace(/_/g, '/');
+        updateTableAttachment(rfqId, quoteId, finalQuoteNo, snapshotPayload);
+
+        const quoteNoEl = document.getElementById('docQuoteNo');
+        if (quoteNoEl) quoteNoEl.textContent = finalQuoteNo;
+
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+
+        const modalEl = document.getElementById('prepareQuotationModal');
+        bootstrap.Modal.getInstance(modalEl)?.hide();
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        alert(`Error saving/downloading quotation: ${err.message}`);
     });
-
-    const dwInput = document.getElementById('deliveryWeeksInput')?.value || '';
-    const icInput = document.getElementById('installationChargeInput')?.value || '';
-    if (dwInput) params.append('delivery_weeks', dwInput);
-    if (icInput) params.append('installation_charge', icInput);
-
-    const customTerms = Array.from(document.querySelectorAll('#termsListContainer .prepare-quote-term-input'))
-        .map(input => input.value.trim())
-        .filter(Boolean);
-    customTerms.forEach(t => params.append('custom_terms', t));
-
-    const qs = params.toString();
-    window.open(`/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`, '_blank');
 });
 
 document.getElementById('quotationEmailForm')?.addEventListener('submit', function (e) {
@@ -1755,6 +2112,79 @@ function renderDefaultTerms(rfq, currentCustomTerms) {
     termsToRender.forEach(termText => addTermRow(termText));
 }
 
+function getDynamicQuotationNumber(rfq, isRevision = false) {
+    if (!rfq) return '-';
+
+    const existingQuotes = getRfqQuotations(rfq);
+
+    if (isRevision || existingQuotes.length > 0 || (rfq.quotation_no && rfq.quotation_no !== '-')) {
+        let baseNo = '';
+        let maxRev = 0;
+
+        existingQuotes.forEach(q => {
+            const qNo = (q.quotation_number || '').trim();
+            if (!qNo) return;
+            const b = qNo.replace(/_R\d+$/i, '');
+            if (!baseNo) baseNo = b;
+            const m = qNo.match(/_R(\d+)$/i);
+            if (m) {
+                maxRev = Math.max(maxRev, parseInt(m[1], 10));
+            }
+        });
+
+        if (!baseNo && rfq.quotation_no && rfq.quotation_no !== '-') {
+            baseNo = rfq.quotation_no.replace(/_R\d+$/i, '');
+            const m = rfq.quotation_no.match(/_R(\d+)$/i);
+            if (m) maxRev = Math.max(maxRev, parseInt(m[1], 10));
+        }
+
+        if (baseNo) {
+            const nextRev = maxRev + 1;
+            return `${baseNo}_R${nextRev}`;
+        }
+    }
+
+    // Brand new RFQ - Calculate next sequential base quotation number dynamically across all RFQs in system
+    const now = new Date();
+    let year = now.getFullYear();
+    if (rfq.mail_date) {
+        const d = new Date(rfq.mail_date);
+        if (!isNaN(d.getTime())) year = d.getFullYear();
+    }
+    const yearSuffix = `${String(year).slice(-2)}-${String(year + 1).slice(-2)}`;
+
+    let maxSeq = (yearSuffix === '26-27') ? 449 : 0;
+
+    if (typeof rfqData !== 'undefined' && Array.isArray(rfqData)) {
+        rfqData.forEach(r => {
+            if (r.quotation_no && r.quotation_no !== '-') {
+                const m = r.quotation_no.match(/MES_?Q(\d+)[/_](\d{2}-\d{2})/i);
+                if (m && m[2] === yearSuffix) {
+                    maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+                }
+            }
+            (r.quotation_records || []).forEach(q => {
+                const qNo = q.quotation_number || '';
+                const m = qNo.match(/MES_?Q(\d+)[/_](\d{2}-\d{2})/i);
+                if (m && m[2] === yearSuffix) {
+                    maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+                }
+            });
+        });
+    }
+
+    document.querySelectorAll('.rfq-attachment-list a, .rfq-attachment-cell a, .rfq-quote-no-cell a, a[href*="quotation"]').forEach(a => {
+        const text = a.textContent.trim();
+        const m = text.match(/MES_?Q(\d+)[/_](\d{2}-\d{2})/i);
+        if (m && m[2] === yearSuffix) {
+            maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+        }
+    });
+
+    const nextSeq = maxSeq + 1;
+    return `MES_Q${String(nextSeq).padStart(4, '0')}/${yearSuffix}`;
+}
+
 const prepareQuoteFormEl = document.getElementById('prepareQuotationForm');
 if (prepareQuoteFormEl) {
     prepareQuoteFormEl.addEventListener('submit', function (e) {
@@ -1767,6 +2197,27 @@ if (prepareQuoteFormEl) {
         const rfqId = form.dataset.rfqId;
         const rfq = (typeof rfqData !== 'undefined') ? rfqData.find(item => String(item.id) === String(rfqId)) : null;
         if (!rfq) return;
+
+        const userDetailSelect = document.getElementById('docUserDetailSelect');
+        if (userDetailSelect && !userDetailSelect.classList.contains('d-none') && !userDetailSelect.value) {
+            alert('Please select User Details for Kind Attention (Mandatory).');
+            userDetailSelect.focus();
+            return;
+        }
+
+        if (rfq && userDetailSelect && userDetailSelect.value) {
+            const selectedOpt = userDetailSelect.options[userDetailSelect.selectedIndex];
+            if (selectedOpt) {
+                rfq.customer_user_detail_id = userDetailSelect.value;
+                const uName = selectedOpt.dataset.name || selectedOpt.text;
+                const uDesig = selectedOpt.dataset.designation;
+                rfq.customer_contact_person = uDesig ? `${uName} (${uDesig})` : uName;
+                rfq.customer_contact_number = selectedOpt.dataset.number || rfq.customer_contact_number;
+                rfq.customer_user_mail_id = selectedOpt.dataset.email || rfq.customer_user_mail_id;
+            }
+        }
+
+        const selectedUserDetailId = (userDetailSelect && userDetailSelect.value) ? userDetailSelect.value : (document.getElementById('docUserDetailIdExisting')?.value || '');
 
         const rows = form.querySelectorAll('#prepareQuotationTable tbody tr');
         if (rows.length === 0) {
@@ -1802,6 +2253,24 @@ if (prepareQuoteFormEl) {
         const isReplyMode = mode === 'reply' || mode === 'edit_reply';
         const hasSentEmail = form.dataset.hasSentEmail === 'true';
 
+        // Auto-save quotation record to backend & update attachment table
+        const formData = new FormData(form);
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]')?.value || '');
+
+        const snapshotPayload = extractPrepareQuotationSnapshot(form);
+        fetch(`/rfq/${rfqId}/quotation/download/`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(async response => {
+            if (response.ok) {
+                const quoteId = response.headers.get('X-Quotation-Id');
+                const quoteNo = response.headers.get('X-Quotation-Number') || getDynamicQuotationNumber(rfq, hasSentEmail);
+                updateTableAttachment(rfqId, quoteId, quoteNo, snapshotPayload);
+            }
+        })
+        .catch(err => console.warn('Background quotation update failed:', err));
+
         // Hide prepare quotation modal
         const modalEl = document.getElementById('prepareQuotationModal');
         const modal = bootstrap.Modal.getInstance(modalEl);
@@ -1816,7 +2285,8 @@ if (prepareQuoteFormEl) {
                 mesRates: mesRates,
                 deliveryWeeks: deliveryWeeks,
                 installationCharge: installationCharge,
-                customTerms: customTerms
+                customTerms: customTerms,
+                userDetailId: selectedUserDetailId
             };
 
             const previewBtn = document.getElementById('previewReplyQuotationPdfBtn');
@@ -1852,7 +2322,8 @@ if (prepareQuoteFormEl) {
             mesRates: mesRates,
             deliveryWeeks: deliveryWeeks,
             installationCharge: installationCharge,
-            customTerms: customTerms
+            customTerms: customTerms,
+            userDetailId: selectedUserDetailId
         };
 
         // Populate quotation email form (New Email mode)
@@ -1861,7 +2332,7 @@ if (prepareQuoteFormEl) {
             emailForm.reset();
             document.getElementById('quotationEmailRfqId').value = rfq.id;
             document.getElementById('quotationCustomerEmail').value = rfq.customer_email || '';
-            const quoteNo = (rfq.quotation_no && rfq.quotation_no !== '-') ? rfq.quotation_no : (rfq.default_quotation_no || rfq.rfq_no || 'RFQ');
+            const quoteNo = getDynamicQuotationNumber(rfq, hasSentEmail);
             document.getElementById('quotationEmailSubject').value = `Quotation for ${quoteNo}`;
             document.getElementById('quotationEmailBody').value = buildQuotationEmailBody(rfq, {
                 productIds: productIds,
@@ -1893,6 +2364,14 @@ if (prepareQuoteFormEl) {
             mInput.value = mesRates[idx] || '';
             productInputs.appendChild(mInput);
         });
+
+        if (selectedUserDetailId) {
+            const udInput = document.createElement('input');
+            udInput.type = 'hidden';
+            udInput.name = 'user_detail_id';
+            udInput.value = selectedUserDetailId;
+            productInputs.appendChild(udInput);
+        }
 
         if (deliveryWeeks) {
             const dwInput = document.createElement('input');
@@ -1944,10 +2423,10 @@ function openEditQuotationModal(mode, targetRfqId = null) {
     let rfqId = targetRfqId ? Number(targetRfqId) : null;
     let currentParams = null;
 
-    if (mode === 'edit_reply' || mode === 'reply') {
+    if (mode === 'edit_reply') {
         if (!rfqId) rfqId = Number(document.getElementById('emailChainRfqId')?.value);
         currentParams = window.activeReplyQuotationParams || null;
-    } else {
+    } else if (mode === 'edit_new_email') {
         if (!rfqId) rfqId = Number(document.getElementById('quotationEmailRfqId')?.value);
         const prodInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_product_ids"]'));
         const spInputs = Array.from(document.querySelectorAll('#quotationEmailProductInputs input[name="quotation_supplier_price_ids"]'));
@@ -1968,6 +2447,8 @@ function openEditQuotationModal(mode, targetRfqId = null) {
         } else if (window.activeNewEmailQuotationParams) {
             currentParams = window.activeNewEmailQuotationParams;
         }
+    } else {
+        currentParams = null;
     }
 
     if (!rfqId) {
@@ -1986,6 +2467,36 @@ function openEditQuotationModal(mode, targetRfqId = null) {
         return;
     }
 
+    // Determine latest snapshot first from active quotation selection, RFQ property, or records
+    let latestSnapshot = null;
+    if (window.activeSelectedQuotation && window.activeSelectedQuotation.products_snapshot && Array.isArray(window.activeSelectedQuotation.products_snapshot) && window.activeSelectedQuotation.products_snapshot.length > 0) {
+        latestSnapshot = window.activeSelectedQuotation.products_snapshot;
+    } else if (rfq.latest_quotation_snapshot && Array.isArray(rfq.latest_quotation_snapshot) && rfq.latest_quotation_snapshot.length > 0) {
+        latestSnapshot = rfq.latest_quotation_snapshot;
+    } else if (rfq.quotation_records && rfq.quotation_records.length > 0) {
+        for (const q of rfq.quotation_records) {
+            if (q.products_snapshot && Array.isArray(q.products_snapshot) && q.products_snapshot.length > 0) {
+                latestSnapshot = q.products_snapshot;
+                break;
+            }
+        }
+    }
+
+    const form = document.getElementById('prepareQuotationForm');
+    form.reset();
+    form.dataset.rfqId = String(rfq.id);
+    form.dataset.mode = mode;
+
+    const hasExistingQuotes = Boolean(
+        (rfq.quotation_records && rfq.quotation_records.length > 0) ||
+        (rfq.quotation_no && rfq.quotation_no !== '-')
+    );
+
+    const isRevision = Boolean(
+        (form.dataset.hasSentEmail === 'true' || mode === 'edit_reply' || mode === 'reply' || hasExistingQuotes || window.activeSelectedQuotation) &&
+        hasExistingQuotes
+    );
+
     const row = document.querySelector(`tr[data-rfq-id="${rfqId}"]`);
     let selectedItems = null;
 
@@ -1994,8 +2505,30 @@ function openEditQuotationModal(mode, targetRfqId = null) {
             productIds: currentParams.productIds,
             supplierPriceIds: currentParams.supplierPriceIds || []
         };
+    } else if (isRevision && latestSnapshot && Array.isArray(latestSnapshot) && latestSnapshot.length > 0) {
+        const snapProductIds = latestSnapshot.map(s => String(s.product_id)).filter(Boolean);
+        if (snapProductIds.length > 0) {
+            selectedItems = {
+                productIds: snapProductIds,
+                supplierPriceIds: []
+            };
+        } else if (row) {
+            selectedItems = getSelectedQuotationItems(row);
+        }
     } else if (row) {
         selectedItems = getSelectedQuotationItems(row);
+    }
+
+    if (!selectedItems || !selectedItems.productIds || selectedItems.productIds.length === 0) {
+        if (latestSnapshot && Array.isArray(latestSnapshot) && latestSnapshot.length > 0) {
+            const snapProductIds = latestSnapshot.map(s => String(s.product_id)).filter(Boolean);
+            if (snapProductIds.length > 0) {
+                selectedItems = {
+                    productIds: snapProductIds,
+                    supplierPriceIds: []
+                };
+            }
+        }
     }
 
     if (!selectedItems || !selectedItems.productIds || selectedItems.productIds.length === 0) {
@@ -2011,8 +2544,9 @@ function openEditQuotationModal(mode, targetRfqId = null) {
     const validTillDate = new Date(now.getTime() + (60 * 24 * 60 * 60 * 1000));
     const validTillStr = String(validTillDate.getDate()).padStart(2, '0') + '/' + String(validTillDate.getMonth() + 1).padStart(2, '0') + '/' + validTillDate.getFullYear();
 
+    const quoteNo = getDynamicQuotationNumber(rfq, isRevision);
+
     const docQuoteNo = document.getElementById('docQuoteNo');
-    const quoteNo = (rfq.quotation_no && rfq.quotation_no !== '-') ? rfq.quotation_no : (rfq.default_quotation_no || '');
     if (docQuoteNo) docQuoteNo.textContent = quoteNo;
 
     const docQuoteDate = document.getElementById('docQuoteDate');
@@ -2027,11 +2561,44 @@ function openEditQuotationModal(mode, targetRfqId = null) {
     const docCustomerGstin = document.getElementById('docCustomerGstin');
     if (docCustomerGstin) docCustomerGstin.textContent = rfq.customer_gstin || '-';
 
+    const docCustomerContactPerson = document.getElementById('docCustomerContactPerson');
+    const docUserDetailSelect = document.getElementById('docUserDetailSelect');
+    const docUserDetailIdExisting = document.getElementById('docUserDetailIdExisting');
     const docCustomerPhone = document.getElementById('docCustomerPhone');
-    if (docCustomerPhone) docCustomerPhone.textContent = rfq.customer_phone || '-';
-
     const docCustomerEmail = document.getElementById('docCustomerEmail');
-    if (docCustomerEmail) docCustomerEmail.textContent = rfq.customer_email || '-';
+
+    const hasUserDetail = Boolean(rfq.customer_user_detail_id || (rfq.customer_contact_person && rfq.customer_contact_person !== '-'));
+
+    if (hasUserDetail) {
+        if (docCustomerContactPerson) {
+            docCustomerContactPerson.textContent = rfq.customer_contact_person || '-';
+            docCustomerContactPerson.classList.remove('d-none');
+        }
+        if (docUserDetailSelect) {
+            docUserDetailSelect.classList.add('d-none');
+            docUserDetailSelect.required = false;
+            docUserDetailSelect.value = '';
+        }
+        if (docUserDetailIdExisting) {
+            docUserDetailIdExisting.value = rfq.customer_user_detail_id || '';
+        }
+        if (docCustomerPhone) docCustomerPhone.textContent = rfq.customer_contact_number || rfq.customer_phone || '-';
+        if (docCustomerEmail) docCustomerEmail.textContent = rfq.customer_user_mail_id || rfq.customer_email || '-';
+    } else {
+        if (docCustomerContactPerson) {
+            docCustomerContactPerson.classList.add('d-none');
+        }
+        if (docUserDetailSelect) {
+            docUserDetailSelect.classList.remove('d-none');
+            docUserDetailSelect.required = true;
+            docUserDetailSelect.value = '';
+        }
+        if (docUserDetailIdExisting) {
+            docUserDetailIdExisting.value = '';
+        }
+        if (docCustomerPhone) docCustomerPhone.textContent = rfq.customer_phone || '-';
+        if (docCustomerEmail) docCustomerEmail.textContent = rfq.customer_email || '-';
+    }
 
     const docEnquiryNo = document.getElementById('docEnquiryNo');
     if (docEnquiryNo) docEnquiryNo.textContent = rfq.rfq_no || ('RFQ #' + rfq.id);
@@ -2040,19 +2607,14 @@ function openEditQuotationModal(mode, targetRfqId = null) {
     const docPaymentTerms = document.getElementById('docPaymentTerms');
     if (docPaymentTerms) docPaymentTerms.textContent = payTerms;
 
-    const form = document.getElementById('prepareQuotationForm');
-    form.reset();
-    form.dataset.rfqId = String(rfq.id);
-    form.dataset.mode = mode;
-
     const titleEl = document.getElementById('prepareQuotationModalLabel');
     if (titleEl) {
-        titleEl.textContent = `Edit Quotation Document - ${rfq.rfq_no || ('RFQ #' + rfq.id)}`;
+        titleEl.textContent = `Edit Quotation Document - ${rfq.rfq_no || ('RFQ #' + rfq.id)} (${quoteNo})`;
     }
 
     const submitBtn = document.getElementById('prepareQuotationSubmitBtn');
     if (submitBtn) {
-        submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Save & Update Attachment';
+        submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Update Attachment';
     }
 
     const tbody = document.querySelector('#prepareQuotationTable tbody');
@@ -2094,19 +2656,65 @@ function openEditQuotationModal(mode, targetRfqId = null) {
 
         const lastRow = tbody.rows[tbody.rows.length - 1];
         if (lastRow) {
-            const customRateVal = mesRatesArr[idx];
-            if (customRateVal !== undefined && customRateVal !== '' && customRateVal !== null) {
-                const mesRateInput = lastRow.querySelector('.prepare-quote-mes-rate');
-                const mesProfitInput = lastRow.querySelector('.prepare-quote-mes-profit');
-                const mesValueInput = lastRow.querySelector('.prepare-quote-mes-value');
-                const qty = parseFloat(lastRow.querySelector('.prepare-quote-qty')?.value || 0) || 0;
-                
-                if (mesRateInput) mesRateInput.value = customRateVal;
-                
+            let customRateVal = null;
+            let snapItem = null;
+
+            if (latestSnapshot && Array.isArray(latestSnapshot)) {
+                snapItem = latestSnapshot.find(s => 
+                    (s.product_id && String(s.product_id) === String(product.id)) ||
+                    (s.product_name && product.product_name && s.product_name.trim().toLowerCase() === product.product_name.trim().toLowerCase())
+                );
+            }
+
+            if (mesRatesArr && mesRatesArr[idx] !== undefined && mesRatesArr[idx] !== '' && mesRatesArr[idx] !== null) {
+                customRateVal = mesRatesArr[idx];
+            } else if (snapItem && snapItem.rate_per_unit !== undefined && snapItem.rate_per_unit !== null && snapItem.rate_per_unit !== '') {
+                customRateVal = snapItem.rate_per_unit;
+            }
+
+            const mesRateInput = lastRow.querySelector('.prepare-quote-mes-rate');
+            const mesProfitInput = lastRow.querySelector('.prepare-quote-mes-profit');
+            const mesValueInput = lastRow.querySelector('.prepare-quote-mes-value');
+            const qtyInput = lastRow.querySelector('.prepare-quote-qty');
+            const unitInput = lastRow.querySelector('.prepare-quote-unit');
+            const baseRateInput = lastRow.querySelector('.prepare-quote-rate');
+
+            if (snapItem) {
+                if (snapItem.quantity !== undefined && snapItem.quantity !== null && snapItem.quantity !== '') {
+                    if (qtyInput) qtyInput.value = snapItem.quantity;
+                }
+                if (snapItem.unit) {
+                    if (unitInput) unitInput.value = snapItem.unit;
+                }
+                if (snapItem.product_type) {
+                    const typeInput = lastRow.querySelector('.prepare-quote-product-type');
+                    if (typeInput) typeInput.value = snapItem.product_type;
+                    const badge = lastRow.querySelector('span.badge');
+                    if (badge) badge.textContent = snapItem.product_type;
+                }
+                if (snapItem.profit_percentage !== undefined && snapItem.profit_percentage !== null && snapItem.profit_percentage !== '') {
+                    if (mesProfitInput) mesProfitInput.value = snapItem.profit_percentage;
+                }
+            }
+
+            if (customRateVal !== null && customRateVal !== undefined && customRateVal !== '') {
                 const customRate = parseFloat(customRateVal);
-                if (!isNaN(customRate) && rate > 0) {
-                    const calculatedProfit = ((customRate - rate) / rate) * 100;
-                    if (mesProfitInput) mesProfitInput.value = calculatedProfit.toFixed(2);
+                if (mesRateInput) mesRateInput.value = isNaN(customRate) ? customRateVal : customRate.toFixed(2);
+
+                const qty = parseFloat(qtyInput?.value || 0) || 0;
+                if (!isNaN(customRate)) {
+                    if (rate > 0) {
+                        if (!mesProfitInput || !mesProfitInput.value) {
+                            const calculatedProfit = ((customRate - rate) / rate) * 100;
+                            if (mesProfitInput) mesProfitInput.value = calculatedProfit.toFixed(2);
+                        }
+                    } else if (snapItem && snapItem.profit_percentage && baseRateInput) {
+                        const pPct = parseFloat(snapItem.profit_percentage);
+                        if (!isNaN(pPct) && pPct > -100) {
+                            const derivedBase = customRate / (1 + pPct / 100);
+                            baseRateInput.value = derivedBase.toFixed(2);
+                        }
+                    }
                     if (mesValueInput) mesValueInput.value = (qty * customRate).toFixed(2);
                 }
             }
@@ -2115,15 +2723,48 @@ function openEditQuotationModal(mode, targetRfqId = null) {
 
     const dwInput = document.getElementById('deliveryWeeksInput');
     if (dwInput) {
-        dwInput.value = (currentParams && currentParams.deliveryWeeks) ? currentParams.deliveryWeeks : '3';
+        if (currentParams && currentParams.deliveryWeeks) {
+            dwInput.value = currentParams.deliveryWeeks;
+        } else if (latestSnapshot) {
+            const snapDw = latestSnapshot.find(s => s.delivery_weeks)?.delivery_weeks;
+            if (snapDw) {
+                dwInput.value = snapDw;
+            } else {
+                dwInput.value = '3';
+            }
+        } else {
+            dwInput.value = '3';
+        }
     }
 
     const icInput = document.getElementById('installationChargeInput');
     if (icInput) {
-        icInput.value = (currentParams && currentParams.installationCharge) ? currentParams.installationCharge : '';
+        if (currentParams && currentParams.installationCharge !== undefined && currentParams.installationCharge !== null && currentParams.installationCharge !== '') {
+            icInput.value = currentParams.installationCharge;
+        } else if (latestSnapshot) {
+            const snapIc = latestSnapshot.find(s => s.installation_charge !== undefined && s.installation_charge !== null && s.installation_charge !== '')?.installation_charge;
+            if (snapIc !== undefined && snapIc !== null) {
+                icInput.value = snapIc;
+            } else {
+                icInput.value = '';
+            }
+        } else {
+            icInput.value = '';
+        }
     }
 
-    renderDefaultTerms(rfq, currentParams ? currentParams.customTerms : null);
+    let termsToRender = null;
+    if (currentParams && currentParams.customTerms && currentParams.customTerms.length > 0) {
+        termsToRender = currentParams.customTerms;
+    } else if (rfq.latest_quotation_terms && rfq.latest_quotation_terms.length > 0) {
+        termsToRender = rfq.latest_quotation_terms;
+    } else if (latestSnapshot) {
+        const snapTerms = latestSnapshot.find(s => s.custom_terms && s.custom_terms.length > 0)?.custom_terms;
+        if (snapTerms && snapTerms.length > 0) {
+            termsToRender = snapTerms;
+        }
+    }
+    renderDefaultTerms(rfq, termsToRender);
 
     updatePrepareQuotationGrandTotal();
     checkDeliveryWeeksVisibility();
@@ -2137,6 +2778,18 @@ function openEditQuotationModal(mode, targetRfqId = null) {
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('prepareQuotationModal')).show();
 }
+
+document.getElementById('docUserDetailSelect')?.addEventListener('change', function() {
+    const selectedOpt = this.options[this.selectedIndex];
+    if (selectedOpt && selectedOpt.value) {
+        const phone = selectedOpt.dataset.number || '';
+        const email = selectedOpt.dataset.email || '';
+        const phoneEl = document.getElementById('docCustomerPhone');
+        const emailEl = document.getElementById('docCustomerEmail');
+        if (phoneEl && phone) phoneEl.textContent = phone;
+        if (emailEl && email) emailEl.textContent = email;
+    }
+});
 
 document.addEventListener('click', function(e) {
     const addTermBtn = e.target.closest('#addCustomTermBtn');
@@ -3301,28 +3954,18 @@ function openQuotationModalForReply(chainBtn) {
         return;
     }
 
-    // Check if quotation mail was already sent for this RFQ (second time click / revision)
-    const hasSentEmail = Boolean(
-        chainBtn.dataset.hasSentEmail === 'true' ||
-        (rfq && rfq.has_sent_email) ||
-        (rfq && rfq.products && rfq.products.some(p => p.quotation_email_sent)) ||
-        (rfq && rfq.quotation_no && rfq.quotation_no !== '-')
-    );
+    const existingQuotes = getRfqQuotations(rfq);
+    if (existingQuotes.length > 0) {
+        promptAttachQuotation('reply', rfq, existingQuotes);
+    } else {
+        const form = document.getElementById('prepareQuotationForm');
+        if (form) form.dataset.hasSentEmail = 'false';
 
-    if (hasSentEmail) {
-        const confirmMsg = "The quotation mail was already sent for this RFQ. This will create and send a Revised Quotation.\n\nDo you want to continue?";
-        if (!confirm(confirmMsg)) {
-            return;
-        }
+        const ecInput = document.getElementById('emailChainRfqId');
+        if (ecInput) ecInput.value = String(rfq.id);
+
+        openEditQuotationModal('edit_reply', rfq.id);
     }
-
-    const form = document.getElementById('prepareQuotationForm');
-    if (form) form.dataset.hasSentEmail = hasSentEmail ? 'true' : 'false';
-
-    const ecInput = document.getElementById('emailChainRfqId');
-    if (ecInput) ecInput.value = String(rfq.id);
-
-    openEditQuotationModal('edit_reply', rfq.id);
 }
 
 document.addEventListener('click', function(e) {
@@ -3548,18 +4191,24 @@ function openReplyComposer(msg) {
     // Update quotation PDF preview link
     const previewBtn = document.getElementById('previewReplyQuotationPdfBtn');
     if (previewBtn && rfqId) {
-        const qParams = new URLSearchParams();
-        if (window.activeReplyQuotationParams) {
-            const qP = window.activeReplyQuotationParams;
-            (qP.productIds || []).forEach(id => qParams.append('product_ids', id));
-            (qP.supplierPriceIds || []).forEach(id => { if (id) qParams.append('supplier_price_ids', id); });
-            (qP.mesRates || []).forEach(r => qParams.append('mes_rates', r));
-            if (qP.deliveryWeeks) qParams.append('delivery_weeks', qP.deliveryWeeks);
-            if (qP.installationCharge) qParams.append('installation_charge', qP.installationCharge);
-            (qP.customTerms || []).forEach(t => qParams.append('custom_terms', t));
+        if (window.activeReplySelectedQuotation) {
+            previewBtn.href = window.activeReplySelectedQuotation.download_url;
+            const repInput = document.getElementById('replySelectedQuotationId');
+            if (repInput) repInput.value = window.activeReplySelectedQuotation.id;
+        } else {
+            const qParams = new URLSearchParams();
+            if (window.activeReplyQuotationParams) {
+                const qP = window.activeReplyQuotationParams;
+                (qP.productIds || []).forEach(id => qParams.append('product_ids', id));
+                (qP.supplierPriceIds || []).forEach(id => { if (id) qParams.append('supplier_price_ids', id); });
+                (qP.mesRates || []).forEach(r => qParams.append('mes_rates', r));
+                if (qP.deliveryWeeks) qParams.append('delivery_weeks', qP.deliveryWeeks);
+                if (qP.installationCharge) qParams.append('installation_charge', qP.installationCharge);
+                (qP.customTerms || []).forEach(t => qParams.append('custom_terms', t));
+            }
+            const qs = qParams.toString();
+            previewBtn.href = `/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`;
         }
-        const qs = qParams.toString();
-        previewBtn.href = `/rfq/${rfqId}/quotation/download/${qs ? '?' + qs : ''}`;
     }
 
     // Hide detail view (header, body, footer) and display reply composer cleanly
@@ -3690,6 +4339,7 @@ document.getElementById('emailReplyForm')?.addEventListener('submit', function(e
         (qP.mesRates || []).forEach(r => formData.append('mes_rates', r));
         if (qP.deliveryWeeks) formData.append('delivery_weeks', qP.deliveryWeeks);
         if (qP.installationCharge) formData.append('installation_charge', qP.installationCharge);
+        if (qP.userDetailId) formData.append('user_detail_id', qP.userDetailId);
         (qP.customTerms || []).forEach(t => {
             formData.append('custom_terms', t);
             formData.append('quotation_terms', t);

@@ -10,12 +10,22 @@ class Supplier(models.Model):
     supplier_name = models.CharField(max_length=255)
     email = models.CharField(max_length=500, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
+    user_detail = models.ForeignKey('accounts.UserDetail', on_delete=models.SET_NULL, blank=True, null=True, related_name='suppliers', verbose_name="User Detail")
+    contact_person = models.CharField(max_length=255, blank=True, null=True, verbose_name="User Name")
+    contact_number = models.CharField(max_length=500, blank=True, null=True, verbose_name="User Number")
+    user_mail_id = models.CharField(max_length=500, blank=True, null=True, verbose_name="User Mail ID")
     address = models.TextField(blank=True, null=True)
     gstin = models.CharField(max_length=15, blank=True, null=True, verbose_name="GSTIN")
     state_code = models.CharField(max_length=20, blank=True, null=True, verbose_name="State Code")
     is_sez = models.CharField(max_length=3, choices=SEZ_CHOICES, default='No', verbose_name="SEZ")
     payment_terms = models.CharField(max_length=255, blank=True, null=True, verbose_name="Payment Terms")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def user_display_name(self):
+        if self.user_detail:
+            return self.user_detail.user_name
+        return self.contact_person or ''
 
     def save(self, *args, **kwargs):
         if self.gstin:

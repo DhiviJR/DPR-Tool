@@ -21,50 +21,58 @@
 
 <div class="dpr-card mb-4">
     <div class="card-body">
-        <form method="post" class="row g-3 align-items-end">
+        <form method="post" class="row g-2 align-items-end flex-nowrap overflow-x-auto pb-1">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
-            <div class="col-lg">
-                <label class="form-label">Supplier Name *</label>
-                <input type="text" name="supplier_name" class="form-control" required>
+            <div class="col" style="min-width: 140px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">Supplier Name *</label>
+                <input type="text" name="supplier_name" class="form-control form-control-sm" required>
             </div>
-            <div class="col-lg">
-                <label class="form-label">Email</label>
-                <input type="text" name="email" class="form-control" placeholder="e.g. supp1@example.com, supp2@example.com">
-                <div class="form-text text-muted" style="font-size: 0.72rem;">(Separate multiple emails with commas)</div>
+            <div class="col" style="min-width: 160px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">Email</label>
+                <input type="text" name="email" class="form-control form-control-sm" placeholder="e.g. supp1@example.com, supp2@example.com" title="Separate multiple emails with commas">
             </div>
-            <div class="col-lg">
-                <label class="form-label">Phone Number</label>
-                <input type="tel" name="phone_number" class="form-control js-phone-input" maxlength="10" inputmode="numeric">
+            <div class="col" style="min-width: 120px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">Phone Number</label>
+                <input type="tel" name="phone_number" class="form-control form-control-sm js-phone-input" maxlength="10" inputmode="numeric">
             </div>
-            <div class="col-lg">
-                <label class="form-label">GSTIN</label>
-                <input type="text" name="gstin" class="form-control js-gstin-input text-uppercase" maxlength="15">
+            <div class="col" style="min-width: 160px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">User Details *</label>
+                <select name="user_detail_id" class="form-select form-select-sm" required>
+                    <option value="">Select User</option>
+                    {% for u in user_details_list %}
+                    <option value="{{ u.id }}">{{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}</option>
+                    {% endfor %}
+                </select>
             </div>
-            <div class="col-lg">
-                <label class="form-label">State Code</label>
-                <input type="text" name="state_code" class="form-control text-uppercase" maxlength="10">
+            <div class="col" style="min-width: 130px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">GSTIN</label>
+                <input type="text" name="gstin" class="form-control form-control-sm js-gstin-input text-uppercase" maxlength="15">
             </div>
-            <div class="col-lg">
-                <label class="form-label">SEZ</label>
-                <select name="is_sez" class="form-select">
+            <div class="col" style="min-width: 90px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">State Code</label>
+                <input type="text" name="state_code" class="form-control form-control-sm text-uppercase" maxlength="10">
+            </div>
+            <div class="col" style="min-width: 80px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">SEZ</label>
+                <select name="is_sez" class="form-select form-select-sm">
                     <option value="No" selected>No</option>
                     <option value="Yes">Yes</option>
                 </select>
             </div>
-            <div class="col-lg">
-                <label class="form-label">Payment Terms</label>
-                <div class="input-group">
-                    <input type="number" name="payment_terms" class="form-control" min="0">
+            <div class="col" style="min-width: 120px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">Payment Terms</label>
+                <div class="input-group input-group-sm">
+                    <input type="number" name="payment_terms" class="form-control form-control-sm" min="0">
                     <span class="input-group-text">Weeks</span>
                 </div>
             </div>
-            <div class="col-lg">
-                <label class="form-label">Address</label>
-                <input type="text" name="address" class="form-control">
+            <div class="col" style="min-width: 140px;">
+                <label class="form-label small fw-semibold text-nowrap mb-1">Address</label>
+                <input type="text" name="address" class="form-control form-control-sm">
             </div>
-            <div class="col-lg-2">
-                <button type="submit" class="btn btn-success w-100">
+            <div class="col-auto">
+                <button type="submit" class="btn btn-success btn-sm text-nowrap px-3">
                     <i class="bi bi-plus-lg me-1"></i>Add Supplier
                 </button>
             </div>
@@ -90,26 +98,27 @@
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>S.No</th>
-                        <th>Supplier Name</th>
-                        <th>Email</th>
-                        <th>Phone Number</th>
-                        <th>GSTIN</th>
-                        <th>State Code</th>
-                        <th>SEZ</th>
-                        <th>Payment Terms</th>
-                        <th>Address</th>
-                        <th>Created At</th>
-                        <th>Action</th>
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.82rem;">
+                <thead class="table-light">
+                    <tr class="text-nowrap align-middle">
+                        <th style="width: 45px; min-width: 45px;" class="text-center">S.No</th>
+                        <th style="min-width: 150px;">Supplier Company Name</th>
+                        <th style="min-width: 170px;">Email</th>
+                        <th style="min-width: 115px;">Phone Number</th>
+                        <th style="min-width: 140px;">User Details</th>
+                        <th style="min-width: 130px;">GSTIN</th>
+                        <th style="min-width: 85px;">State Code</th>
+                        <th style="min-width: 75px;">SEZ</th>
+                        <th style="min-width: 110px;">Payment Terms</th>
+                        <th style="min-width: 160px;">Address</th>
+                        <th style="min-width: 125px;">Created At</th>
+                        <th style="min-width: 145px;" class="text-center">Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for supplier in suppliers %}
                     <tr>
-                        <td>{{ forloop.counter }}</td>
+                        <td class="text-center fw-semibold text-muted">{{ forloop.counter }}</td>
                         <td>
                             <form method="post" class="dpr-inline-row-form" id="form-{{ supplier.id }}">
                                 {% csrf_token %}
@@ -122,6 +131,32 @@
                         </td>
                         <td>
                             <input type="tel" name="phone_number" form="form-{{ supplier.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ supplier.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
+                        </td>
+                        <td>
+                            <div class="user-display-wrapper">
+                                {% if supplier.user_display_name %}
+                                <a href="javascript:void(0)" class="js-show-user-modal text-decoration-none fw-semibold text-primary d-inline-flex align-items-center gap-1"
+                                   data-user-name="{{ supplier.user_display_name }}"
+                                   data-user-number="{{ supplier.user_detail.user_number|default:supplier.contact_number|default:'-' }}"
+                                   data-user-email="{{ supplier.user_detail.user_mail_id|default:supplier.user_mail_id|default:'-' }}"
+                                   data-user-designation="{{ supplier.user_detail.user_designation|default:'-' }}"
+                                   data-user-search-url="{% url 'user_details' %}?search={{ supplier.user_display_name|urlencode }}"
+                                   title="Click to view details for {{ supplier.user_display_name }}">
+                                    <span>{{ supplier.user_display_name }}</span>
+                                    <i class="bi bi-info-circle text-primary" style="font-size: 0.75rem;"></i>
+                                </a>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </div>
+                            <select name="user_detail_id" form="form-{{ supplier.id }}" class="form-select form-select-sm master-edit-field d-none" disabled>
+                                <option value="">Select User</option>
+                                {% for u in user_details_list %}
+                                <option value="{{ u.id }}" {% if supplier.user_detail_id == u.id or supplier.contact_person == u.user_name %}selected{% endif %}>
+                                    {{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
                         </td>
                         <td>
                             <input type="text" name="gstin" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field js-gstin-input text-uppercase" value="{{ supplier.gstin|default:''|upper }}" maxlength="15" disabled>
@@ -147,8 +182,8 @@
                         <td class="small text-muted text-nowrap">
                             {{ supplier.created_at|date:'Y-m-d H:i' }}
                         </td>
-                        <td>
-                            <div class="d-flex gap-1">
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center gap-1">
                                 <button type="button" class="btn btn-primary btn-sm master-edit-btn text-nowrap">
                                     <i class="bi bi-pencil-square me-1"></i>Edit
                                 </button>
@@ -167,11 +202,54 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="11" class="text-center">No supplier records found.</td>
+                        <td colspan="12" class="text-center py-4 text-muted">No supplier records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- User Detail Modal -->
+<div class="modal fade" id="userDetailModal" tabindex="-1" aria-labelledby="userDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white py-2 px-3">
+                <h6 class="modal-title fw-bold" id="userDetailModalLabel"><i class="bi bi-person-badge me-2"></i>User Details</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="avatar-circle bg-primary-subtle text-primary fw-bold fs-4 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 48px; height: 48px;">
+                        <i class="bi bi-person"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-0 fw-bold" id="modalUserName">-</h6>
+                        <span class="badge bg-secondary-subtle text-secondary" id="modalUserDesignation">-</span>
+                    </div>
+                </div>
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                        <span class="text-muted"><i class="bi bi-telephone me-2"></i>User Number</span>
+                        <span class="fw-semibold text-dark" id="modalUserNumber">-</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                        <span class="text-muted"><i class="bi bi-envelope me-2"></i>User Mail ID</span>
+                        <span class="fw-semibold text-dark" id="modalUserEmail">-</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                        <span class="text-muted"><i class="bi bi-briefcase me-2"></i>Designation</span>
+                        <span class="fw-semibold text-dark" id="modalUserDesignationDetail">-</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="modal-footer bg-light py-2 px-3 justify-content-between">
+                <a href="{% url 'user_details' %}" id="modalUserMasterLink" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Open in User Details Master
+                </a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -209,6 +287,28 @@ if (supplierSearchInput) {
 }
 
 document.addEventListener('click', function (e) {
+    const userModalTrigger = e.target.closest('.js-show-user-modal');
+    if (userModalTrigger) {
+        e.preventDefault();
+        const userName = userModalTrigger.dataset.userName || '-';
+        const userNumber = userModalTrigger.dataset.userNumber || '-';
+        const userEmail = userModalTrigger.dataset.userEmail || '-';
+        const userDesignation = userModalTrigger.dataset.userDesignation || '-';
+        const searchUrl = userModalTrigger.dataset.userSearchUrl || "{% url 'user_details' %}";
+
+        document.getElementById('modalUserName').textContent = userName;
+        document.getElementById('modalUserDesignation').textContent = userDesignation !== '-' ? userDesignation : 'No Designation';
+        document.getElementById('modalUserNumber').textContent = userNumber;
+        document.getElementById('modalUserEmail').textContent = userEmail;
+        document.getElementById('modalUserDesignationDetail').textContent = userDesignation;
+        document.getElementById('modalUserMasterLink').href = searchUrl;
+
+        const modalEl = document.getElementById('userDetailModal');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+        return;
+    }
+
     const editButton = e.target.closest('.master-edit-btn');
     const cancelButton = e.target.closest('.master-cancel-btn');
 
@@ -217,7 +317,11 @@ document.addEventListener('click', function (e) {
         row.querySelectorAll('.master-edit-field').forEach(field => {
             field.dataset.originalValue = field.value;
             field.disabled = false;
+            field.classList.remove('d-none');
         });
+        const displayWrapper = row.querySelector('.user-display-wrapper');
+        if (displayWrapper) displayWrapper.classList.add('d-none');
+
         row.querySelector('.master-save-btn').classList.remove('d-none');
         row.querySelector('.master-cancel-btn').classList.remove('d-none');
         editButton.classList.add('d-none');
@@ -229,7 +333,13 @@ document.addEventListener('click', function (e) {
         row.querySelectorAll('.master-edit-field').forEach(field => {
             field.value = field.dataset.originalValue || '';
             field.disabled = true;
+            if (field.tagName === 'SELECT' && field.name === 'user_detail_id') {
+                field.classList.add('d-none');
+            }
         });
+        const displayWrapper = row.querySelector('.user-display-wrapper');
+        if (displayWrapper) displayWrapper.classList.remove('d-none');
+
         row.querySelector('.master-edit-btn').classList.remove('d-none');
         row.querySelector('.master-save-btn').classList.add('d-none');
         cancelButton.classList.add('d-none');

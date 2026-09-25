@@ -81,4 +81,22 @@ def create_or_update_user_profile(sender, instance, created, **kwargs):
         UserProfile.objects.get_or_create(user=instance)
     else:
         if hasattr(instance, 'profile'):
-            instance.profile.save()
+            instance.profile.save()
+
+
+class UserDetail(models.Model):
+    user_name = models.CharField(max_length=255, verbose_name="User Name")
+    user_number = models.CharField(max_length=100, blank=True, null=True, verbose_name="User Number")
+    user_mail_id = models.CharField(max_length=255, blank=True, null=True, verbose_name="User Mail ID")
+    user_designation = models.CharField(max_length=255, blank=True, null=True, verbose_name="User Designation")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['user_name']
+        verbose_name = "User Detail"
+        verbose_name_plural = "User Details"
+
+    def __str__(self):
+        return f"{self.user_name} ({self.user_designation or 'No Designation'})"
+

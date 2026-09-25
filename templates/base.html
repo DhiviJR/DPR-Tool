@@ -75,17 +75,18 @@
                 {% endif %}
                 {% if can_view_masters or can_view_customer_details %}
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle dpr-nav-link {% if request.resolver_match.url_name == 'customer_details' or request.resolver_match.url_name == 'supplier_details' %}active{% endif %}"
+                    <a class="nav-link dropdown-toggle dpr-nav-link {% if request.resolver_match.url_name == 'customer_details' or request.resolver_match.url_name == 'supplier_details' or request.resolver_match.url_name == 'user_details' or request.resolver_match.url_name == 'product_type_master' %}active{% endif %}"
                        href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         Masters
                     </a>
                     <ul class="dropdown-menu">
                         {% if can_view_customer_details or is_admin %}
-                        <li><a class="dropdown-item" href="{% url 'customer_details' %}">Customer Details</a></li>
+                        <li><a class="dropdown-item {% if request.resolver_match.url_name == 'customer_details' %}active{% endif %}" href="{% url 'customer_details' %}">Customer Details</a></li>
                         {% endif %}
                         {% if can_view_masters or is_admin %}
-                        <li><a class="dropdown-item" href="{% url 'supplier_details' %}">Supplier Details</a></li>
-                        <li><a class="dropdown-item" href="{% url 'product_type_master' %}"><i class="bi bi-sliders me-2"></i>Product Type Master</a></li>
+                        <li><a class="dropdown-item {% if request.resolver_match.url_name == 'supplier_details' %}active{% endif %}" href="{% url 'supplier_details' %}">Supplier Details</a></li>
+                        <li><a class="dropdown-item {% if request.resolver_match.url_name == 'user_details' %}active{% endif %}" href="{% url 'user_details' %}">User Details</a></li>
+                        <li><a class="dropdown-item {% if request.resolver_match.url_name == 'product_type_master' %}active{% endif %}" href="{% url 'product_type_master' %}"><i class="bi bi-sliders me-2"></i>Product Type Master</a></li>
                         {% endif %}
                     </ul>
                 </li>
