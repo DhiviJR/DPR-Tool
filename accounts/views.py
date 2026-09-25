@@ -29,6 +29,7 @@ from types import SimpleNamespace
 import re
 import html
 import json
+from urllib.parse import quote
 
 
 def _pct(part, whole):
@@ -4234,7 +4235,7 @@ def customer_details(request):
         'region': request.GET.get('region', '').strip(),
         'email': request.GET.get('email', '').strip(),
         'phone_number': request.GET.get('phone_number', '').strip(),
-        'user_detail_id': request.GET.get('user_detail_id', '').strip(),
+        'user_detail_id': request.GET.get('selected_user_id', '').strip() or request.GET.get('user_detail_id', '').strip(),
         'contact_person': request.GET.get('contact_person', '').strip(),
         'contact_number': request.GET.get('contact_number', '').strip(),
         'user_mail_id': request.GET.get('user_mail_id', '').strip(),
@@ -5292,12 +5293,14 @@ def supplier_details(request):
     return render(request, 'supplier_details.html', {
         'suppliers': suppliers,
         'user_details_list': user_details_list,
-        'search_query': search_query
+        'search_query': search_query,
+        'selected_user_id': request.GET.get('selected_user_id', '').strip(),
     })
 
 
 @role_required('ADMIN')
 def user_details(request):
+    return_url = request.POST.get('return_url', '').strip() or request.GET.get('return_url', '').strip()
     if request.method == 'POST':
         action = request.POST.get('action')
         user_detail_id = request.POST.get('user_detail_id') or request.POST.get('user_id')
@@ -5309,6 +5312,9 @@ def user_details(request):
         if action in ('add', 'edit'):
             if not user_name:
                 messages.error(request, 'User Name is required.')
+                if return_url:
+                    delim = '&' if '?' in return_url else '?'
+                    return redirect(f"/user-details/?return_url={quote(return_url)}")
                 return redirect('user_details')
             if user_mail_id:
                 emails_list = [e.strip() for e in re.split(r'[,;\s]+', user_mail_id) if e.strip()]
@@ -5317,17 +5323,22 @@ def user_details(request):
                         validate_email(em)
                     except ValidationError:
                         messages.error(request, f'Enter a valid email address ("{em}" is invalid).')
+                        if return_url:
+                            return redirect(f"/user-details/?return_url={quote(return_url)}")
                         return redirect('user_details')
                 user_mail_id = ', '.join(emails_list)
 
         if action == 'add':
-            UserDetail.objects.create(
+            new_ud = UserDetail.objects.create(
                 user_name=user_name,
                 user_number=user_number or None,
                 user_mail_id=user_mail_id or None,
                 user_designation=user_designation or None,
             )
-            messages.success(request, 'User detail added successfully.')
+            messages.success(request, f'User detail "{new_ud.user_name}" added successfully.')
+            if return_url:
+                delim = '&' if '?' in return_url else '?'
+                return redirect(f"{return_url}{delim}selected_user_id={new_ud.id}")
         elif action == 'edit':
             try:
                 ud = UserDetail.objects.get(pk=user_detail_id)
@@ -5339,6 +5350,9 @@ def user_details(request):
             ud.user_designation = user_designation or None
             ud.save(update_fields=['user_name', 'user_number', 'user_mail_id', 'user_designation', 'updated_at'])
             messages.success(request, 'User detail updated successfully.')
+            if return_url:
+                delim = '&' if '?' in return_url else '?'
+                return redirect(f"{return_url}{delim}selected_user_id={ud.id}")
         elif action == 'delete':
             try:
                 ud = UserDetail.objects.get(pk=user_detail_id)
@@ -5347,6 +5361,8 @@ def user_details(request):
             ud.delete()
             messages.success(request, 'User detail deleted successfully.')
 
+        if return_url:
+            return redirect(return_url)
         return redirect('user_details')
 
     search_query = request.GET.get('search', '').strip()
@@ -5360,7 +5376,8 @@ def user_details(request):
         )
     return render(request, 'user_details.html', {
         'user_details_list': user_details_list,
-        'search_query': search_query
+        'search_query': search_query,
+        'return_url': return_url,
     })
 
 

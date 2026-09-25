@@ -8,10 +8,22 @@
         <h1 class="dpr-page-title mb-1">User Details</h1>
         <p class="dpr-page-subtitle mb-0">Maintain internal user master data and designations</p>
     </div>
+    {% if return_url %}
+    <a href="{{ return_url }}" class="btn btn-outline-secondary dpr-back-btn btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+    {% else %}
     <a href="javascript:history.back()" class="btn btn-outline-secondary dpr-back-btn btn-sm">
         <i class="bi bi-arrow-left me-1"></i>Back
     </a>
+    {% endif %}
 </div>
+
+{% if return_url %}
+<div class="alert alert-info py-2 px-3 mb-3 small rounded-3 border-info-subtle">
+    <i class="bi bi-info-circle-fill me-1 text-info"></i> <strong>Adding User:</strong> Fill in and click <strong>Add User</strong> below to automatically return to your previous page with this user selected.
+</div>
+{% endif %}
 
 {% if messages %}
     {% for message in messages %}
@@ -24,6 +36,9 @@
         <form method="post" class="row g-2 align-items-end flex-nowrap overflow-x-auto pb-1">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
+            {% if return_url %}
+            <input type="hidden" name="return_url" value="{{ return_url }}">
+            {% endif %}
             <div class="col" style="min-width: 180px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">User Name *</label>
                 <input type="text" name="user_name" class="form-control form-control-sm" placeholder="Enter user name" required>

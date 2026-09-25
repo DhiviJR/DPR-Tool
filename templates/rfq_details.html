@@ -788,6 +788,7 @@
                                             {{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}
                                         </option>
                                         {% endfor %}
+                                        <option value="__add_new_user__" class="fw-bold text-primary">+ Add New User</option>
                                     </select>
                                     <input type="hidden" name="user_detail_id_existing" id="docUserDetailIdExisting" value="">
                                 </div>
@@ -2780,6 +2781,11 @@ function openEditQuotationModal(mode, targetRfqId = null) {
 }
 
 document.getElementById('docUserDetailSelect')?.addEventListener('change', function() {
+    if (this.value === '__add_new_user__') {
+        const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `{% url 'user_details' %}?return_url=${returnUrl}`;
+        return;
+    }
     const selectedOpt = this.options[this.selectedIndex];
     if (selectedOpt && selectedOpt.value) {
         const phone = selectedOpt.dataset.number || '';

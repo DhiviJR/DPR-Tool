@@ -2,7 +2,107 @@
 
 {% block title %}Customer Details | DPR System{% endblock %}
 
+{% block extra_head %}
+<style>
+.user-searchable-combobox {
+    position: relative;
+}
+.user-custom-dropdown {
+    position: fixed;
+    z-index: 999999 !important;
+    background: #ffffff;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    display: none;
+    padding: 0;
+    overflow: hidden;
+}
+.user-custom-dropdown.active-show {
+    display: block !important;
+}
+.user-options-container {
+    max-height: 220px;
+    overflow-y: auto;
+}
+.user-custom-option {
+    display: flex;
+    align-items: center;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    color: #212529;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s ease;
+}
+.user-custom-option:hover,
+.user-custom-option.highlighted {
+    background-color: #e9ecef;
+    color: #0d6efd;
+}
+.user-custom-add-btn {
+    border-top: 1px solid #dee2e6;
+    color: #0d6efd;
+    font-weight: 600;
+    background-color: #f8fafc;
+}
+.user-custom-add-btn:hover {
+    background-color: #e7f1ff;
+    color: #0a58ca;
+}
+</style>
+{% endblock %}
+
 {% block content %}
+<style>
+.user-searchable-combobox {
+    position: relative;
+}
+.user-custom-dropdown {
+    position: fixed;
+    z-index: 999999 !important;
+    background: #ffffff;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    display: none;
+    padding: 0;
+    overflow: hidden;
+}
+.user-custom-dropdown.active-show {
+    display: block !important;
+}
+.user-options-container {
+    max-height: 220px;
+    overflow-y: auto;
+}
+.user-custom-option {
+    display: flex;
+    align-items: center;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    color: #212529;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s ease;
+}
+.user-custom-option:hover,
+.user-custom-option.highlighted {
+    background-color: #e9ecef;
+    color: #0d6efd;
+}
+.user-custom-add-btn {
+    border-top: 1px solid #dee2e6;
+    color: #0d6efd;
+    font-weight: 600;
+    background-color: #f8fafc;
+}
+.user-custom-add-btn:hover {
+    background-color: #e7f1ff;
+    color: #0a58ca;
+}
+</style>
+
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
     <div>
         <h1 class="dpr-page-title mb-1">Customer Details</h1>
@@ -61,14 +161,37 @@
                 <label class="form-label small fw-semibold text-nowrap mb-1">Phone Number</label>
                 <input type="tel" name="phone_number" class="form-control form-control-sm js-phone-input" maxlength="10" inputmode="numeric" value="{{ prefill_data.phone_number|default:'' }}">
             </div>
-            <div class="col" style="min-width: 160px;">
+            <div class="col user-searchable-combobox position-relative" style="min-width: 180px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">User Details *</label>
-                <select name="user_detail_id" class="form-select form-select-sm" required>
-                    <option value="">Select User</option>
-                    {% for u in user_details_list %}
-                    <option value="{{ u.id }}" {% if prefill_data.user_detail_id == u.id|stringformat:"s" %}selected{% endif %}>{{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}</option>
-                    {% endfor %}
-                </select>
+                <div class="input-group input-group-sm">
+                    <input type="text" 
+                           class="form-control form-control-sm user-search-input" 
+                           placeholder="Type or select user..." 
+                           autocomplete="off" 
+                           required>
+                    <button class="btn btn-outline-secondary user-search-toggle" type="button" tabindex="-1" title="Show all users">
+                        <i class="bi bi-chevron-down" style="font-size: 0.75rem;"></i>
+                    </button>
+                </div>
+                <input type="hidden" name="user_detail_id" class="user-search-hidden" value="{{ prefill_data.user_detail_id|default:'' }}" required>
+                <div class="user-custom-dropdown">
+                    <div class="user-options-container">
+                        {% for u in user_details_list %}
+                        <div class="user-custom-option user-option-item" 
+                             data-id="{{ u.id }}" 
+                             data-name="{{ u.user_name }}" 
+                             data-designation="{{ u.user_designation|default:'' }}"
+                             data-display="{{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}">
+                            <span class="fw-semibold">{{ u.user_name }}</span>
+                            {% if u.user_designation %}<span class="text-muted small ms-1">({{ u.user_designation }})</span>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="user-custom-option user-custom-add-btn user-option-add-new">
+                        <i class="bi bi-plus-circle me-1"></i>+ Add New User
+                    </div>
+                    <div class="user-no-results text-muted small px-3 py-2 d-none">No user found</div>
+                </div>
             </div>
             <div class="col" style="min-width: 130px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">GSTIN</label>
@@ -112,7 +235,7 @@
                 <form method="get" action="{% url 'customer_details' %}" id="customerSearchForm" class="m-0">
                     <div class="input-group">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                        <input type="search" name="search" id="customerSearchInput" class="form-control" placeholder="Search by customer name..." value="{{ search_query|default:'' }}" autocomplete="off">
+                        <input type="search" name="search" id="customerSearchInput" class="form-control" placeholder="Search by customer name, email, phone, user..." value="{{ search_query|default:'' }}" autocomplete="off">
                     </div>
                 </form>
             </div>
@@ -189,6 +312,7 @@
                                     {{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}
                                 </option>
                                 {% endfor %}
+                                <option value="__add_new_user__" class="fw-bold text-primary">+ Add New User</option>
                             </select>
                         </td>
                         <td>
@@ -235,7 +359,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="13" class="text-center py-4 text-muted">No customer records found.</td>
+                        <td colspan="13" class="text-center py-4 text-muted">No customers found. Add your first customer above.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -246,29 +370,29 @@
 
 <!-- User Detail Modal -->
 <div class="modal fade" id="userDetailModal" tabindex="-1" aria-labelledby="userDetailModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow">
             <div class="modal-header bg-primary text-white py-2 px-3">
-                <h6 class="modal-title fw-bold" id="userDetailModalLabel"><i class="bi bi-person-badge me-2"></i>User Details</h6>
+                <h5 class="modal-title fs-6" id="userDetailModalLabel">
+                    <i class="bi bi-person-badge me-2"></i>User Details
+                </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-3">
-                <div class="d-flex align-items-center mb-3">
-                    <div class="avatar-circle bg-primary-subtle text-primary fw-bold fs-4 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 48px; height: 48px;">
-                        <i class="bi bi-person"></i>
+                <div class="text-center mb-3">
+                    <div class="avatar bg-primary-subtle text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-2" style="width: 54px; height: 54px;">
+                        <i class="bi bi-person-fill fs-2"></i>
                     </div>
-                    <div>
-                        <h6 class="mb-0 fw-bold" id="modalUserName">-</h6>
-                        <span class="badge bg-secondary-subtle text-secondary" id="modalUserDesignation">-</span>
-                    </div>
+                    <h5 class="mb-0 fw-bold text-dark" id="modalUserName">-</h5>
+                    <span class="badge bg-secondary-subtle text-secondary" id="modalUserDesignation">-</span>
                 </div>
                 <ul class="list-group list-group-flush small">
                     <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                        <span class="text-muted"><i class="bi bi-telephone me-2"></i>User Number</span>
+                        <span class="text-muted"><i class="bi bi-telephone me-2"></i>Phone Number</span>
                         <span class="fw-semibold text-dark" id="modalUserNumber">-</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                        <span class="text-muted"><i class="bi bi-envelope me-2"></i>User Mail ID</span>
+                        <span class="text-muted"><i class="bi bi-envelope me-2"></i>Email</span>
                         <span class="fw-semibold text-dark" id="modalUserEmail">-</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
@@ -297,6 +421,7 @@ document.addEventListener('input', function (e) {
     }
 });
 
+// Live Table Search Filter
 const customerSearchInput = document.getElementById('customerSearchInput');
 if (customerSearchInput) {
     customerSearchInput.addEventListener('input', function () {
@@ -304,13 +429,10 @@ if (customerSearchInput) {
         const rows = document.querySelectorAll('tbody tr');
         let visibleCount = 0;
         rows.forEach(row => {
-            const nameInput = row.querySelector('input[name="customer_name"]');
-            if (nameInput) {
-                const name = nameInput.value.toLowerCase();
-                const isMatch = name.includes(filter);
-                row.style.display = isMatch ? '' : 'none';
-                if (isMatch) visibleCount++;
-            }
+            const text = row.textContent.toLowerCase();
+            const isMatch = !filter || text.includes(filter);
+            row.style.display = isMatch ? '' : 'none';
+            if (isMatch) visibleCount++;
         });
         const countSpan = document.getElementById('customerRowCount');
         if (countSpan) {
@@ -319,6 +441,7 @@ if (customerSearchInput) {
     });
 }
 
+// User Modal Trigger & Row Inline Edit
 document.addEventListener('click', function (e) {
     const userModalTrigger = e.target.closest('.js-show-user-modal');
     if (userModalTrigger) {
@@ -388,8 +511,319 @@ document.addEventListener('submit', function (e) {
     });
 });
 
+// Typeable Searchable User Combobox Logic
+function initUserSearchableDropdown(container, draftStorageKey, addNewUserUrl) {
+    if (!container) return;
+    const input = container.querySelector('.user-search-input');
+    const toggleBtn = container.querySelector('.user-search-toggle');
+    const hiddenInput = container.querySelector('.user-search-hidden');
+    const dropdown = container.querySelector('.user-custom-dropdown');
+    const items = container.querySelectorAll('.user-option-item');
+    const noResults = container.querySelector('.user-no-results');
+    const addNewBtn = container.querySelector('.user-option-add-new');
+
+    if (!input || !dropdown) return;
+
+    let activeIndex = -1;
+
+    function getVisibleItems() {
+        return Array.from(items).filter(item => !item.classList.contains('d-none'));
+    }
+
+    function updateDropdownPosition() {
+        const rect = input.getBoundingClientRect();
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = (rect.bottom + 2) + 'px';
+        dropdown.style.left = rect.left + 'px';
+        dropdown.style.width = Math.max(rect.width, 220) + 'px';
+        dropdown.style.zIndex = '999999';
+    }
+
+    function showDropdown() {
+        updateDropdownPosition();
+        dropdown.classList.add('active-show');
+    }
+
+    function hideDropdown() {
+        dropdown.classList.remove('active-show');
+        activeIndex = -1;
+        items.forEach(el => el.classList.remove('highlighted'));
+    }
+
+    window.addEventListener('scroll', function() {
+        if (dropdown.classList.contains('active-show')) {
+            updateDropdownPosition();
+        }
+    }, true);
+
+    window.addEventListener('resize', function() {
+        if (dropdown.classList.contains('active-show')) {
+            updateDropdownPosition();
+        }
+    });
+
+    function filterOptions(query) {
+        const q = (query || '').toLowerCase().trim();
+        let matchCount = 0;
+        items.forEach(item => {
+            const name = (item.dataset.name || '').toLowerCase();
+            const desig = (item.dataset.designation || '').toLowerCase();
+            const display = (item.dataset.display || '').toLowerCase();
+            const matches = !q || name.includes(q) || desig.includes(q) || display.includes(q);
+            if (matches) {
+                item.classList.remove('d-none');
+                matchCount++;
+            } else {
+                item.classList.add('d-none');
+            }
+        });
+        if (noResults) {
+            if (matchCount === 0 && q) {
+                noResults.classList.remove('d-none');
+            } else {
+                noResults.classList.add('d-none');
+            }
+        }
+        activeIndex = -1;
+        items.forEach(el => el.classList.remove('highlighted'));
+    }
+
+    function selectOption(item) {
+        if (!item) return;
+        const id = item.dataset.id;
+        const display = item.dataset.display || item.dataset.name;
+        input.value = display;
+        if (hiddenInput) {
+            hiddenInput.value = id;
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        input.setCustomValidity('');
+        hideDropdown();
+    }
+
+    function syncInitialValue() {
+        if (hiddenInput && hiddenInput.value) {
+            const matched = Array.from(items).find(item => String(item.dataset.id) === String(hiddenInput.value));
+            if (matched) {
+                input.value = matched.dataset.display || matched.dataset.name;
+                input.setCustomValidity('');
+            }
+        }
+    }
+    syncInitialValue();
+
+    function openAndShowAll() {
+        filterOptions('');
+        showDropdown();
+        if (hiddenInput && hiddenInput.value) {
+            const selectedItem = Array.from(items).find(item => String(item.dataset.id) === String(hiddenInput.value));
+            if (selectedItem) {
+                items.forEach(el => el.classList.remove('highlighted'));
+                selectedItem.classList.add('highlighted');
+                selectedItem.scrollIntoView({ block: 'nearest' });
+            }
+        }
+    }
+
+    // Input interaction events
+    input.addEventListener('focus', function() {
+        openAndShowAll();
+        setTimeout(() => input.select(), 10);
+    });
+
+    input.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (!dropdown.classList.contains('active-show')) {
+            openAndShowAll();
+            setTimeout(() => input.select(), 10);
+        }
+    });
+
+    input.addEventListener('input', function() {
+        filterOptions(this.value);
+        showDropdown();
+        const q = this.value.trim().toLowerCase();
+        const exact = Array.from(items).find(item => {
+            const name = (item.dataset.name || '').toLowerCase();
+            const display = (item.dataset.display || '').toLowerCase();
+            return name === q || display === q;
+        });
+        if (exact) {
+            if (hiddenInput) hiddenInput.value = exact.dataset.id;
+            input.setCustomValidity('');
+        } else {
+            if (hiddenInput) hiddenInput.value = '';
+        }
+    });
+
+    input.addEventListener('keydown', function(e) {
+        const visible = getVisibleItems();
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!dropdown.classList.contains('active-show')) {
+                openAndShowAll();
+            } else if (visible.length > 0) {
+                activeIndex = (activeIndex + 1) % visible.length;
+                visible.forEach((el, idx) => el.classList.toggle('highlighted', idx === activeIndex));
+                visible[activeIndex].scrollIntoView({ block: 'nearest' });
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (visible.length > 0) {
+                activeIndex = (activeIndex - 1 + visible.length) % visible.length;
+                visible.forEach((el, idx) => el.classList.toggle('highlighted', idx === activeIndex));
+                visible[activeIndex].scrollIntoView({ block: 'nearest' });
+            }
+        } else if (e.key === 'Enter') {
+            if (dropdown.classList.contains('active-show')) {
+                e.preventDefault();
+                if (activeIndex >= 0 && visible[activeIndex]) {
+                    selectOption(visible[activeIndex]);
+                } else if (visible.length === 1) {
+                    selectOption(visible[0]);
+                } else {
+                    hideDropdown();
+                }
+            }
+        } else if (e.key === 'Escape' || e.key === 'Tab') {
+            hideDropdown();
+        }
+    });
+
+    // Toggle button
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (dropdown.classList.contains('active-show')) {
+                hideDropdown();
+            } else {
+                openAndShowAll();
+                input.focus();
+                setTimeout(() => input.select(), 10);
+            }
+        });
+    }
+
+    // Item click
+    items.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            selectOption(this);
+        });
+    });
+
+    // Add new user click
+    if (addNewBtn) {
+        addNewBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const form = container.closest('form');
+            if (form && draftStorageKey) {
+                const formData = {};
+                form.querySelectorAll('input, select, textarea').forEach(inp => {
+                    if (inp.name && inp.name !== 'csrfmiddlewaretoken' && inp.name !== 'action' && inp.name !== 'user_detail_id') {
+                        formData[inp.name] = inp.value;
+                    }
+                });
+                sessionStorage.setItem(draftStorageKey, JSON.stringify(formData));
+            }
+            const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+            const targetUrl = addNewUserUrl || "{% url 'user_details' %}";
+            window.location.href = `${targetUrl}?return_url=${returnUrl}`;
+        });
+    }
+
+    // Close on click outside
+    document.addEventListener('click', function(e) {
+        if (!container.contains(e.target) && !dropdown.contains(e.target)) {
+            hideDropdown();
+            if (hiddenInput && hiddenInput.value) {
+                const matched = Array.from(items).find(item => String(item.dataset.id) === String(hiddenInput.value));
+                if (matched) {
+                    input.value = matched.dataset.display || matched.dataset.name;
+                    input.setCustomValidity('');
+                }
+            } else {
+                const q = input.value.trim().toLowerCase();
+                if (q) {
+                    const matched = Array.from(items).find(item => {
+                        return (item.dataset.name || '').toLowerCase() === q || (item.dataset.display || '').toLowerCase() === q;
+                    });
+                    if (matched) {
+                        selectOption(matched);
+                    } else {
+                        input.value = '';
+                    }
+                } else {
+                    input.value = '';
+                }
+            }
+        }
+    });
+
+    // Form submit validation check
+    const form = container.closest('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (hiddenInput && !hiddenInput.value) {
+                input.setCustomValidity('Please select a valid user from the dropdown.');
+                input.reportValidity();
+                e.preventDefault();
+            } else {
+                input.setCustomValidity('');
+            }
+        });
+    }
+
+    return {
+        setValue: function(id) {
+            if (hiddenInput) hiddenInput.value = id;
+            syncInitialValue();
+        }
+    };
+}
+
+// Inline Table Row Change for Add New User
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.name === 'user_detail_id' && e.target.value === '__add_new_user__') {
+        const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `{% url 'user_details' %}?return_url=${returnUrl}`;
+    }
+});
+
+// Page Initialization
 document.addEventListener('DOMContentLoaded', function() {
+    const comboboxEl = document.querySelector('.user-searchable-combobox');
+    let comboboxCtrl = null;
+    if (comboboxEl) {
+        comboboxCtrl = initUserSearchableDropdown(comboboxEl, 'dpr_customer_form_draft', "{% url 'user_details' %}");
+    }
+
+    const draftData = sessionStorage.getItem('dpr_customer_form_draft');
+    if (draftData) {
+        try {
+            const parsed = JSON.parse(draftData);
+            const topForm = document.querySelector('.dpr-card form');
+            if (topForm && parsed) {
+                Object.entries(parsed).forEach(([k, v]) => {
+                    const el = topForm.querySelector(`[name="${k}"]`);
+                    if (el && (!el.value || el.value === '')) {
+                        el.value = v;
+                    }
+                });
+            }
+        } catch(err) {}
+        sessionStorage.removeItem('dpr_customer_form_draft');
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
+    const selectedUserId = urlParams.get('selected_user_id');
+    if (selectedUserId && comboboxCtrl) {
+        comboboxCtrl.setValue(selectedUserId);
+    }
+
     if (urlParams.get('add_customer') === '1') {
         const custName = urlParams.get('customer_name') || '';
         const email = urlParams.get('email') || '';
@@ -408,8 +842,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const nameInput = form.querySelector('input[name="customer_name"]');
             const emailInput = form.querySelector('input[name="email"]');
             const phoneInput = form.querySelector('input[name="phone_number"]');
-            const stateCodeInput = form.querySelector('input[name="state_code"]');
-            const regionSelect = form.querySelector('select[name="region"]');
 
             if (nameInput && custName) nameInput.value = custName;
             if (emailInput && email) emailInput.value = email;
