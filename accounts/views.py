@@ -4115,15 +4115,16 @@ def customer_details(request):
             if not customer_name:
                 messages.error(request, 'Customer Name is required.')
                 return redirect('customer_details')
-            if not user_detail_id and not contact_person:
-                messages.error(request, 'User Details is required.')
-                return redirect('customer_details')
+            if action == 'add':
+                if not user_detail_id and not contact_person:
+                    messages.error(request, 'User Details is required.')
+                    return redirect('customer_details')
+                if not state_code:
+                    messages.error(request, 'State Code is required.')
+                    return redirect('customer_details')
             region_error = _validate_customer_region(region)
             if region_error:
                 messages.error(request, region_error)
-                return redirect('customer_details')
-            if not state_code:
-                messages.error(request, 'State Code is required.')
                 return redirect('customer_details')
             if email:
                 emails_list = [e.strip() for e in re.split(r'[,;\s]+', email) if e.strip()]
@@ -4200,7 +4201,7 @@ def customer_details(request):
             customer.user_mail_id = user_mail_id or None
             customer.address = address or None
             customer.gstin = gstin or None
-            customer.state_code = state_code or None
+            customer.state_code = state_code or customer.state_code or None
             customer.is_sez = is_sez
             customer.payment_terms = payment_terms or None
             customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'user_detail', 'contact_person', 'contact_number', 'user_mail_id', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
@@ -4210,14 +4211,13 @@ def customer_details(request):
                 customer = Customer.objects.get(pk=customer_id)
             except Customer.DoesNotExist:
                 raise Http404
-            if DPR.objects.filter(customer=customer).exists():
-                messages.error(
-                    request,
-                    'This customer is used in DPR records and cannot be deleted.'
-                )
-            else:
-                customer.delete()
+            try:
+                with transaction.atomic():
+                    customer.rfqs.all().delete()
+                    customer.delete()
                 messages.success(request, 'Customer deleted successfully.')
+            except Exception as e:
+                messages.error(request, f'Could not delete customer: {str(e)}')
 
         return redirect('customer_details')
 
@@ -5214,9 +5214,10 @@ def supplier_details(request):
             if not supplier_name:
                 messages.error(request, 'Supplier Name is required.')
                 return redirect('supplier_details')
-            if not user_detail_id and not contact_person:
-                messages.error(request, 'User Details is required.')
-                return redirect('supplier_details')
+            if action == 'add':
+                if not user_detail_id and not contact_person:
+                    messages.error(request, 'User Details is required.')
+                    return redirect('supplier_details')
             if email:
                 emails_list = [e.strip() for e in re.split(r'[,;\s]+', email) if e.strip()]
                 for em in emails_list:
@@ -5261,7 +5262,7 @@ def supplier_details(request):
             supplier.user_mail_id = user_mail_id or None
             supplier.address = address or None
             supplier.gstin = gstin or None
-            supplier.state_code = state_code or None
+            supplier.state_code = state_code or supplier.state_code or None
             supplier.is_sez = is_sez
             supplier.payment_terms = payment_terms or None
             supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'user_detail', 'contact_person', 'contact_number', 'user_mail_id', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
@@ -5271,14 +5272,16 @@ def supplier_details(request):
                 supplier = Supplier.objects.get(pk=supplier_id)
             except Supplier.DoesNotExist:
                 raise Http404
-            if SupplierProduct.objects.filter(supplier=supplier).exists():
-                messages.error(
-                    request,
-                    'This supplier is used in supplier order records and cannot be deleted.'
-                )
-            else:
-                supplier.delete()
+            try:
+                with transaction.atomic():
+                    SupplierProduct.objects.filter(supplier=supplier).delete()
+                    RFQSupplierPrice.objects.filter(supplier=supplier).delete()
+                    RFQProduct.objects.filter(supplier=supplier).update(supplier=None)
+                    supplier.rfq_multi_price_requests.clear()
+                    supplier.delete()
                 messages.success(request, 'Supplier deleted successfully.')
+            except Exception as e:
+                messages.error(request, f'Could not delete supplier: {str(e)}')
 
         return redirect('supplier_details')
 

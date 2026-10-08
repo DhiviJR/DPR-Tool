@@ -317,7 +317,7 @@
                                 <button type="button" class="btn btn-outline-secondary btn-sm master-cancel-btn d-none text-nowrap">
                                     Cancel
                                 </button>
-                                <button type="submit" name="action" value="delete" form="form-{{ supplier.id }}" class="btn btn-outline-danger btn-sm text-nowrap"
+                                <button type="submit" name="action" value="delete" form="form-{{ supplier.id }}" formnovalidate class="btn btn-outline-danger btn-sm text-nowrap"
                                         onclick="return confirm('Delete this supplier?');">
                                     <i class="bi bi-trash me-1"></i>Delete
                                 </button>
@@ -471,11 +471,14 @@ document.addEventListener('click', function (e) {
 
 document.addEventListener('submit', function (e) {
     if (!e.target.classList.contains('dpr-inline-row-form')) return;
-    Array.from(e.target.elements).forEach(field => {
-        if (field.classList.contains('master-edit-field')) {
-            field.disabled = false;
-        }
-    });
+    const isDelete = (e.submitter && e.submitter.value === 'delete') || (document.activeElement && document.activeElement.value === 'delete');
+    if (!isDelete) {
+        Array.from(e.target.elements).forEach(field => {
+            if (field.classList.contains('master-edit-field')) {
+                field.disabled = false;
+            }
+        });
+    }
 });
 
 // Typeable Searchable User Combobox Logic
