@@ -5913,10 +5913,15 @@ def get_customer_quotations(request):
     rfqs = rfqs_qs.distinct().prefetch_related('products', 'quotations').order_by('-created_at')
 
     quotations = []
+    seen_quote_numbers = set()
     for rfq in rfqs:
-        quotation_records = list(rfq.quotations.all().order_by('revision_number'))
+        quotation_records = list(rfq.quotations.all().order_by('-revision_number'))
         if quotation_records:
             for quotation in quotation_records:
+                quote_num = (quotation.quotation_number or '').strip()
+                if not quote_num or quote_num in seen_quote_numbers:
+                    continue
+                seen_quote_numbers.add(quote_num)
                 prepared_not_emailed = not quotation.email_sent
                 products_list = []
                 for product in quotation.products_snapshot or []:
@@ -5945,7 +5950,10 @@ def get_customer_quotations(request):
                 })
             continue
 
-        quote_no = _get_mes_quote_no(rfq)
+        quote_no = (_get_mes_quote_no(rfq) or '').strip()
+        if not quote_no or quote_no in seen_quote_numbers:
+            continue
+        seen_quote_numbers.add(quote_no)
         products_list = []
         has_prepared_not_emailed = False
         for p in rfq.products.all():

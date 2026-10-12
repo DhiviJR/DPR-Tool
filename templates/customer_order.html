@@ -718,7 +718,7 @@ function loadCustomerQuotations() {
     const menu = document.getElementById('quotationDropdownMenu');
     const input = document.getElementById('quotationNumberInput');
     const selectedQuoteVal = input.value || '';
-    const selectedQuotes = selectedQuoteVal.split(',').map(s => s.trim()).filter(Boolean);
+    const selectedQuotes = Array.from(new Set(selectedQuoteVal.split(',').map(s => s.trim()).filter(Boolean)));
     const warning = document.getElementById('quotationEmailWarning');
 
     const updatePreparedEmailWarning = (checkedValues) => {
@@ -737,13 +737,17 @@ function loadCustomerQuotations() {
     const updateDisplay = () => {
         const checkboxes = menu.querySelectorAll('.quote-checkbox');
         const checkedValues = [];
+        const addedPreviews = new Set();
         const previewContainer = document.getElementById('quotationPreviewContainer');
         if (previewContainer) previewContainer.innerHTML = '';
 
         checkboxes.forEach(cb => {
             if (cb.checked) {
-                checkedValues.push(cb.value);
-                if (previewContainer && cb.dataset.previewUrl) {
+                if (!checkedValues.includes(cb.value)) {
+                    checkedValues.push(cb.value);
+                }
+                if (previewContainer && cb.dataset.previewUrl && !addedPreviews.has(cb.value)) {
+                    addedPreviews.add(cb.value);
                     const previewBadge = document.createElement('a');
                     previewBadge.href = cb.dataset.previewUrl;
                     previewBadge.target = '_blank';
@@ -844,14 +848,20 @@ function loadCustomerQuotations() {
     }
 
     const currentDprId = '{% if dpr %}{{ dpr.id }}{% endif %}';
-    fetch(`/get-customer-quotations/?customer_id=${customerId}&product_name=${encodeURIComponent(currentProdName)}&dpr_id=${currentDprId}`)
+    fetch(`/get-customer-quotations/?customer_id=${customerId}&product_name=${encodeURIComponent(currentProdName)}&dpr_id=${currentDprId}`, {
+        headers: { 'X-Skip-Loader': '1' }
+    })
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
                 window.customerQuotations = data.quotations;
-                const fetchedQuotes = data.quotations.map(q => q.quotation_number);
+                const addedQuoteNumbers = new Set();
                 
                 data.quotations.forEach(q => {
+                    if (!q.quotation_number || addedQuoteNumbers.has(q.quotation_number)) {
+                        return;
+                    }
+                    addedQuoteNumbers.add(q.quotation_number);
                     const isChecked = selectedQuotes.includes(q.quotation_number);
                     const statusText = q.status_label ? ` - ${q.status_label}` : '';
                     addCheckbox(
@@ -865,7 +875,8 @@ function loadCustomerQuotations() {
 
                 // Preserve all previously selected/attached quotes so they are never silently wiped out
                 selectedQuotes.forEach(q => {
-                    if (!fetchedQuotes.includes(q)) {
+                    if (!addedQuoteNumbers.has(q)) {
+                        addedQuoteNumbers.add(q);
                         const customUrl = (window.customQuotePreviewUrls ? window.customQuotePreviewUrls[q] : null);
                         addCheckbox(q, q, true, false, customUrl);
                     }
@@ -906,11 +917,6 @@ function filterCustomersByRegion() {
 
 document.getElementById('regionDropdown').addEventListener('change', filterCustomersByRegion);
 document.getElementById('customerDropdown').addEventListener('change', loadCustomerQuotations);
-document.addEventListener('change', function(e) {
-    if (e.target && (e.target.name === 'product_name[]' || e.target.name === 'product_type[]')) {
-        loadCustomerQuotations();
-    }
-});
 filterCustomersByRegion();
 
 document.addEventListener('input', function (e) {
@@ -1493,12 +1499,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         loadCustomerQuotations();
     }
-
-    document.querySelector('#productTable tbody').addEventListener('input', (e) => {
-        if (e.target && e.target.name === 'product_name[]') {
-            loadCustomerQuotations();
-        }
-    });
 
     // Add Quotation Modal Pre-fill & Initialization (Customer fixed to current selection)
     const addQuotationBtn = document.getElementById('addQuotationBtn');
