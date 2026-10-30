@@ -59,6 +59,7 @@ function initPoTableTools(options) {
 
     function rowMatchesSearch(row, term) {
         if (!term) return true;
+        const words = term.split(/\s+/).filter(Boolean);
         const haystack = Array.from(row.cells).map((cell) => {
             const input = cell.querySelector('input, select');
             if (input) {
@@ -69,7 +70,7 @@ function initPoTableTools(options) {
             }
             return cell.textContent;
         }).join(' ').toLowerCase();
-        return haystack.includes(term);
+        return words.every((w) => haystack.includes(w));
     }
 
     function rowMatchesFilter(row) {

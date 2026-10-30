@@ -476,44 +476,236 @@ th.sortable.sort-desc {
     background: rgba(255, 255, 255, 0.18);
 }
 
-.dpr-table-card .table tbody tr.table-success > td {
-    background-color: #d1e7dd !important;
+/* ========================================================
+   UNIFIED STATUS COLORS ACROSS ALL TABLES (REFINED SLIGHTLY DARKER PROFESSIONAL TONE)
+   ======================================================== */
+
+/* 1. GREEN - Completed / Closed / Quotation Sent */
+.table tbody tr.table-success,
+.table tbody tr.dpr-row-completed,
+.dpr-table-card .table tbody tr.table-success,
+.dpr-table-card .table tbody tr.dpr-row-completed {
+    --bs-table-bg: #9bd9b7 !important;
+    --bs-table-accent-bg: #9bd9b7 !important;
+    --bs-table-striped-bg: #8bcfa8 !important;
+    --bs-table-hover-bg: #8bcfa8 !important;
+    --bs-table-color: #0f172a !important;
+}
+.table tbody tr.table-success > td,
+.table tbody tr.table-success > th,
+.table tbody tr.dpr-row-completed > td,
+.table tbody tr.dpr-row-completed > th,
+.dpr-table-card .table tbody tr.table-success > td,
+.dpr-table-card .table tbody tr.table-success > th,
+.dpr-table-card .table tbody tr.dpr-row-completed > td,
+.dpr-table-card .table tbody tr.dpr-row-completed > th {
+    background-color: #9bd9b7 !important;
+    box-shadow: inset 0 0 0 9999px #9bd9b7 !important;
+    color: #0f172a !important;
 }
 
-.dpr-table-card .table tbody tr.table-secondary > td {
-    background-color: #e2e3e5 !important;
+/* 2. RED - Expired / After Due / Overdue (>3 Days) / Price Pending */
+.table tbody tr.table-danger,
+.table tbody tr.dpr-row-after-due,
+.dpr-table-card .table tbody tr.table-danger,
+.dpr-table-card .table tbody tr.dpr-row-after-due {
+    --bs-table-bg: #f2aab0 !important;
+    --bs-table-accent-bg: #f2aab0 !important;
+    --bs-table-striped-bg: #ea9ba2 !important;
+    --bs-table-hover-bg: #ea9ba2 !important;
+    --bs-table-color: #0f172a !important;
+}
+.table tbody tr.table-danger > td,
+.table tbody tr.table-danger > th,
+.table tbody tr.dpr-row-after-due > td,
+.table tbody tr.dpr-row-after-due > th,
+.dpr-table-card .table tbody tr.table-danger > td,
+.dpr-table-card .table tbody tr.table-danger > th,
+.dpr-table-card .table tbody tr.dpr-row-after-due > td,
+.dpr-table-card .table tbody tr.dpr-row-after-due > th {
+    background-color: #f2aab0 !important;
+    box-shadow: inset 0 0 0 9999px #f2aab0 !important;
+    color: #0f172a !important;
 }
 
-.dpr-table-card .table tbody tr.table-warning > td {
-    background-color: #fff3cd !important;
+/* 3. YELLOW - Due Soon */
+.table tbody tr.table-warning,
+.table tbody tr.dpr-row-due-soon,
+.dpr-table-card .table tbody tr.table-warning,
+.dpr-table-card .table tbody tr.dpr-row-due-soon {
+    --bs-table-bg: #f9d16a !important;
+    --bs-table-accent-bg: #f9d16a !important;
+    --bs-table-striped-bg: #f0c456 !important;
+    --bs-table-hover-bg: #f0c456 !important;
+    --bs-table-color: #0f172a !important;
+}
+.table tbody tr.table-warning > td,
+.table tbody tr.table-warning > th,
+.table tbody tr.dpr-row-due-soon > td,
+.table tbody tr.dpr-row-due-soon > th,
+.dpr-table-card .table tbody tr.table-warning > td,
+.dpr-table-card .table tbody tr.table-warning > th,
+.dpr-table-card .table tbody tr.dpr-row-due-soon > td,
+.dpr-table-card .table tbody tr.dpr-row-due-soon > th {
+    background-color: #f9d16a !important;
+    box-shadow: inset 0 0 0 9999px #f9d16a !important;
+    color: #0f172a !important;
 }
 
-.dpr-table-card .table tbody tr.table-danger > td {
-    background-color: #f8d7da !important;
+/* 4. BLUE - Supplier Qty Matched / Invoice Pending */
+.table tbody tr.table-info,
+.table tbody tr.dpr-row-qty-matched,
+.dpr-table-card .table tbody tr.table-info,
+.dpr-table-card .table tbody tr.dpr-row-qty-matched {
+    --bs-table-bg: #9ec6f8 !important;
+    --bs-table-accent-bg: #9ec6f8 !important;
+    --bs-table-striped-bg: #8bb7f0 !important;
+    --bs-table-hover-bg: #8bb7f0 !important;
+    --bs-table-color: #0f172a !important;
+}
+.table tbody tr.table-info > td,
+.table tbody tr.table-info > th,
+.table tbody tr.dpr-row-qty-matched > td,
+.table tbody tr.dpr-row-qty-matched > th,
+.dpr-table-card .table tbody tr.table-info > td,
+.dpr-table-card .table tbody tr.table-info > th,
+.dpr-table-card .table tbody tr.dpr-row-qty-matched > td,
+.dpr-table-card .table tbody tr.dpr-row-qty-matched > th {
+    background-color: #9ec6f8 !important;
+    box-shadow: inset 0 0 0 9999px #9ec6f8 !important;
+    color: #0f172a !important;
 }
 
-.dpr-table-card .table tbody tr.dpr-row-qty-matched > td {
-    background-color: #cfe2ff !important;
+/* 5. ORANGE - Mail Confirmation Alert */
+.table tbody tr.table-orange,
+.table tbody tr.dpr-row-mail-alert,
+.dpr-table-card .table tbody tr.table-orange,
+.dpr-table-card .table tbody tr.dpr-row-mail-alert {
+    --bs-table-bg: #fdb67d !important;
+    --bs-table-accent-bg: #fdb67d !important;
+    --bs-table-striped-bg: #f5a463 !important;
+    --bs-table-hover-bg: #f5a463 !important;
+    --bs-table-color: #0f172a !important;
+}
+.table tbody tr.table-orange > td,
+.table tbody tr.table-orange > th,
+.table tbody tr.dpr-row-mail-alert > td,
+.table tbody tr.dpr-row-mail-alert > th,
+.dpr-table-card .table tbody tr.table-orange > td,
+.dpr-table-card .table tbody tr.table-orange > th,
+.dpr-table-card .table tbody tr.dpr-row-mail-alert > td,
+.dpr-table-card .table tbody tr.dpr-row-mail-alert > th {
+    background-color: #fdb67d !important;
+    box-shadow: inset 0 0 0 9999px #fdb67d !important;
+    color: #0f172a !important;
 }
 
-.dpr-table-card .table tbody tr.dpr-row-completed > td {
-    background-color: #d1e7dd !important;
+/* 6. PURPLE - Supplier Order Pending */
+.table tbody tr.table-purple,
+.table tbody tr.dpr-row-supplier-order-pending,
+.dpr-table-card .table tbody tr.table-purple,
+.dpr-table-card .table tbody tr.dpr-row-supplier-order-pending {
+    --bs-table-bg: #c2abec !important;
+    --bs-table-accent-bg: #c2abec !important;
+    --bs-table-striped-bg: #b197e2 !important;
+    --bs-table-hover-bg: #b197e2 !important;
+    --bs-table-color: #0f172a !important;
+}
+.table tbody tr.table-purple > td,
+.table tbody tr.table-purple > th,
+.table tbody tr.dpr-row-supplier-order-pending > td,
+.table tbody tr.dpr-row-supplier-order-pending > th,
+.dpr-table-card .table tbody tr.table-purple > td,
+.dpr-table-card .table tbody tr.table-purple > th,
+.dpr-table-card .table tbody tr.dpr-row-supplier-order-pending > td,
+.dpr-table-card .table tbody tr.dpr-row-supplier-order-pending > th {
+    background-color: #c2abec !important;
+    box-shadow: inset 0 0 0 9999px #c2abec !important;
+    color: #0f172a !important;
 }
 
-.dpr-table-card .table tbody tr.dpr-row-mail-alert > td {
-    background-color: #fed7aa !important;
+/* 7. GRAY - Cancelled */
+.table tbody tr.table-secondary,
+.dpr-table-card .table tbody tr.table-secondary {
+    --bs-table-bg: #c2c8d1 !important;
+    --bs-table-accent-bg: #c2c8d1 !important;
+    --bs-table-striped-bg: #b0b7c2 !important;
+    --bs-table-hover-bg: #b0b7c2 !important;
+    --bs-table-color: #0f172a !important;
+}
+.table tbody tr.table-secondary > td,
+.table tbody tr.table-secondary > th,
+.dpr-table-card .table tbody tr.table-secondary > td,
+.dpr-table-card .table tbody tr.table-secondary > th {
+    background-color: #c2c8d1 !important;
+    box-shadow: inset 0 0 0 9999px #c2c8d1 !important;
+    color: #0f172a !important;
 }
 
-.dpr-table-card .table tbody tr.dpr-row-supplier-order-pending > td {
-    background-color: #e9d5ff !important;
+/* Row Hover States */
+.table tbody tr.table-success:hover > td,
+.table tbody tr.table-success:hover > th,
+.table tbody tr.dpr-row-completed:hover > td,
+.table tbody tr.dpr-row-completed:hover > th,
+.dpr-table-card .table tbody tr.table-success:hover > td,
+.dpr-table-card .table tbody tr.dpr-row-completed:hover > td {
+    background-color: #8bcfa8 !important;
+    box-shadow: inset 0 0 0 9999px #8bcfa8 !important;
 }
 
-.dpr-table-card .table tbody tr.dpr-row-due-soon > td {
-    background-color: #fff3cd !important;
+.table tbody tr.table-danger:hover > td,
+.table tbody tr.table-danger:hover > th,
+.table tbody tr.dpr-row-after-due:hover > td,
+.table tbody tr.dpr-row-after-due:hover > th,
+.dpr-table-card .table tbody tr.table-danger:hover > td,
+.dpr-table-card .table tbody tr.dpr-row-after-due:hover > td {
+    background-color: #ea9ba2 !important;
+    box-shadow: inset 0 0 0 9999px #ea9ba2 !important;
 }
 
-.dpr-table-card .table tbody tr.dpr-row-after-due > td {
-    background-color: #f8d7da !important;
+.table tbody tr.table-warning:hover > td,
+.table tbody tr.table-warning:hover > th,
+.table tbody tr.dpr-row-due-soon:hover > td,
+.table tbody tr.dpr-row-due-soon:hover > th,
+.dpr-table-card .table tbody tr.table-warning:hover > td,
+.dpr-table-card .table tbody tr.dpr-row-due-soon:hover > td {
+    background-color: #f0c456 !important;
+    box-shadow: inset 0 0 0 9999px #f0c456 !important;
+}
+
+.table tbody tr.table-info:hover > td,
+.table tbody tr.table-info:hover > th,
+.table tbody tr.dpr-row-qty-matched:hover > td,
+.table tbody tr.dpr-row-qty-matched:hover > th,
+.dpr-table-card .table tbody tr.table-info:hover > td,
+.dpr-table-card .table tbody tr.dpr-row-qty-matched:hover > td {
+    background-color: #8bb7f0 !important;
+    box-shadow: inset 0 0 0 9999px #8bb7f0 !important;
+}
+
+.table tbody tr.table-orange:hover > td,
+.table tbody tr.table-orange:hover > th,
+.table tbody tr.dpr-row-mail-alert:hover > td,
+.table tbody tr.dpr-row-mail-alert:hover > th,
+.dpr-table-card .table tbody tr.dpr-row-mail-alert:hover > td {
+    background-color: #f5a463 !important;
+    box-shadow: inset 0 0 0 9999px #f5a463 !important;
+}
+
+.table tbody tr.table-purple:hover > td,
+.table tbody tr.table-purple:hover > th,
+.table tbody tr.dpr-row-supplier-order-pending:hover > td,
+.table tbody tr.dpr-row-supplier-order-pending:hover > th,
+.dpr-table-card .table tbody tr.dpr-row-supplier-order-pending:hover > td {
+    background-color: #b197e2 !important;
+    box-shadow: inset 0 0 0 9999px #b197e2 !important;
+}
+
+.table tbody tr.table-secondary:hover > td,
+.table tbody tr.table-secondary:hover > th,
+.dpr-table-card .table tbody tr.table-secondary:hover > td {
+    background-color: #b0b7c2 !important;
+    box-shadow: inset 0 0 0 9999px #b0b7c2 !important;
 }
 
 .dpr-table-legend {
@@ -539,45 +731,40 @@ th.sortable.sort-desc {
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    border: 1px solid rgba(15, 23, 42, 0.16);
+    border: 1px solid rgba(15, 23, 42, 0.25);
 }
 
-.dpr-table-legend .legend-swatch.table-success {
-    background: #d1e7dd;
+/* Legend Swatches - Unified Across All Pages */
+.dpr-table-legend .legend-swatch.table-success,
+.dpr-table-legend .legend-swatch.dpr-row-completed {
+    background: #9bd9b7 !important;
+}
+
+.dpr-table-legend .legend-swatch.table-danger,
+.dpr-table-legend .legend-swatch.dpr-row-after-due {
+    background: #f2aab0 !important;
+}
+
+.dpr-table-legend .legend-swatch.table-warning,
+.dpr-table-legend .legend-swatch.dpr-row-due-soon {
+    background: #f9d16a !important;
+}
+
+.dpr-table-legend .legend-swatch.table-info,
+.dpr-table-legend .legend-swatch.dpr-row-qty-matched {
+    background: #9ec6f8 !important;
+}
+
+.dpr-table-legend .legend-swatch.table-orange,
+.dpr-table-legend .legend-swatch.dpr-row-mail-alert {
+    background: #fdb67d !important;
+}
+
+.dpr-table-legend .legend-swatch.table-purple,
+.dpr-table-legend .legend-swatch.dpr-row-supplier-order-pending {
+    background: #c2abec !important;
 }
 
 .dpr-table-legend .legend-swatch.table-secondary {
-    background: #e2e3e5;
-}
-
-.dpr-table-legend .legend-swatch.table-warning {
-    background: #fff3cd;
-}
-
-.dpr-table-legend .legend-swatch.table-danger {
-    background: #f8d7da;
-}
-
-.dpr-table-legend .legend-swatch.dpr-row-qty-matched {
-    background: #cfe2ff;
-}
-
-.dpr-table-legend .legend-swatch.dpr-row-completed {
-    background: #d1e7dd;
-}
-
-.dpr-table-legend .legend-swatch.dpr-row-mail-alert {
-    background: #fed7aa;
-}
-
-.dpr-table-legend .legend-swatch.dpr-row-supplier-order-pending {
-    background: #e9d5ff;
-}
-
-.dpr-table-legend .legend-swatch.dpr-row-due-soon {
-    background: #fff3cd;
-}
-
-.dpr-table-legend .legend-swatch.dpr-row-after-due {
-    background: #f8d7da;
+    background: #c2c8d1 !important;
 }

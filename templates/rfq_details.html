@@ -172,24 +172,49 @@
                                 <option value="Hosur">Hosur</option>
                             </select>
                         </div>
-                        <div class="col-lg-2">
+                        <div class="col-lg-3">
                             <label class="form-label">Customer *</label>
                             <select name="customer_id" id="rfqCustomer" class="form-select" required>
                                 <option value="">Select Customer</option>
                                 {% for customer in customers %}
-                                <option value="{{ customer.id }}" data-region="{{ customer.region|default:'' }}">{{ customer.customer_name }}</option>
+                                <option value="{{ customer.id }}" 
+                                        data-region="{{ customer.region|default:'' }}" 
+                                        data-address="{{ customer.address_single_line|default:'' }}"
+                                        data-users="{{ customer.users_display_str|default:'' }}"
+                                        data-users-json="{{ customer.users_data_json|escape }}">
+                                    {{ customer.customer_name }}{% if customer.address_single_line %} - {{ customer.address_single_line }}{% endif %}
+                                </option>
                                 {% endfor %}
                             </select>
+                            <input type="hidden" id="rfqCustomerAddress" name="customer_address" value="">
                         </div>
-                        <div class="col-lg-2">
+                        <div class="col-lg-3" id="rfqUserSelectCol">
+                            <label class="form-label">User Details</label>
+                            <div class="user-multi-select-container position-relative">
+                                <div class="form-control d-flex align-items-center justify-content-between p-2 user-multi-select-trigger" 
+                                     id="rfqUserMultiTrigger" tabindex="0" role="button" title="Click to select user(s)" style="cursor: pointer; min-height: 38px;">
+                                    <span class="text-truncate user-multi-select-label text-muted" id="rfqUserMultiLabel">Select user(s)...</span>
+                                    <i class="bi bi-chevron-down ms-1 text-secondary" style="font-size: 0.75rem;"></i>
+                                </div>
+                                <input type="hidden" name="customer_users" id="rfqCustomerUsers" value="">
+                                <input type="hidden" name="customer_user_ids" id="rfqCustomerUserIds" value="">
+                                <div class="user-multi-select-dropdown shadow-lg p-2 d-none" id="rfqUserMultiDropdown" 
+                                     style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1060; background: #fff; border: 1px solid #ced4da; border-radius: 6px; max-height: 220px; overflow-y: auto;">
+                                    <div id="rfqUserMultiOptions" class="d-flex flex-column gap-1">
+                                        <div class="text-muted small px-2 py-1">Please select a customer first</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
                             <label class="form-label">Enquiry Details *</label>
                             <input type="text" name="enquiry_details" id="rfqEnquiryDetails" class="form-control" required>
                         </div>
-                        <div class="col-lg-2">
+                        <div class="col-lg-4">
                             <label class="form-label">Remarks</label>
                             <input type="text" name="remarks" id="rfqRemarks" class="form-control">
                         </div>
-                        <div class="col-lg-3">
+                        <div class="col-lg-4">
                             <label class="form-label">Attachment</label>
                             <input type="file" name="attachment" id="rfqAttachment" class="form-control">
                             <div id="rfqCurrentAttachment" class="form-text mt-1 d-none">
@@ -687,8 +712,8 @@
                                         data-rfq-id="{{ rfq.id }}"
                                         data-rfq-no="{{ rfq.rfq_no }}">
                                     <i class="bi bi-reply-all me-1"></i>Reply Email
-                                    {% if rfq.email_messages.count %}
-                                    <span class="badge bg-secondary rounded-pill ms-1">{{ rfq.email_messages.count }}</span>
+                                    {% if rfq.email_count %}
+                                    <span class="badge bg-secondary rounded-pill ms-1">{{ rfq.email_count }}</span>
                                     {% endif %}
                                 </button>
                             </div>
@@ -2056,9 +2081,77 @@ function addTermRow(text = '') {
     div.innerHTML = `
         <span class="badge bg-light text-dark border prepare-quote-term-num fw-bold" style="min-width: 32px; font-size: 0.78rem;">${index}.</span>
         <input type="text" class="form-control form-control-sm prepare-quote-term-input" name="custom_terms" value="${escapeHtml(text)}" placeholder="Enter condition details..." style="font-size: 0.8rem;">
+        <span class="btn btn-outline-secondary btn-sm px-2 py-0 prepare-quote-drag-handle" style="cursor: grab; font-size: 0.75rem;" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
         <button type="button" class="btn btn-outline-danger btn-sm px-2 py-0 prepare-quote-remove-term" style="font-size: 0.75rem;" title="Delete term"><i class="bi bi-trash"></i></button>
     `;
     container.appendChild(div);
+    makeTermsDraggable();
+}
+
+function makeTermsDraggable() {
+    const container = document.getElementById('termsListContainer');
+    if (!container || container.dataset.dragInitialized === 'true') return;
+    container.dataset.dragInitialized = 'true';
+
+    let draggedItem = null;
+
+    container.addEventListener('mousedown', function(e) {
+        const handle = e.target.closest('.prepare-quote-drag-handle');
+        if (handle) {
+            const row = handle.closest('.prepare-quote-term-row');
+            if (row) {
+                row.setAttribute('draggable', 'true');
+            }
+        }
+    });
+
+    container.addEventListener('mouseup', function(e) {
+        const rows = container.querySelectorAll('.prepare-quote-term-row');
+        rows.forEach(r => r.removeAttribute('draggable'));
+    });
+
+    container.addEventListener('dragstart', function(e) {
+        const row = e.target.closest('.prepare-quote-term-row');
+        if (!row || !row.hasAttribute('draggable')) {
+            e.preventDefault();
+            return;
+        }
+        draggedItem = row;
+        row.classList.add('opacity-50', 'bg-light');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', '');
+    });
+
+    container.addEventListener('dragend', function(e) {
+        if (draggedItem) {
+            draggedItem.classList.remove('opacity-50', 'bg-light');
+            draggedItem.removeAttribute('draggable');
+            draggedItem = null;
+        }
+        const rows = container.querySelectorAll('.prepare-quote-term-row');
+        rows.forEach(r => r.removeAttribute('draggable'));
+        renumberTerms();
+    });
+
+    container.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const targetRow = e.target.closest('.prepare-quote-term-row');
+        if (!targetRow || targetRow === draggedItem) return;
+
+        const bounding = targetRow.getBoundingClientRect();
+        const offset = bounding.y + (bounding.height / 2);
+        if (e.clientY > offset) {
+            targetRow.after(draggedItem);
+        } else {
+            targetRow.before(draggedItem);
+        }
+    });
+
+    container.addEventListener('drop', function(e) {
+        e.preventDefault();
+        renumberTerms();
+    });
 }
 
 function renumberTerms() {
@@ -2350,14 +2443,12 @@ if (prepareQuoteFormEl) {
             pInput.value = productId;
             productInputs.appendChild(pInput);
 
-            const spId = supplierPriceIds[idx];
-            if (spId) {
-                const spInput = document.createElement('input');
-                spInput.type = 'hidden';
-                spInput.name = 'quotation_supplier_price_ids';
-                spInput.value = spId;
-                productInputs.appendChild(spInput);
-            }
+            const spId = supplierPriceIds[idx] || '';
+            const spInput = document.createElement('input');
+            spInput.type = 'hidden';
+            spInput.name = 'quotation_supplier_price_ids';
+            spInput.value = spId;
+            productInputs.appendChild(spInput);
 
             const mInput = document.createElement('input');
             mInput.type = 'hidden';
@@ -2499,9 +2590,13 @@ function openEditQuotationModal(mode, targetRfqId = null) {
     );
 
     const row = document.querySelector(`tr[data-rfq-id="${rfqId}"]`);
+    const rowSelected = row ? getSelectedQuotationItems(row) : null;
     let selectedItems = null;
 
-    if (currentParams && currentParams.productIds && currentParams.productIds.length > 0) {
+    if (rowSelected && rowSelected.productIds && rowSelected.productIds.length > 0) {
+        // User explicitly checked products in the table row - ALWAYS respect user's selection
+        selectedItems = rowSelected;
+    } else if (currentParams && currentParams.productIds && currentParams.productIds.length > 0) {
         selectedItems = {
             productIds: currentParams.productIds,
             supplierPriceIds: currentParams.supplierPriceIds || []
@@ -2639,7 +2734,19 @@ function openEditQuotationModal(mode, targetRfqId = null) {
 
         let rate = parseFloat(product.rate_per_unit) || 0;
         let supplierValue = parseFloat(product.value) || 0;
-        let supplierPriceId = (selectedItems.supplierPriceIds && selectedItems.supplierPriceIds[idx]) ? String(selectedItems.supplierPriceIds[idx]) : '';
+        let supplierPriceId = '';
+
+        // Match supplier price specifically for this product
+        if (selectedItems.supplierPriceIds && selectedItems.supplierPriceIds.length > 0) {
+            const matchedSp = (product.supplier_prices || []).find(price => 
+                selectedItems.supplierPriceIds.some(spId => String(spId) === String(price.id))
+            );
+            if (matchedSp) {
+                rate = parseFloat(matchedSp.price) || rate;
+                supplierValue = parseFloat(matchedSp.value) || supplierValue;
+                supplierPriceId = String(matchedSp.id);
+            }
+        }
 
         if (row && !supplierPriceId) {
             const checkedSupplierPrice = row.querySelector(`.rfq-quotation-supplier-price[data-product-id="${product.id}"]:checked`);
@@ -2667,9 +2774,14 @@ function openEditQuotationModal(mode, targetRfqId = null) {
                 );
             }
 
-            if (mesRatesArr && mesRatesArr[idx] !== undefined && mesRatesArr[idx] !== '' && mesRatesArr[idx] !== null) {
-                customRateVal = mesRatesArr[idx];
-            } else if (snapItem && snapItem.rate_per_unit !== undefined && snapItem.rate_per_unit !== null && snapItem.rate_per_unit !== '') {
+            // Map custom rate specifically by product ID, never by arbitrary array index
+            if (currentParams && currentParams.productIds && currentParams.mesRates) {
+                const pIdx = currentParams.productIds.findIndex(id => String(id) === String(product.id));
+                if (pIdx !== -1 && currentParams.mesRates[pIdx] !== undefined && currentParams.mesRates[pIdx] !== '' && currentParams.mesRates[pIdx] !== null) {
+                    customRateVal = currentParams.mesRates[pIdx];
+                }
+            }
+            if (customRateVal === null && snapItem && snapItem.rate_per_unit !== undefined && snapItem.rate_per_unit !== null && snapItem.rate_per_unit !== '') {
                 customRateVal = snapItem.rate_per_unit;
             }
 
@@ -3241,6 +3353,120 @@ function setRfqProductRows(products) {
     refreshSupplierEmailBody();
 }
 
+
+let isSwitchingRfqModal = false;
+
+function markRfqModalOpen(mode = 'add', id = '') {
+    sessionStorage.setItem('dpr_rfq_modal_state', JSON.stringify({ mode: mode, id: id }));
+}
+
+function clearRfqModalState() {
+    sessionStorage.removeItem('dpr_rfq_modal_state');
+    sessionStorage.removeItem('dpr_rfq_draft');
+}
+
+function getRfqProductsFromForm() {
+    const products = [];
+    document.querySelectorAll('#rfqProductTable tbody tr').forEach(row => {
+        const nameInput = row.querySelector('input[name="product_name[]"]');
+        if (!nameInput) return;
+        const typeSelect = row.querySelector('select[name="product_type[]"]');
+        const priceKnownSelect = row.querySelector('select[name="price_known[]"]');
+        const qtyInput = row.querySelector('input[name="quantity[]"]');
+        const unitSelect = row.querySelector('select[name="unit[]"]');
+        const rateInput = row.querySelector('input[name="rate_per_unit[]"]');
+        const remarksInput = row.querySelector('input[name="product_remarks[]"]');
+        const specInput = row.querySelector('.rfq-product-spec-input');
+
+        let specs = {};
+        if (specInput && specInput.value) {
+            try {
+                specs = typeof specInput.value === 'string' && specInput.value.startsWith('{')
+                    ? JSON.parse(specInput.value)
+                    : specInput.value;
+            } catch (e) {
+                specs = specInput.value;
+            }
+        }
+
+        products.push({
+            product_name: nameInput.value || '',
+            product_type: typeSelect ? typeSelect.value : '',
+            price_known: priceKnownSelect ? priceKnownSelect.value : 'yes',
+            quantity: qtyInput ? qtyInput.value : '',
+            unit: unitSelect ? unitSelect.value : "No's",
+            rate_per_unit: rateInput ? rateInput.value : '',
+            remarks: remarksInput ? remarksInput.value : '',
+            product_specifications: specs
+        });
+    });
+    return products;
+}
+
+function saveRfqDraft() {
+    const modalEl = document.getElementById('addRfqModal');
+    if (!modalEl || !modalEl.classList.contains('show')) return;
+    const action = document.getElementById('rfqFormAction')?.value || 'add';
+    if (action !== 'add') return;
+
+    const draft = {
+        mail_date: document.getElementById('rfqMailDate')?.value || '',
+        region: document.getElementById('rfqRegion')?.value || '',
+        customer_id: document.getElementById('rfqCustomer')?.value || '',
+        enquiry_details: document.getElementById('rfqEnquiryDetails')?.value || '',
+        remarks: document.getElementById('rfqRemarks')?.value || '',
+        customer_users: document.getElementById('rfqCustomerUsers')?.value || '',
+        customer_user_ids: document.getElementById('rfqCustomerUserIds')?.value || '',
+        products: getRfqProductsFromForm()
+    };
+    sessionStorage.setItem('dpr_rfq_draft', JSON.stringify(draft));
+    sessionStorage.setItem('dpr_rfq_modal_state', JSON.stringify({ mode: 'add' }));
+}
+
+function restoreRfqDraft(draft) {
+    if (!draft) return;
+    if (draft.mail_date) {
+        const mailDateInput = document.getElementById('rfqMailDate');
+        if (mailDateInput) mailDateInput.value = draft.mail_date;
+    }
+    if (draft.region) {
+        const regionSelect = document.getElementById('rfqRegion');
+        if (regionSelect) {
+            regionSelect.value = draft.region;
+            filterRfqCustomersByRegion();
+        }
+    }
+    if (draft.customer_id) {
+        const customerSelect = document.getElementById('rfqCustomer');
+        if (customerSelect) {
+            customerSelect.value = draft.customer_id;
+            syncRfqCustomerAddress();
+            if (draft.customer_users) {
+                const desired = draft.customer_users.split(',').map(s => s.trim().toLowerCase());
+                const cbs = document.querySelectorAll('#rfqUserMultiOptions .rfq-user-cb');
+                if (cbs.length > 0) {
+                    cbs.forEach(cb => {
+                        const val = cb.value.toLowerCase();
+                        cb.checked = desired.some(d => val.includes(d) || d.includes(val));
+                    });
+                    updateRfqSelectedUsersLabel();
+                }
+            }
+        }
+    }
+    if (draft.enquiry_details) {
+        const enquiryInput = document.getElementById('rfqEnquiryDetails');
+        if (enquiryInput) enquiryInput.value = draft.enquiry_details;
+    }
+    if (draft.remarks) {
+        const remarksInput = document.getElementById('rfqRemarks');
+        if (remarksInput) remarksInput.value = draft.remarks;
+    }
+    if (draft.products && draft.products.length > 0) {
+        setRfqProductRows(draft.products);
+    }
+}
+
 function resetRfqForm() {
     const form = document.getElementById('addRfqForm');
     form.reset();
@@ -3266,8 +3492,129 @@ function resetRfqForm() {
         Array.from(draftSupplierSelect.options).forEach(opt => opt.selected = false);
     }
     filterRfqCustomersByRegion();
+    syncRfqCustomerAddress();
     setRfqProductRows([getBlankRfqProduct()]);
     refreshSupplierEmailBody(true);
+}
+
+function syncRfqCustomerAddress() {
+    const customerDropdown = document.getElementById('rfqCustomer');
+    const addressInput = document.getElementById('rfqCustomerAddress');
+    const optionsContainer = document.getElementById('rfqUserMultiOptions');
+    const labelSpan = document.getElementById('rfqUserMultiLabel');
+    const hiddenInput = document.getElementById('rfqCustomerUsers');
+    const hiddenIdsInput = document.getElementById('rfqCustomerUserIds');
+
+    if (!customerDropdown) return;
+    const selectedOption = customerDropdown.options[customerDropdown.selectedIndex];
+
+    if (!selectedOption || !selectedOption.value || selectedOption.value === '__add_new_user__') {
+        if (addressInput) addressInput.value = '';
+        if (hiddenInput) hiddenInput.value = '';
+        if (hiddenIdsInput) hiddenIdsInput.value = '';
+        if (labelSpan) {
+            labelSpan.textContent = 'Select user(s)...';
+            labelSpan.classList.add('text-muted');
+            labelSpan.title = '';
+        }
+        if (optionsContainer) {
+            optionsContainer.innerHTML = '<div class="text-muted small px-2 py-1">Please select a customer first</div>';
+        }
+        return;
+    }
+
+    const addr = (selectedOption.dataset.address || '').trim();
+    if (addressInput) addressInput.value = addr;
+
+    let users = [];
+    try {
+        users = JSON.parse(selectedOption.dataset.usersJson || '[]');
+    } catch (e) {
+        users = [];
+    }
+
+    if (users.length === 0) {
+        if (hiddenInput) hiddenInput.value = '';
+        if (hiddenIdsInput) hiddenIdsInput.value = '';
+        if (labelSpan) {
+            labelSpan.textContent = 'No user assigned';
+            labelSpan.classList.add('text-muted');
+            labelSpan.title = '';
+        }
+        if (optionsContainer) {
+            optionsContainer.innerHTML = '<div class="text-muted small px-2 py-1">No user assigned to this customer</div>';
+        }
+        return;
+    }
+
+    let html = '';
+    if (users.length > 1) {
+        html += `
+            <div class="d-flex align-items-center justify-content-between border-bottom pb-1 mb-1 px-1">
+                <span class="small fw-semibold text-secondary">Customer Users (${users.length})</span>
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="rfqUserSelectAllBtn" style="font-size: 0.72rem;">Select All</button>
+            </div>
+        `;
+    }
+
+    users.forEach((u, idx) => {
+        const uDisplay = u.display || u.name;
+        html += `
+            <label class="dropdown-item d-flex align-items-center gap-2 p-1 px-2 rounded mb-0 rfq-user-option" style="cursor: pointer; font-size: 0.82rem;">
+                <input type="checkbox" class="form-check-input mt-0 rfq-user-cb" value="${escapeHtml(uDisplay)}" data-id="${escapeHtml(String(u.id || ''))}" checked>
+                <span class="text-truncate">
+                    <strong>${escapeHtml(u.name)}</strong>
+                    ${u.designation ? `<span class="text-muted small ms-1">(${escapeHtml(u.designation)})</span>` : ''}
+                </span>
+            </label>
+        `;
+    });
+
+    optionsContainer.innerHTML = html;
+
+    optionsContainer.querySelectorAll('.rfq-user-cb').forEach(cb => {
+        cb.addEventListener('change', updateRfqSelectedUsersLabel);
+    });
+
+    const selectAllBtn = document.getElementById('rfqUserSelectAllBtn');
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cbs = optionsContainer.querySelectorAll('.rfq-user-cb');
+            const allChecked = Array.from(cbs).every(c => c.checked);
+            cbs.forEach(c => c.checked = !allChecked);
+            selectAllBtn.textContent = allChecked ? 'Select All' : 'Deselect All';
+            updateRfqSelectedUsersLabel();
+        });
+    }
+
+    updateRfqSelectedUsersLabel();
+}
+
+function updateRfqSelectedUsersLabel() {
+    const optionsContainer = document.getElementById('rfqUserMultiOptions');
+    const labelSpan = document.getElementById('rfqUserMultiLabel');
+    const hiddenInput = document.getElementById('rfqCustomerUsers');
+    const hiddenIdsInput = document.getElementById('rfqCustomerUserIds');
+    if (!optionsContainer || !labelSpan) return;
+
+    const checkedBoxes = Array.from(optionsContainer.querySelectorAll('.rfq-user-cb:checked'));
+    if (checkedBoxes.length === 0) {
+        labelSpan.textContent = 'Select user(s)...';
+        labelSpan.classList.add('text-muted');
+        labelSpan.title = '';
+        if (hiddenInput) hiddenInput.value = '';
+        if (hiddenIdsInput) hiddenIdsInput.value = '';
+    } else {
+        const names = checkedBoxes.map(cb => cb.value);
+        const ids = checkedBoxes.map(cb => cb.dataset.id).filter(Boolean);
+        const fullText = names.join(', ');
+        labelSpan.textContent = fullText;
+        labelSpan.classList.remove('text-muted');
+        labelSpan.title = fullText;
+        if (hiddenInput) hiddenInput.value = fullText;
+        if (hiddenIdsInput) hiddenIdsInput.value = ids.join(',');
+    }
 }
 
 function filterRfqCustomersByRegion() {
@@ -3290,6 +3637,7 @@ function filterRfqCustomersByRegion() {
         && selectedOption.dataset.region !== region
     ) {
         customerDropdown.value = '';
+        syncRfqCustomerAddress();
     }
 }
 
@@ -3303,6 +3651,19 @@ function populateRfqForm(rfq) {
     document.getElementById('rfqRegion').value = rfq.customer_region || '';
     filterRfqCustomersByRegion();
     document.getElementById('rfqCustomer').value = rfq.customer_id || '';
+    syncRfqCustomerAddress();
+    const userText = rfq.customer_users || rfq.customer_contact_person;
+    if (userText) {
+        const desiredUsers = userText.split(',').map(s => s.trim().toLowerCase());
+        const cbs = document.querySelectorAll('#rfqUserMultiOptions .rfq-user-cb');
+        if (cbs.length > 0) {
+            cbs.forEach(cb => {
+                const val = cb.value.toLowerCase();
+                cb.checked = desiredUsers.some(d => val.includes(d) || d.includes(val));
+            });
+            updateRfqSelectedUsersLabel();
+        }
+    }
     document.getElementById('rfqEnquiryDetails').value = rfq.enquiry_details || '';
     document.getElementById('rfqRemarks').value = rfq.remarks || '';
     document.getElementById('supplierEmailSubject').value = defaultSupplierEmailSubject.replace('{rfq_no}', rfq.rfq_no || '');
@@ -3330,8 +3691,49 @@ function populateRfqForm(rfq) {
     }
 }
 
-document.getElementById('openAddRfqModal')?.addEventListener('click', resetRfqForm);
+document.getElementById('openAddRfqModal')?.addEventListener('click', function() {
+    resetRfqForm();
+    markRfqModalOpen('add');
+    saveRfqDraft();
+});
 document.getElementById('rfqRegion')?.addEventListener('change', filterRfqCustomersByRegion);
+document.getElementById('rfqCustomer')?.addEventListener('change', function() {
+    if (this.value === '__add_new_user__') {
+        window.open('{% url "user_details" %}', '_blank');
+        this.value = '';
+        syncRfqCustomerAddress();
+        return;
+    }
+    syncRfqCustomerAddress();
+});
+
+// Dropdown toggle for RFQ User Details multi-select
+const rfqUserTrigger = document.getElementById('rfqUserMultiTrigger');
+const rfqUserDropdown = document.getElementById('rfqUserMultiDropdown');
+if (rfqUserTrigger && rfqUserDropdown) {
+    rfqUserTrigger.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const isHidden = rfqUserDropdown.classList.contains('d-none');
+        if (isHidden) {
+            rfqUserDropdown.classList.remove('d-none');
+            rfqUserTrigger.classList.add('active');
+        } else {
+            rfqUserDropdown.classList.add('d-none');
+            rfqUserTrigger.classList.remove('active');
+        }
+    });
+
+    rfqUserDropdown.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!rfqUserDropdown.contains(e.target) && !rfqUserTrigger.contains(e.target)) {
+            rfqUserDropdown.classList.add('d-none');
+            rfqUserTrigger.classList.remove('active');
+        }
+    });
+}
 
 document.addEventListener('click', function (e) {
     const editButton = e.target.closest('.rfq-edit-btn');
@@ -3340,6 +3742,7 @@ document.addEventListener('click', function (e) {
     const rfq = rfqData.find(item => item.id === rfqId);
     if (!rfq) return;
     populateRfqForm(rfq);
+    markRfqModalOpen('edit', rfq.id);
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addRfqModal')).show();
 });
 
@@ -3629,6 +4032,7 @@ if (submitBtn) {
 const draftEmailBtn = document.getElementById('rfqDraftEmailBtn');
 if (draftEmailBtn) {
     draftEmailBtn.addEventListener('click', function () {
+        isSwitchingRfqModal = true;
         syncSupplierEmailToAddress();
         refreshSupplierEmailBody();
 
@@ -3752,6 +4156,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             filterRfqCustomersByRegion();
             customerSelect.value = customerId;
+            syncRfqCustomerAddress();
         }
         if (mailDateInput && mailDate) {
             mailDateInput.value = mailDate;
@@ -3805,10 +4210,80 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const modalEl = document.getElementById('addRfqModal');
         if (modalEl) {
+            markRfqModalOpen('add');
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+    } else {
+        const savedModalStateStr = sessionStorage.getItem('dpr_rfq_modal_state');
+        if (savedModalStateStr) {
+            try {
+                const savedState = JSON.parse(savedModalStateStr);
+                if (savedState && savedState.mode === 'edit' && savedState.id) {
+                    const rfq = rfqData.find(item => item.id === Number(savedState.id));
+                    if (rfq) {
+                        populateRfqForm(rfq);
+                        bootstrap.Modal.getOrCreateInstance(document.getElementById('addRfqModal')).show();
+                    } else {
+                        clearRfqModalState();
+                    }
+                } else if (savedState && savedState.mode === 'add') {
+                    resetRfqForm();
+                    const draftStr = sessionStorage.getItem('dpr_rfq_draft');
+                    if (draftStr) {
+                        try {
+                            const draft = JSON.parse(draftStr);
+                            restoreRfqDraft(draft);
+                        } catch(e) {}
+                    }
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('addRfqModal')).show();
+                }
+            } catch(e) {
+                clearRfqModalState();
+            }
         }
     }
 });
+
+const rfqMainModalEl = document.getElementById('addRfqModal');
+if (rfqMainModalEl) {
+    rfqMainModalEl.addEventListener('shown.bs.modal', function () {
+        const action = document.getElementById('rfqFormAction')?.value || 'add';
+        const rfqId = document.getElementById('rfqFormId')?.value || '';
+        if (action === 'edit' && rfqId) {
+            markRfqModalOpen('edit', rfqId);
+        } else {
+            markRfqModalOpen('add');
+            saveRfqDraft();
+        }
+    });
+
+    rfqMainModalEl.addEventListener('hidden.bs.modal', function () {
+        if (isSwitchingRfqModal) {
+            isSwitchingRfqModal = false;
+            return;
+        }
+        clearRfqModalState();
+    });
+}
+
+document.getElementById('addRfqForm')?.addEventListener('submit', function() {
+    clearRfqModalState();
+});
+
+document.getElementById('addRfqForm')?.addEventListener('input', function() {
+    const action = document.getElementById('rfqFormAction')?.value || 'add';
+    if (action === 'add') {
+        saveRfqDraft();
+    }
+});
+
+document.getElementById('addRfqForm')?.addEventListener('change', function() {
+    const action = document.getElementById('rfqFormAction')?.value || 'add';
+    if (action === 'add') {
+        saveRfqDraft();
+    }
+});
+
 
 function getActiveRow() {
     const allCheckedInputs = document.querySelectorAll('.rfq-quotation-product:checked, .rfq-quotation-supplier-price:checked');

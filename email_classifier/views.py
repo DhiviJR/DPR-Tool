@@ -1481,19 +1481,28 @@ def download_email_attachment(request, record_id):
                 subj = _decode(msg.get('Subject'))
 
                 if (record.imap_uid and record.imap_uid in (msg_id, subj)) or (record.subject and record.subject.strip() == subj.strip()) or len(msg_nums) <= 5:
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            fn = part.get_filename()
-                            if fn:
-                                decoded_fn = ' '.join(_decode(fn).split())
-                                if target_filename.lower() in decoded_fn.lower() or decoded_fn.lower() in target_filename.lower():
-                                    file_bytes = part.get_payload(decode=True)
-                                    if file_bytes:
-                                        content_type = part.get_content_type() or mimetypes.guess_type(target_filename)[0] or 'application/octet-stream'
-                                        response = HttpResponse(file_bytes, content_type=content_type)
-                                        safe_fn = target_filename.replace('"', '').replace('\r', '').replace('\n', '')
-                                        response['Content-Disposition'] = f'attachment; filename="{safe_fn}"'
-                                        return response
+                    parts_to_check = msg.walk() if msg.is_multipart() else [msg]
+                    for part in parts_to_check:
+                        fn = part.get_filename() or part.get_param('name')
+                        if fn:
+                            decoded_fn = ' '.join(_decode(fn).split())
+                            if target_filename.lower() in decoded_fn.lower() or decoded_fn.lower() in target_filename.lower():
+                                file_bytes = part.get_payload(decode=True)
+                                if file_bytes:
+                                    guessed_type, _ = mimetypes.guess_type(target_filename)
+                                    raw_ctype = part.get_content_type()
+                                    if guessed_type:
+                                        content_type = guessed_type
+                                    elif raw_ctype and raw_ctype.lower() != 'application/octet-stream':
+                                        content_type = raw_ctype
+                                    else:
+                                        content_type = 'application/octet-stream'
+
+                                    response = HttpResponse(file_bytes, content_type=content_type)
+                                    safe_fn = target_filename.replace('"', '').replace('\r', '').replace('\n', '')
+                                    disposition = 'attachment' if request.GET.get('download') == '1' else 'inline'
+                                    response['Content-Disposition'] = f'{disposition}; filename="{safe_fn}"'
+                                    return response
 
         raise Http404(f"Attachment '{target_filename}' could not be retrieved from mailbox.")
     finally:

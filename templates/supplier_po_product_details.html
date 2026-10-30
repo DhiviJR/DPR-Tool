@@ -144,13 +144,14 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Supplier Inward</h5>
+                <h5 class="modal-title" id="supplierInwardModalTitle">Supplier Inward</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label class="form-label">Ordered Quantity</label>
+                    <label class="form-label" id="supplierInwardQtyLabel">Ordered Quantity</label>
                     <input type="number" id="supplierInwardOrderedQty" class="form-control" readonly>
+                    <div id="supplierInwardQtySubtext" class="small text-muted mt-1" style="display:none;"></div>
                 </div>
                 <div class="mb-3">
                     <label for="supplierInwardReceivedQty" class="form-label">Received Quantity <span class="text-danger">*</span></label>
@@ -388,10 +389,17 @@ function validateSupplierInwardLive(isSubmit = false) {
 
     // 1. Check received quantity bounds (if filled)
     if (values.receivedValue !== '') {
-        if (values.receivedQuantity < 0) {
-            message = 'Received quantity cannot be negative.';
+        const isRem = pendingSupplierInward.isRemaining;
+        const pendingQty = pendingSupplierInward.orderedQty - pendingSupplierInward.receivedQty;
+        const allowedMax = isRem ? pendingQty : pendingSupplierInward.orderedQty;
+
+        if (values.receivedQuantity <= 0) {
+            message = 'Received quantity must be greater than 0.';
             invalidInputs = [receivedInput];
-        } else if (values.receivedQuantity > pendingSupplierInward.orderedQty) {
+        } else if (isRem && values.receivedQuantity > allowedMax && values.receivedQuantity !== pendingSupplierInward.orderedQty) {
+            message = `Received quantity cannot exceed pending quantity (${allowedMax}).`;
+            invalidInputs = [receivedInput];
+        } else if (!isRem && values.receivedQuantity > pendingSupplierInward.orderedQty) {
             message = `Received quantity cannot exceed ordered quantity (${pendingSupplierInward.orderedQty}).`;
             invalidInputs = [receivedInput];
         }
@@ -436,13 +444,19 @@ function validateSupplierInwardLive(isSubmit = false) {
                 ...(!values.okValue ? [okInput] : []),
                 ...(!values.notOkValue ? [notOkInput] : [])
             ];
+        } else if (values.receivedQuantity <= 0) {
+            message = 'Received quantity must be greater than 0.';
+            invalidInputs = [receivedInput];
+        } else if (values.okQuantity + values.notOkQuantity !== values.receivedQuantity) {
+            message = `OK quantity plus NOT OK quantity must equal received quantity (${values.receivedQuantity}).`;
+            invalidInputs = [okInput, notOkInput];
         } else if (!values.invoiceNumber) {
             message = 'Supplier Invoice Number is required.';
             invalidInputs = [invoiceInput];
         } else if (!values.billAmountValue || isNaN(values.billAmount) || values.billAmount <= 0) {
             message = 'Supplier Bill Amount is required and must be greater than 0.';
             invalidInputs = [billAmountInput];
-        } else if (!values.billFile && !pendingSupplierInward.billAttachmentName && !pendingSupplierInward.billAttachmentUrl) {
+        } else if (pendingSupplierInward.isRemaining ? !values.billFile : (!values.billFile && !pendingSupplierInward.billAttachmentName && !pendingSupplierInward.billAttachmentUrl)) {
             message = 'Bill Attachment is required.';
             invalidInputs = [billAttachmentInput];
         }
@@ -579,51 +593,112 @@ function checkPriceMismatchWarning() {
     return false;
 }
 
-function showFirstTimeInwardModal() {
+function showSupplierInwardModal(isRemaining = false, prefillQty = null) {
+    if (!pendingSupplierInward) return;
+    pendingSupplierInward.isRemaining = isRemaining;
+
     const orderedQty = pendingSupplierInward.orderedQty;
-    document.getElementById('supplierInwardOrderedQty').value = orderedQty;
-    
+    const pendingQty = orderedQty - pendingSupplierInward.receivedQty;
+
+    // If there is no remaining inward quantity, do NOT open remaining inward
+    if (isRemaining && pendingQty <= 0) {
+        return;
+    }
+
+    const qtyLabelEl = document.getElementById('supplierInwardQtyLabel');
+    const qtyInputEl = document.getElementById('supplierInwardOrderedQty');
+    const qtySubtextEl = document.getElementById('supplierInwardQtySubtext');
     const receivedInput = document.getElementById('supplierInwardReceivedQty');
     const okInput = document.getElementById('supplierInwardOkQty');
     const notOkInput = document.getElementById('supplierInwardNotOkQty');
-    receivedInput.max = orderedQty;
-    okInput.max = orderedQty;
-    notOkInput.max = orderedQty;
-    
-    const initialReceived = pendingSupplierInward.receivedQty > 0
-        ? pendingSupplierInward.receivedQty
-        : '';
-    const initialOk = pendingSupplierInward.okQty > 0
-        ? pendingSupplierInward.okQty
-        : '';
-    const initialNotOk = pendingSupplierInward.notOkQty > 0
-        ? pendingSupplierInward.notOkQty
-        : '';
-
-    receivedInput.value = initialReceived;
-    okInput.value = initialOk;
-    notOkInput.value = initialNotOk;
-    document.getElementById('supplierInwardNotOkReason').value = pendingSupplierInward.notOkReason || '';
-    document.getElementById('supplierInwardHint').textContent =
-        `Received quantity cannot exceed ${orderedQty}. OK quantity plus NOT OK quantity cannot exceed received quantity.`;
-
-    // Pre-fill invoice / bill fields
-    document.getElementById('supplierInwardInvoiceNumber').value = pendingSupplierInward.supplierInvoiceNumber || '';
-    document.getElementById('supplierInwardBillAmount').value = pendingSupplierInward.supplierBillAmount || '';
-    // Clear the file input (cannot pre-fill for security reasons), but show existing filename
-    document.getElementById('supplierInwardBillAttachment').value = '';
+    const modalTitleEl = document.getElementById('supplierInwardModalTitle');
     const existingEl = document.getElementById('supplierInwardBillAttachmentExisting');
-    if (pendingSupplierInward.billAttachmentName) {
-        existingEl.innerHTML = `Current file: <a href="${pendingSupplierInward.billAttachmentUrl}" target="_blank">${pendingSupplierInward.billAttachmentName}</a>`;
+
+    if (isRemaining) {
+        if (modalTitleEl) modalTitleEl.textContent = 'Supplier Inward';
+        if (qtyLabelEl) qtyLabelEl.textContent = 'Pending Quantity';
+        if (qtyInputEl) qtyInputEl.value = pendingQty;
+        if (qtySubtextEl) {
+            qtySubtextEl.innerHTML = `Ordered Quantity: <strong>${orderedQty}</strong> &nbsp;|&nbsp; Already Received: <strong>${pendingSupplierInward.receivedQty}</strong>`;
+            qtySubtextEl.style.display = 'block';
+        }
+        receivedInput.max = pendingQty;
+        okInput.max = pendingQty;
+        notOkInput.max = pendingQty;
+
+        // User requested: do NOT auto-fill quantity defaultly, let user enter it
+        const initialVal = (prefillQty !== null && prefillQty !== undefined && prefillQty > 0) ? prefillQty : '';
+        receivedInput.value = initialVal;
+        okInput.value = initialVal ? initialVal : '';
+        notOkInput.value = initialVal ? '0' : '';
+        receivedInput.placeholder = `Enter received quantity (max ${pendingQty})`;
+        document.getElementById('supplierInwardNotOkReason').value = '';
+        document.getElementById('supplierInwardHint').textContent =
+            `Received quantity cannot exceed pending quantity (${pendingQty}). OK quantity plus NOT OK quantity cannot exceed received quantity.`;
+
+        // User requested: do NOT attach previous same PDF, clear fields so user enters fresh
+        document.getElementById('supplierInwardInvoiceNumber').value = '';
+        document.getElementById('supplierInwardBillAmount').value = '';
+        document.getElementById('supplierInwardBillAttachment').value = '';
+        if (existingEl) {
+            existingEl.textContent = '';
+            existingEl.innerHTML = '';
+        }
+        const inwardErrorEl = document.getElementById('supplierInwardValidationError');
+        if (inwardErrorEl) {
+            inwardErrorEl.textContent = '';
+            inwardErrorEl.style.display = 'none';
+        }
     } else {
-        existingEl.textContent = '';
+        if (modalTitleEl) modalTitleEl.textContent = 'Supplier Inward';
+        if (qtyLabelEl) qtyLabelEl.textContent = 'Ordered Quantity';
+        if (qtyInputEl) qtyInputEl.value = orderedQty;
+        if (qtySubtextEl) {
+            qtySubtextEl.innerHTML = '';
+            qtySubtextEl.style.display = 'none';
+        }
+        receivedInput.max = orderedQty;
+        okInput.max = orderedQty;
+        notOkInput.max = orderedQty;
+
+        const initialReceived = pendingSupplierInward.receivedQty > 0
+            ? pendingSupplierInward.receivedQty
+            : '';
+        const initialOk = pendingSupplierInward.okQty > 0
+            ? pendingSupplierInward.okQty
+            : '';
+        const initialNotOk = pendingSupplierInward.notOkQty > 0
+            ? pendingSupplierInward.notOkQty
+            : '';
+
+        receivedInput.value = initialReceived;
+        okInput.value = initialOk;
+        notOkInput.value = initialNotOk;
+        receivedInput.placeholder = '';
+        document.getElementById('supplierInwardNotOkReason').value = pendingSupplierInward.notOkReason || '';
+        document.getElementById('supplierInwardHint').textContent =
+            `Received quantity cannot exceed ${orderedQty}. OK quantity plus NOT OK quantity cannot exceed received quantity.`;
+
+        // Pre-fill invoice / bill fields
+        document.getElementById('supplierInwardInvoiceNumber').value = pendingSupplierInward.supplierInvoiceNumber || '';
+        document.getElementById('supplierInwardBillAmount').value = pendingSupplierInward.supplierBillAmount || '';
+        document.getElementById('supplierInwardBillAttachment').value = '';
+        if (pendingSupplierInward.billAttachmentName) {
+            existingEl.innerHTML = `Current file: <a href="${pendingSupplierInward.billAttachmentUrl}" target="_blank">${pendingSupplierInward.billAttachmentName}</a>`;
+        } else {
+            existingEl.textContent = '';
+        }
     }
-    
+
     updateInwardFieldsState();
     toggleSupplierInwardReason();
     checkPriceMismatchWarning();
     validateSupplierInwardLive();
-    new bootstrap.Modal(document.getElementById('supplierInwardModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierInwardModal')).show();
+}
+
+function showFirstTimeInwardModal() {
+    showSupplierInwardModal(false);
 }
 
 document.addEventListener('click', function (e) {
@@ -659,10 +734,42 @@ document.addEventListener('click', function (e) {
         ratePerUnit: ratePerUnit
     };
 
+    const pendingQty = orderedQty - receivedQty;
+
     if (receivedQty > 0 && status !== 'closed' && status !== 'cancelled') {
+        const remainingBtn = document.getElementById('actionRemainingInwardBtn');
+        if (remainingBtn) {
+            const hasRemaining = pendingQty > 0;
+            remainingBtn.disabled = !hasRemaining;
+            remainingBtn.classList.remove('d-none');
+            if (hasRemaining) {
+                remainingBtn.classList.remove('disabled');
+                remainingBtn.style.pointerEvents = '';
+                remainingBtn.style.opacity = '1';
+                remainingBtn.removeAttribute('title');
+            } else {
+                remainingBtn.classList.add('disabled');
+                remainingBtn.style.pointerEvents = 'none';
+                remainingBtn.style.opacity = '0.5';
+                remainingBtn.title = 'No remaining inward products';
+            }
+        }
         const reworkBtn = document.getElementById('actionReworkBtn');
         if (reworkBtn) {
-            reworkBtn.disabled = (notOkQty <= 0);
+            const hasRework = notOkQty > 0;
+            reworkBtn.disabled = !hasRework;
+            reworkBtn.classList.remove('d-none');
+            if (hasRework) {
+                reworkBtn.classList.remove('disabled');
+                reworkBtn.style.pointerEvents = '';
+                reworkBtn.style.opacity = '1';
+                reworkBtn.removeAttribute('title');
+            } else {
+                reworkBtn.classList.add('disabled');
+                reworkBtn.style.pointerEvents = 'none';
+                reworkBtn.style.opacity = '0.5';
+                reworkBtn.title = 'No rework products';
+            }
         }
         new bootstrap.Modal(document.getElementById('supplierInwardActionModal')).show();
     } else {
@@ -670,23 +777,8 @@ document.addEventListener('click', function (e) {
     }
 });
 
-document.getElementById('actionRemainingInwardBtn')?.addEventListener('click', function() {
-    const actionModalEl = document.getElementById('supplierInwardActionModal');
-    bootstrap.Modal.getInstance(actionModalEl).hide();
-    
-    const pendingQty = pendingSupplierInward.orderedQty - pendingSupplierInward.receivedQty;
-    document.getElementById('remainingInwardPendingQty').value = pendingQty;
-    document.getElementById('remainingInwardReceivedQty').value = '';
-    document.getElementById('remainingInwardReceivedQty').max = pendingQty;
-    document.getElementById('remainingInwardValidationError').style.display = 'none';
-    
-    new bootstrap.Modal(document.getElementById('supplierRemainingInwardModal')).show();
-});
-
-document.getElementById('actionReworkBtn')?.addEventListener('click', function() {
-    const actionModalEl = document.getElementById('supplierInwardActionModal');
-    bootstrap.Modal.getInstance(actionModalEl).hide();
-    
+function openSupplierReworkModal() {
+    if (!pendingSupplierInward) return;
     const reworkQtyVal = pendingSupplierInward.notOkQty;
     document.getElementById('reworkQty').value = reworkQtyVal;
     document.getElementById('reworkReceivedQty').value = '';
@@ -696,42 +788,60 @@ document.getElementById('actionReworkBtn')?.addEventListener('click', function()
     
     updateReworkFieldsState();
     validateReworkLive();
-    new bootstrap.Modal(document.getElementById('supplierReworkModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierReworkModal')).show();
+}
+
+document.getElementById('actionRemainingInwardBtn')?.addEventListener('click', function() {
+    if (!pendingSupplierInward) return;
+    const pendingQty = pendingSupplierInward.orderedQty - pendingSupplierInward.receivedQty;
+    if (pendingQty <= 0) {
+        return;
+    }
+    const actionModalEl = document.getElementById('supplierInwardActionModal');
+    if (actionModalEl) {
+        bootstrap.Modal.getInstance(actionModalEl)?.hide();
+    }
+    showSupplierInwardModal(true);
+});
+
+document.getElementById('actionReworkBtn')?.addEventListener('click', function() {
+    if (!pendingSupplierInward || pendingSupplierInward.notOkQty <= 0) return;
+    const actionModalEl = document.getElementById('supplierInwardActionModal');
+    if (actionModalEl) {
+        bootstrap.Modal.getInstance(actionModalEl)?.hide();
+    }
+    openSupplierReworkModal();
 });
 
 document.getElementById('saveRemainingInwardBtn')?.addEventListener('click', function() {
     if (!pendingSupplierInward) return;
     const receivedInput = document.getElementById('remainingInwardReceivedQty');
-    const enteredVal = receivedInput.value.trim();
+    const enteredVal = receivedInput ? receivedInput.value.trim() : '';
     const enteredQty = parseInt(enteredVal || '0', 10);
     const pendingQty = pendingSupplierInward.orderedQty - pendingSupplierInward.receivedQty;
     const errorEl = document.getElementById('remainingInwardValidationError');
 
     if (!enteredVal || enteredQty <= 0) {
-        errorEl.textContent = 'Received quantity is required and must be greater than 0.';
-        errorEl.style.display = 'block';
+        if (errorEl) {
+            errorEl.textContent = 'Received quantity is required and must be greater than 0.';
+            errorEl.style.display = 'block';
+        }
         return;
     }
     if (enteredQty > pendingQty) {
-        errorEl.textContent = `Received quantity cannot exceed pending quantity (${pendingQty}).`;
-        errorEl.style.display = 'block';
+        if (errorEl) {
+            errorEl.textContent = `Received quantity cannot exceed pending quantity (${pendingQty}).`;
+            errorEl.style.display = 'block';
+        }
         return;
     }
-    errorEl.style.display = 'none';
+    if (errorEl) errorEl.style.display = 'none';
 
-    const newReceivedTotal = pendingSupplierInward.receivedQty + enteredQty;
-    const newOkTotal = pendingSupplierInward.okQty + enteredQty;
-    const newNotOkTotal = pendingSupplierInward.notOkQty;
-    const newNotOkReason = pendingSupplierInward.notOkReason;
-
-    postSupplierInwardUpdate(
-        pendingSupplierInward.row,
-        pendingSupplierInward.buttonElement,
-        newReceivedTotal,
-        newOkTotal,
-        newNotOkTotal,
-        newNotOkReason
-    );
+    const remainingModalEl = document.getElementById('supplierRemainingInwardModal');
+    if (remainingModalEl) {
+        bootstrap.Modal.getInstance(remainingModalEl)?.hide();
+    }
+    showSupplierInwardModal(true, enteredQty);
 });
 
 function validateReworkLive(isSubmit = false) {
@@ -962,6 +1072,9 @@ function autoFillNotOkQty() {
             if (okNum > receivedNum) {
                 okNum = receivedNum;
                 okInput.value = okNum;
+            } else if (okNum < 0) {
+                okNum = 0;
+                okInput.value = 0;
             }
             const calculatedNotOk = Math.max(0, receivedNum - okNum);
             notOkInput.value = calculatedNotOk;
@@ -973,16 +1086,51 @@ function autoFillNotOkQty() {
     }
 }
 
+function autoFillOkQty() {
+    const receivedVal = document.getElementById('supplierInwardReceivedQty').value.trim();
+    const okInput = document.getElementById('supplierInwardOkQty');
+    const notOkInput = document.getElementById('supplierInwardNotOkQty');
+    const notOkValStr = notOkInput.value.trim();
+    
+    if (receivedVal !== '') {
+        const receivedNum = parseInt(receivedVal, 10);
+        let notOkNum = parseInt(notOkValStr, 10);
+
+        if (notOkValStr !== '' && !isNaN(notOkNum)) {
+            if (notOkNum > receivedNum) {
+                notOkNum = receivedNum;
+                notOkInput.value = notOkNum;
+            } else if (notOkNum < 0) {
+                notOkNum = 0;
+                notOkInput.value = 0;
+            }
+            const calculatedOk = Math.max(0, receivedNum - notOkNum);
+            okInput.value = calculatedOk;
+        } else if (notOkValStr === '') {
+            okInput.value = '';
+        }
+        toggleSupplierInwardReason();
+        validateSupplierInwardLive();
+    }
+}
+
+function handleInwardReceivedQtyChange() {
+    updateInwardFieldsState();
+    const okValStr = document.getElementById('supplierInwardOkQty').value.trim();
+    const notOkValStr = document.getElementById('supplierInwardNotOkQty').value.trim();
+    if (okValStr !== '') {
+        autoFillNotOkQty();
+    } else if (notOkValStr !== '') {
+        autoFillOkQty();
+    }
+}
+
 document.getElementById('supplierInwardOkQty').addEventListener('input', autoFillNotOkQty);
-document.getElementById('supplierInwardReceivedQty').addEventListener('input', function() {
-    updateInwardFieldsState();
-    autoFillNotOkQty();
-});
 document.getElementById('supplierInwardOkQty').addEventListener('change', autoFillNotOkQty);
-document.getElementById('supplierInwardReceivedQty').addEventListener('change', function() {
-    updateInwardFieldsState();
-    autoFillNotOkQty();
-});
+document.getElementById('supplierInwardNotOkQty').addEventListener('input', autoFillOkQty);
+document.getElementById('supplierInwardNotOkQty').addEventListener('change', autoFillOkQty);
+document.getElementById('supplierInwardReceivedQty').addEventListener('input', handleInwardReceivedQtyChange);
+document.getElementById('supplierInwardReceivedQty').addEventListener('change', handleInwardReceivedQtyChange);
 
 function autoFillReworkNotOkQty() {
     const receivedVal = document.getElementById('reworkReceivedQty').value.trim();
@@ -998,6 +1146,9 @@ function autoFillReworkNotOkQty() {
             if (okNum > receivedNum) {
                 okNum = receivedNum;
                 okInput.value = okNum;
+            } else if (okNum < 0) {
+                okNum = 0;
+                okInput.value = 0;
             }
             const calculatedNotOk = Math.max(0, receivedNum - okNum);
             notOkInput.value = calculatedNotOk;
@@ -1008,16 +1159,50 @@ function autoFillReworkNotOkQty() {
     }
 }
 
+function autoFillReworkOkQty() {
+    const receivedVal = document.getElementById('reworkReceivedQty').value.trim();
+    const okInput = document.getElementById('reworkOkQty');
+    const notOkInput = document.getElementById('reworkNotOkQty');
+    const notOkValStr = notOkInput.value.trim();
+    
+    if (receivedVal !== '') {
+        const receivedNum = parseInt(receivedVal, 10);
+        let notOkNum = parseInt(notOkValStr, 10);
+
+        if (notOkValStr !== '' && !isNaN(notOkNum)) {
+            if (notOkNum > receivedNum) {
+                notOkNum = receivedNum;
+                notOkInput.value = notOkNum;
+            } else if (notOkNum < 0) {
+                notOkNum = 0;
+                notOkInput.value = 0;
+            }
+            const calculatedOk = Math.max(0, receivedNum - notOkNum);
+            okInput.value = calculatedOk;
+        } else if (notOkValStr === '') {
+            okInput.value = '';
+        }
+        validateReworkLive();
+    }
+}
+
+function handleReworkReceivedQtyChange() {
+    updateReworkFieldsState();
+    const okValStr = document.getElementById('reworkOkQty').value.trim();
+    const notOkValStr = document.getElementById('reworkNotOkQty').value.trim();
+    if (okValStr !== '') {
+        autoFillReworkNotOkQty();
+    } else if (notOkValStr !== '') {
+        autoFillReworkOkQty();
+    }
+}
+
 document.getElementById('reworkOkQty').addEventListener('input', autoFillReworkNotOkQty);
-document.getElementById('reworkReceivedQty').addEventListener('input', function() {
-    updateReworkFieldsState();
-    autoFillReworkNotOkQty();
-});
 document.getElementById('reworkOkQty').addEventListener('change', autoFillReworkNotOkQty);
-document.getElementById('reworkReceivedQty').addEventListener('change', function() {
-    updateReworkFieldsState();
-    autoFillReworkNotOkQty();
-});
+document.getElementById('reworkNotOkQty').addEventListener('input', autoFillReworkOkQty);
+document.getElementById('reworkNotOkQty').addEventListener('change', autoFillReworkOkQty);
+document.getElementById('reworkReceivedQty').addEventListener('input', handleReworkReceivedQtyChange);
+document.getElementById('reworkReceivedQty').addEventListener('change', handleReworkReceivedQtyChange);
 
 [
     'reworkReceivedQty',
@@ -1042,13 +1227,34 @@ document.getElementById('saveSupplierInwardBtn').addEventListener('click', funct
     }
     const values = getSupplierInwardValues();
 
+    let newReceivedTotal = values.receivedQuantity;
+    let newOkTotal = values.okQuantity;
+    let newNotOkTotal = values.notOkQuantity;
+    let newNotOkReason = values.reason;
+
+    if (pendingSupplierInward.isRemaining) {
+        const pendingQty = pendingSupplierInward.orderedQty - pendingSupplierInward.receivedQty;
+        if (values.receivedQuantity <= pendingQty) {
+            newReceivedTotal = pendingSupplierInward.receivedQty + values.receivedQuantity;
+            newOkTotal = pendingSupplierInward.okQty + values.okQuantity;
+            newNotOkTotal = pendingSupplierInward.notOkQty + values.notOkQuantity;
+            newNotOkReason = values.reason || pendingSupplierInward.notOkReason;
+        } else {
+            // Cumulative entered
+            newReceivedTotal = values.receivedQuantity;
+            newOkTotal = values.okQuantity;
+            newNotOkTotal = values.notOkQuantity;
+            newNotOkReason = values.reason;
+        }
+    }
+
     postSupplierInwardUpdate(
         pendingSupplierInward.row,
         pendingSupplierInward.buttonElement,
-        values.receivedQuantity,
-        values.okQuantity,
-        values.notOkQuantity,
-        values.reason,
+        newReceivedTotal,
+        newOkTotal,
+        newNotOkTotal,
+        newNotOkReason,
         'inward'
     );
 });

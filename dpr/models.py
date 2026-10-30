@@ -20,6 +20,15 @@ class DPR(models.Model):
 
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
 
+    source_email = models.ForeignKey(
+        'email_classifier.EmailRecord',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='dprs',
+        help_text="Original email record from which this DPR was created"
+    )
+
     enquiry_attachment = models.FileField(
         upload_to='enquiry_files/',
         blank=True,
@@ -104,3 +113,28 @@ class DPR(models.Model):
     def __str__(self):
 
         return self.serial_number
+
+
+class DPRBunchDocument(models.Model):
+    DOC_TYPES = [
+        ('rfq_screenshot', 'RFQ Screenshots'),
+        ('quotation', 'Quotation'),
+        ('customer_po', 'Customer PO'),
+        ('vendor_price', 'Vendor Price Details'),
+        ('drawing', 'Drawing'),
+    ]
+
+    dpr = models.ForeignKey(DPR, on_delete=models.CASCADE, related_name='bunch_documents')
+    doc_type = models.CharField(max_length=50, choices=DOC_TYPES, db_index=True)
+    file = models.FileField(upload_to='dpr_bunch_files/')
+    file_name = models.CharField(max_length=255, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.file_name and self.file:
+            from pathlib import PurePath
+            self.file_name = PurePath(self.file.name).name
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.dpr.serial_number} - {self.get_doc_type_display()} - {self.file_name}"

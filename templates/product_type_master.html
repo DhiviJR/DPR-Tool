@@ -27,7 +27,7 @@
 </div>
 
 {% if messages %}
-<div class="mb-3">
+<div class="mb-3" id="djangoMessagesContainer">
     {% for message in messages %}
     <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
         {{ message }}
@@ -37,24 +37,33 @@
 </div>
 {% endif %}
 
-<!-- Product Types Accordion / Table -->
-<div class="row g-4">
+<!-- Live Floating Toast for In-Place Actions (keeps user at exact same position) -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1095;">
+    <div id="ptLiveToast" class="toast align-items-center text-white bg-success border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body d-flex align-items-center gap-2">
+                <i class="bi bi-check-circle-fill fs-5" id="ptToastIcon"></i>
+                <span id="ptToastMsg" class="fw-medium">Saved successfully.</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Product Types Accordion / Cards -->
+<div class="row g-4" id="productTypesContainer">
     {% for pt in product_types %}
-    <div class="col-12">
+    <div class="col-12" id="pt-card-{{ pt.id }}">
         <div class="dpr-card border-0 shadow-sm">
             <div class="card-header bg-light d-flex flex-wrap align-items-center justify-content-between py-3 px-4 gap-2">
                 <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-primary fs-6">{{ pt.code }}</span>
-                    <h5 class="mb-0 fw-bold text-dark">{{ pt.name }}</h5>
-                    {% if pt.category %}
-                    <span class="badge bg-secondary-subtle text-secondary border ms-2">{{ pt.category }}</span>
-                    {% endif %}
-                    {% if not pt.is_active %}
-                    <span class="badge bg-danger-subtle text-danger border ms-1">Inactive</span>
-                    {% endif %}
+                    <span class="badge bg-primary fs-6 pt-badge-code">{{ pt.code }}</span>
+                    <h5 class="mb-0 fw-bold text-dark pt-badge-name">{{ pt.name }}</h5>
+                    <span class="badge bg-secondary-subtle text-secondary border ms-2 pt-badge-category {% if not pt.category %}d-none{% endif %}">{{ pt.category|default:'' }}</span>
+                    <span class="badge bg-danger-subtle text-danger border ms-1 pt-badge-inactive {% if pt.is_active %}d-none{% endif %}">Inactive</span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <span class="small text-muted me-2">HSN: <strong>{{ pt.hsn_code }}</strong> &bull; Delivery: <strong>{{ pt.default_delivery_weeks }} Weeks</strong></span>
+                    <span class="small text-muted me-2">HSN: <strong class="pt-hsn-val">{{ pt.hsn_code }}</strong> &bull; Delivery: <strong class="pt-weeks-val">{{ pt.default_delivery_weeks }} Weeks</strong></span>
                     
                     <button type="button" class="btn btn-sm btn-outline-primary edit-pt-btn"
                             data-pt-id="{{ pt.id }}"
@@ -74,11 +83,11 @@
                         <i class="bi bi-plus-circle me-1"></i>Add Spec Field
                     </button>
 
-                    <form method="POST" action="" class="d-inline">
+                    <form method="POST" action="" class="d-inline toggle-status-form">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="toggle_status">
                         <input type="hidden" name="pt_id" value="{{ pt.id }}">
-                        <button type="submit" class="btn btn-sm {% if pt.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                        <button type="submit" class="btn btn-sm {% if pt.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %} toggle-status-btn">
                             {% if pt.is_active %}Disable{% else %}Enable{% endif %}
                         </button>
                     </form>
@@ -102,28 +111,28 @@
                         </thead>
                         <tbody>
                             {% for f in pt.spec_fields.all %}
-                            <tr>
-                                <td class="text-center fw-bold small">{{ forloop.counter }}</td>
-                                <td class="fw-semibold text-primary">{{ f.field_label }}</td>
-                                <td><code>{{ f.field_key }}</code></td>
-                                <td>
+                            <tr id="spec-field-{{ f.id }}">
+                                <td class="text-center fw-bold small field-order-cell">{{ forloop.counter }}</td>
+                                <td class="fw-semibold text-primary field-label-cell">{{ f.field_label }}</td>
+                                <td class="field-key-cell"><code>{{ f.field_key }}</code></td>
+                                <td class="field-type-cell">
                                     <span class="badge bg-info-subtle text-dark border">{{ f.get_field_type_display }}</span>
                                 </td>
-                                <td class="small text-muted">
+                                <td class="small text-muted field-options-cell">
                                     {% if f.select_options %}
                                         {{ f.select_options }}
                                     {% else %}
                                         <span class="text-muted">-</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center field-required-cell">
                                     {% if f.is_required %}
                                         <span class="badge bg-danger text-white">Required</span>
                                     {% else %}
                                         <span class="badge bg-secondary-subtle text-muted border">Optional</span>
                                     {% endif %}
                                 </td>
-                                <td class="small">
+                                <td class="small field-dependency-cell">
                                     {% if f.depends_on_field %}
                                         <span class="text-primary fw-semibold">If {{ f.depends_on_field }} = "{{ f.depends_on_value }}"</span>
                                     {% else %}
@@ -133,6 +142,8 @@
                                 <td class="text-center">
                                     <button type="button" class="btn btn-xs btn-outline-primary me-1 edit-field-btn"
                                             data-pt-id="{{ pt.id }}"
+                                            data-pt-code="{{ pt.code }}"
+                                            data-pt-name="{{ pt.name }}"
                                             data-field-id="{{ f.id }}"
                                             data-field-label="{{ f.field_label }}"
                                             data-field-key="{{ f.field_key }}"
@@ -145,7 +156,7 @@
                                             data-sort-order="{{ f.sort_order }}">
                                         <i class="bi bi-pencil"></i>
                                     </button>
-                                    <form method="POST" action="" class="d-inline" onsubmit="return confirm('Delete parameter field {{ f.field_label }}?');">
+                                    <form method="POST" action="" class="d-inline delete-spec-form" onsubmit="return confirm('Delete parameter field {{ f.field_label }}?');">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="delete_spec_field">
                                         <input type="hidden" name="field_id" value="{{ f.id }}">
@@ -160,7 +171,7 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="text-center py-4 text-muted small">
+                <div class="text-center py-4 text-muted small empty-spec-placeholder">
                     <i class="bi bi-info-circle fs-5 d-block mb-1 text-primary"></i>
                     No specification parameter fields configured for {{ pt.name }}. Click <strong>Add Spec Field</strong> above to define custom parameters.
                 </div>
@@ -319,10 +330,46 @@
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const ptModal = new bootstrap.Modal(document.getElementById('productTypeModal'));
-    const fieldModal = new bootstrap.Modal(document.getElementById('specFieldModal'));
+// Prevent native browser scroll-jumping on reloads
+if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+}
 
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function showToast(message, isError = false) {
+    const toastEl = document.getElementById('ptLiveToast');
+    const toastMsg = document.getElementById('ptToastMsg');
+    const toastIcon = document.getElementById('ptToastIcon');
+    if (!toastEl || !toastMsg) return;
+
+    toastMsg.textContent = message;
+    if (isError) {
+        toastEl.className = 'toast align-items-center text-white bg-danger border-0 shadow-lg';
+        if (toastIcon) toastIcon.className = 'bi bi-exclamation-triangle-fill fs-5';
+    } else {
+        toastEl.className = 'toast align-items-center text-white bg-success border-0 shadow-lg';
+        if (toastIcon) toastIcon.className = 'bi bi-check-circle-fill fs-5';
+    }
+    const bsToast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 });
+    bsToast.show();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const ptModalEl = document.getElementById('productTypeModal');
+    const fieldModalEl = document.getElementById('specFieldModal');
+    const ptModal = new bootstrap.Modal(ptModalEl);
+    const fieldModal = new bootstrap.Modal(fieldModalEl);
+
+    // Open Add Product Type Modal
     document.getElementById('openAddProductTypeBtn')?.addEventListener('click', function() {
         document.getElementById('productTypeModalTitle').textContent = 'Add Product Type';
         document.getElementById('pt_id').value = '';
@@ -334,25 +381,27 @@ document.addEventListener('DOMContentLoaded', function() {
         ptModal.show();
     });
 
-    document.querySelectorAll('.edit-pt-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
+    // Delegated click handler for edit Product Type, add spec field, edit spec field
+    document.addEventListener('click', function(e) {
+        const editPtBtn = e.target.closest('.edit-pt-btn');
+        if (editPtBtn) {
             document.getElementById('productTypeModalTitle').textContent = 'Edit Product Type';
-            document.getElementById('pt_id').value = this.dataset.ptId;
-            document.getElementById('pt_name').value = this.dataset.ptName;
-            document.getElementById('pt_code').value = this.dataset.ptCode;
-            document.getElementById('pt_category').value = this.dataset.ptCategory;
-            document.getElementById('pt_hsn').value = this.dataset.ptHsn;
-            document.getElementById('pt_weeks').value = this.dataset.ptWeeks;
+            document.getElementById('pt_id').value = editPtBtn.dataset.ptId;
+            document.getElementById('pt_name').value = editPtBtn.dataset.ptName;
+            document.getElementById('pt_code').value = editPtBtn.dataset.ptCode;
+            document.getElementById('pt_category').value = editPtBtn.dataset.ptCategory;
+            document.getElementById('pt_hsn').value = editPtBtn.dataset.ptHsn;
+            document.getElementById('pt_weeks').value = editPtBtn.dataset.ptWeeks;
             ptModal.show();
-        });
-    });
+            return;
+        }
 
-    document.querySelectorAll('.add-field-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.getElementById('specFieldModalTitle').textContent = `Add Field to ${this.dataset.ptCode}`;
-            document.getElementById('field_pt_id').value = this.dataset.ptId;
+        const addFieldBtn = e.target.closest('.add-field-btn');
+        if (addFieldBtn) {
+            document.getElementById('specFieldModalTitle').textContent = `Add Field to ${addFieldBtn.dataset.ptCode}`;
+            document.getElementById('field_pt_id').value = addFieldBtn.dataset.ptId;
             document.getElementById('field_id').value = '';
-            document.getElementById('fieldModalPtCode').textContent = `${this.dataset.ptName} (${this.dataset.ptCode})`;
+            document.getElementById('fieldModalPtCode').textContent = `${addFieldBtn.dataset.ptName} (${addFieldBtn.dataset.ptCode})`;
             document.getElementById('field_label').value = '';
             document.getElementById('field_key').value = '';
             document.getElementById('field_type').value = 'text';
@@ -361,28 +410,336 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('field_placeholder').value = '';
             document.getElementById('field_depends_field').value = '';
             document.getElementById('field_depends_value').value = '';
-            document.getElementById('field_sort_order').value = this.dataset.nextOrder || '1';
+            document.getElementById('field_sort_order').value = addFieldBtn.dataset.nextOrder || '1';
             fieldModal.show();
-        });
+            return;
+        }
+
+        const editFieldBtn = e.target.closest('.edit-field-btn');
+        if (editFieldBtn) {
+            document.getElementById('specFieldModalTitle').textContent = `Edit Field (${editFieldBtn.dataset.fieldLabel})`;
+            document.getElementById('field_pt_id').value = editFieldBtn.dataset.ptId;
+            document.getElementById('field_id').value = editFieldBtn.dataset.fieldId;
+            if (editFieldBtn.dataset.ptCode) {
+                document.getElementById('fieldModalPtCode').textContent = `${editFieldBtn.dataset.ptName || ''} (${editFieldBtn.dataset.ptCode})`;
+            }
+            document.getElementById('field_label').value = editFieldBtn.dataset.fieldLabel;
+            document.getElementById('field_key').value = editFieldBtn.dataset.fieldKey;
+            document.getElementById('field_type').value = editFieldBtn.dataset.fieldType;
+            document.getElementById('select_options').value = editFieldBtn.dataset.selectOptions;
+            document.getElementById('field_is_required').checked = (editFieldBtn.dataset.isRequired === '1');
+            document.getElementById('field_placeholder').value = editFieldBtn.dataset.placeholder;
+            document.getElementById('field_depends_field').value = editFieldBtn.dataset.dependsField;
+            document.getElementById('field_depends_value').value = editFieldBtn.dataset.dependsValue;
+            document.getElementById('field_sort_order').value = editFieldBtn.dataset.sortOrder;
+            fieldModal.show();
+            return;
+        }
     });
 
-    document.querySelectorAll('.edit-field-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.getElementById('specFieldModalTitle').textContent = `Edit Field (${this.dataset.fieldLabel})`;
-            document.getElementById('field_pt_id').value = this.dataset.ptId;
-            document.getElementById('field_id').value = this.dataset.fieldId;
-            document.getElementById('field_label').value = this.dataset.fieldLabel;
-            document.getElementById('field_key').value = this.dataset.fieldKey;
-            document.getElementById('field_type').value = this.dataset.fieldType;
-            document.getElementById('select_options').value = this.dataset.selectOptions;
-            document.getElementById('field_is_required').checked = (this.dataset.isRequired === '1');
-            document.getElementById('field_placeholder').value = this.dataset.placeholder;
-            document.getElementById('field_depends_field').value = this.dataset.dependsField;
-            document.getElementById('field_depends_value').value = this.dataset.dependsValue;
-            document.getElementById('field_sort_order').value = this.dataset.sortOrder;
-            fieldModal.show();
+    // AJAX Save Spec Field Form
+    const specFieldForm = fieldModalEl.querySelector('form');
+    if (specFieldForm) {
+        specFieldForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const submitBtn = specFieldForm.querySelector('button[type="submit"]');
+            const origBtnHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Saving...';
+
+            const formData = new FormData(specFieldForm);
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(res => res.json().then(data => ({ ok: res.ok, data: data })))
+            .then(({ ok, data }) => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+
+                if (!ok || data.status !== 'ok') {
+                    showToast(data.message || 'Error saving specification field.', true);
+                    return;
+                }
+
+                fieldModal.hide();
+                showToast(data.message);
+
+                const field = data.field;
+                const rowId = 'spec-field-' + field.id;
+                const row = document.getElementById(rowId);
+
+                if (row) {
+                    // In-place update of edited row - ZERO scroll jump!
+                    const labelCell = row.querySelector('.field-label-cell');
+                    const keyCell = row.querySelector('.field-key-cell');
+                    const typeCell = row.querySelector('.field-type-cell');
+                    const optionsCell = row.querySelector('.field-options-cell');
+                    const requiredCell = row.querySelector('.field-required-cell');
+                    const depCell = row.querySelector('.field-dependency-cell');
+                    const editBtn = row.querySelector('.edit-field-btn');
+
+                    if (labelCell) labelCell.textContent = field.field_label;
+                    if (keyCell) keyCell.innerHTML = `<code>${escapeHtml(field.field_key)}</code>`;
+                    if (typeCell) typeCell.innerHTML = `<span class="badge bg-info-subtle text-dark border">${escapeHtml(field.field_type_display)}</span>`;
+                    if (optionsCell) optionsCell.innerHTML = field.select_options ? escapeHtml(field.select_options) : '<span class="text-muted">-</span>';
+                    if (requiredCell) {
+                        requiredCell.innerHTML = field.is_required
+                            ? '<span class="badge bg-danger text-white">Required</span>'
+                            : '<span class="badge bg-secondary-subtle text-muted border">Optional</span>';
+                    }
+                    if (depCell) {
+                        depCell.innerHTML = field.depends_on_field
+                            ? `<span class="text-primary fw-semibold">If ${escapeHtml(field.depends_on_field)} = "${escapeHtml(field.depends_on_value)}"</span>`
+                            : '-';
+                    }
+
+                    if (editBtn) {
+                        editBtn.dataset.fieldLabel = field.field_label;
+                        editBtn.dataset.fieldKey = field.field_key;
+                        editBtn.dataset.fieldType = field.field_type;
+                        editBtn.dataset.selectOptions = field.select_options || '';
+                        editBtn.dataset.isRequired = field.is_required ? '1' : '0';
+                        editBtn.dataset.placeholder = field.placeholder || '';
+                        editBtn.dataset.dependsField = field.depends_on_field || '';
+                        editBtn.dataset.dependsValue = field.depends_on_value || '';
+                        editBtn.dataset.sortOrder = field.sort_order;
+                    }
+
+                    // Gentle highlight flash on the updated row
+                    row.classList.add('table-success');
+                    setTimeout(() => row.classList.remove('table-success'), 1800);
+                } else {
+                    // Added a new field row
+                    const card = document.getElementById('pt-card-' + data.pt_id);
+                    const tbody = card ? card.querySelector('tbody') : null;
+                    if (tbody) {
+                        const rowCount = tbody.querySelectorAll('tr').length + 1;
+                        const csrfToken = specFieldForm.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                        const tr = document.createElement('tr');
+                        tr.id = rowId;
+                        tr.innerHTML = `
+                            <td class="text-center fw-bold small field-order-cell">${rowCount}</td>
+                            <td class="fw-semibold text-primary field-label-cell">${escapeHtml(field.field_label)}</td>
+                            <td class="field-key-cell"><code>${escapeHtml(field.field_key)}</code></td>
+                            <td class="field-type-cell">
+                                <span class="badge bg-info-subtle text-dark border">${escapeHtml(field.field_type_display)}</span>
+                            </td>
+                            <td class="small text-muted field-options-cell">
+                                ${field.select_options ? escapeHtml(field.select_options) : '<span class="text-muted">-</span>'}
+                            </td>
+                            <td class="text-center field-required-cell">
+                                ${field.is_required ? '<span class="badge bg-danger text-white">Required</span>' : '<span class="badge bg-secondary-subtle text-muted border">Optional</span>'}
+                            </td>
+                            <td class="small field-dependency-cell">
+                                ${field.depends_on_field ? `<span class="text-primary fw-semibold">If ${escapeHtml(field.depends_on_field)} = "${escapeHtml(field.depends_on_value)}"</span>` : '-'}
+                            </td>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-xs btn-outline-primary me-1 edit-field-btn"
+                                        data-pt-id="${data.pt_id}"
+                                        data-pt-code="${escapeHtml(data.pt_code)}"
+                                        data-pt-name=""
+                                        data-field-id="${field.id}"
+                                        data-field-label="${escapeHtml(field.field_label)}"
+                                        data-field-key="${escapeHtml(field.field_key)}"
+                                        data-field-type="${escapeHtml(field.field_type)}"
+                                        data-select-options="${escapeHtml(field.select_options || '')}"
+                                        data-is-required="${field.is_required ? '1' : '0'}"
+                                        data-placeholder="${escapeHtml(field.placeholder || '')}"
+                                        data-depends-field="${escapeHtml(field.depends_on_field || '')}"
+                                        data-depends-value="${escapeHtml(field.depends_on_value || '')}"
+                                        data-sort-order="${field.sort_order}">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <form method="POST" action="" class="d-inline delete-spec-form" onsubmit="return confirm('Delete parameter field ${escapeHtml(field.field_label)}?');">
+                                    <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">
+                                    <input type="hidden" name="action" value="delete_spec_field">
+                                    <input type="hidden" name="field_id" value="${field.id}">
+                                    <button type="submit" class="btn btn-xs btn-outline-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                        tr.classList.add('table-success');
+                        setTimeout(() => tr.classList.remove('table-success'), 1800);
+                        
+                        // Update add button nextOrder
+                        const addBtn = card.querySelector('.add-field-btn');
+                        if (addBtn) addBtn.dataset.nextOrder = (rowCount + 1).toString();
+                    } else {
+                        // If it was an empty placeholder, reload smoothly
+                        sessionStorage.setItem('pt_master_scroll_pos', window.pageYOffset || document.documentElement.scrollTop || 0);
+                        window.location.reload();
+                    }
+                }
+            })
+            .catch(err => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+                showToast('Network error saving field.', true);
+            });
         });
+    }
+
+    // AJAX Save Product Type Form
+    const ptForm = ptModalEl.querySelector('form');
+    if (ptForm) {
+        ptForm.addEventListener('submit', function(e) {
+            const ptId = document.getElementById('pt_id').value;
+            if (!ptId) {
+                // Adding a brand new product type card: let standard reload occur or save scroll
+                sessionStorage.setItem('pt_master_scroll_pos', window.pageYOffset || document.documentElement.scrollTop || 0);
+                return;
+            }
+
+            e.preventDefault();
+            const submitBtn = ptForm.querySelector('button[type="submit"]');
+            const origBtnHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Saving...';
+
+            const formData = new FormData(ptForm);
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(res => res.json().then(data => ({ ok: res.ok, data: data })))
+            .then(({ ok, data }) => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+
+                if (!ok || data.status !== 'ok') {
+                    showToast(data.message || 'Error updating product type.', true);
+                    return;
+                }
+
+                ptModal.hide();
+                showToast(data.message);
+
+                const pt = data.pt;
+                const card = document.getElementById('pt-card-' + pt.id);
+                if (card) {
+                    const codeBadge = card.querySelector('.pt-badge-code');
+                    const nameEl = card.querySelector('.pt-badge-name');
+                    const catBadge = card.querySelector('.pt-badge-category');
+                    const hsnVal = card.querySelector('.pt-hsn-val');
+                    const weeksVal = card.querySelector('.pt-weeks-val');
+                    const editBtn = card.querySelector('.edit-pt-btn');
+
+                    if (codeBadge) codeBadge.textContent = pt.code;
+                    if (nameEl) nameEl.textContent = pt.name;
+                    if (catBadge) {
+                        if (pt.category) {
+                            catBadge.textContent = pt.category;
+                            catBadge.classList.remove('d-none');
+                        } else {
+                            catBadge.textContent = '';
+                            catBadge.classList.add('d-none');
+                        }
+                    }
+                    if (hsnVal) hsnVal.textContent = pt.hsn;
+                    if (weeksVal) weeksVal.textContent = pt.weeks + ' Weeks';
+
+                    if (editBtn) {
+                        editBtn.dataset.ptName = pt.name;
+                        editBtn.dataset.ptCode = pt.code;
+                        editBtn.dataset.ptCategory = pt.category;
+                        editBtn.dataset.ptHsn = pt.hsn;
+                        editBtn.dataset.ptWeeks = pt.weeks;
+                    }
+                }
+            })
+            .catch(err => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+                showToast('Network error updating product type.', true);
+            });
+        });
+    }
+
+    // AJAX Delete Field and Toggle Status Forms
+    document.addEventListener('submit', function(e) {
+        const deleteForm = e.target.closest('.delete-spec-form');
+        if (deleteForm) {
+            e.preventDefault();
+            const formData = new FormData(deleteForm);
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    showToast(data.message);
+                    const row = document.getElementById('spec-field-' + data.field_id);
+                    if (row) {
+                        row.style.transition = 'opacity 0.25s ease';
+                        row.style.opacity = '0';
+                        setTimeout(() => row.remove(), 250);
+                    }
+                } else {
+                    showToast(data.message || 'Error deleting field.', true);
+                }
+            })
+            .catch(err => showToast('Error deleting field.', true));
+            return;
+        }
+
+        const toggleForm = e.target.closest('.toggle-status-form');
+        if (toggleForm) {
+            e.preventDefault();
+            const formData = new FormData(toggleForm);
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    showToast(data.message);
+                    const card = document.getElementById('pt-card-' + data.pt_id);
+                    if (card) {
+                        const inactBadge = card.querySelector('.pt-badge-inactive');
+                        const btn = toggleForm.querySelector('.toggle-status-btn');
+                        if (data.is_active) {
+                            if (inactBadge) inactBadge.classList.add('d-none');
+                            if (btn) {
+                                btn.className = 'btn btn-sm btn-outline-danger toggle-status-btn';
+                                btn.textContent = 'Disable';
+                            }
+                        } else {
+                            if (inactBadge) inactBadge.classList.remove('d-none');
+                            if (btn) {
+                                btn.className = 'btn btn-sm btn-outline-success toggle-status-btn';
+                                btn.textContent = 'Enable';
+                            }
+                        }
+                    }
+                } else {
+                    showToast(data.message || 'Error updating status.', true);
+                }
+            })
+            .catch(err => showToast('Error updating status.', true));
+        }
     });
+
+    // Fallback: If any standard full reload occurs, restore exact scroll
+    const savedScroll = sessionStorage.getItem('pt_master_scroll_pos');
+    if (savedScroll !== null) {
+        const targetY = parseInt(savedScroll, 10);
+        window.scrollTo(0, targetY);
+        sessionStorage.removeItem('pt_master_scroll_pos');
+    }
 });
 </script>
 {% endblock %}

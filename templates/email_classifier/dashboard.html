@@ -355,17 +355,17 @@ tr:hover .email-subject-title {
                                                          <i class="bi bi-paperclip text-primary fs-6"></i>
                                                          Attachments ({{ record.attachments_list|length|default:1 }})
                                                      </span>
-                                                     <span class="text-muted small" style="font-size: 0.75rem;"><i class="bi bi-info-circle me-1"></i>Click file to download</span>
+                                                     <span class="text-muted small" style="font-size: 0.75rem;"><i class="bi bi-info-circle me-1"></i>Click file to view</span>
                                                  </div>
                                                  <div class="d-flex flex-wrap gap-2">
                                                      {% for att in record.attachments_list %}
                                                      <a href="{% url 'email_classifier:download_attachment' record.id %}?file={{ att|urlencode }}"
                                                         class="btn btn-sm bg-white border shadow-sm text-dark d-inline-flex align-items-center gap-2 px-3 py-2 rounded-3 text-decoration-none hover-primary-btn"
                                                         target="_blank"
-                                                        title="Click to download {{ att }}">
+                                                        title="Click to view {{ att }} directly in new tab">
                                                          <i class="bi bi-file-earmark-arrow-down-fill text-primary"></i>
                                                          <span class="fw-medium text-truncate" style="max-width: 280px;">{{ att }}</span>
-                                                         <i class="bi bi-download text-muted small ms-1"></i>
+                                                         <i class="bi bi-box-arrow-up-right text-muted small ms-1"></i>
                                                      </a>
                                                      {% empty %}
                                                      <span class="badge bg-white text-secondary border px-3 py-2">

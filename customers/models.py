@@ -17,6 +17,7 @@ class Customer(models.Model):
     email = models.CharField(max_length=500, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     user_detail = models.ForeignKey('accounts.UserDetail', on_delete=models.SET_NULL, blank=True, null=True, related_name='customers', verbose_name="User Detail")
+    user_details = models.ManyToManyField('accounts.UserDetail', blank=True, related_name='customers_list', verbose_name="User Details")
     contact_person = models.CharField(max_length=255, blank=True, null=True, verbose_name="User Name")
     contact_number = models.CharField(max_length=500, blank=True, null=True, verbose_name="User Number")
     user_mail_id = models.CharField(max_length=500, blank=True, null=True, verbose_name="User Mail ID")
@@ -28,17 +29,42 @@ class Customer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
+    def users_list(self):
+        """Returns list of UserDetail objects; falls back to user_detail if M2M empty."""
+        users = list(self.user_details.all())
+        if not users and self.user_detail:
+            return [self.user_detail]
+        return users
+
+    @property
+    def user_ids_list(self):
+        return [u.id for u in self.users_list]
+
+    @property
+    def user_display_names(self):
+        users = self.users_list
+        if users:
+            return [u.user_name for u in users]
+        if self.contact_person:
+            return [p.strip() for p in self.contact_person.split(',') if p.strip()]
+        return []
+
+    @property
     def user_display_name(self):
-        if self.user_detail:
-            return self.user_detail.user_name
-        return self.contact_person or ''
+        names = self.user_display_names
+        return ', '.join(names) if names else ''
 
     @property
     def kind_attention_display(self):
-        if self.user_detail:
-            if self.user_detail.user_designation:
-                return f"{self.user_detail.user_name} ({self.user_detail.user_designation})"
-            return self.user_detail.user_name
+        users = self.users_list
+        if users:
+            parts = []
+            for u in users:
+                if u.user_designation:
+                    parts.append(f"{u.user_name} ({u.user_designation})")
+                else:
+                    parts.append(u.user_name)
+            return ', '.join(parts)
         if self.contact_person:
             try:
                 from accounts.models import UserDetail

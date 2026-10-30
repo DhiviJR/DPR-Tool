@@ -524,17 +524,25 @@ def sync_rfq_inbox(rfq=None, mail=None, scan_limit=300):
             mail.login(imap_user, imap_password)
             close_mail_at_end = True
 
-        status, _ = mail.select('INBOX', readonly=True)
+        status, select_data = mail.select('INBOX', readonly=True)
         if status != 'OK':
             return 0, "Unable to select INBOX."
 
-        status, data = mail.search(None, 'ALL')
-        if status != 'OK' or not data[0]:
-            return 0, None
+        limit_val = scan_limit if (scan_limit and isinstance(scan_limit, int) and scan_limit > 0) else 100
+        total_msgs = 0
+        if select_data and select_data[0] and select_data[0].isdigit():
+            total_msgs = int(select_data[0])
 
-        msg_nums = data[0].split()
-        limit_val = scan_limit if (scan_limit and isinstance(scan_limit, int) and scan_limit > 0) else 300
-        recent_nums = msg_nums[-limit_val:]
+        if total_msgs > 0:
+            start_num = max(1, total_msgs - limit_val + 1)
+            recent_nums = [str(i).encode() for i in range(start_num, total_msgs + 1)]
+        else:
+            status, data = mail.search(None, 'ALL')
+            if status != 'OK' or not data[0]:
+                return 0, None
+            msg_nums = data[0].split()
+            recent_nums = msg_nums[-limit_val:]
+
         if not recent_nums:
             return 0, None
 

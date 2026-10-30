@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link href="{% static 'css/dpr-theme.css' %}?v=6" rel="stylesheet">
+    <link href="{% static 'css/dpr-theme.css' %}?v=8" rel="stylesheet">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="dpr-app">
@@ -109,14 +109,12 @@
     </div>
 </nav>
 
-<div id="globalSyncAlertToast" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1085; display: none;">
-    <div id="globalSyncToastInner" class="toast show align-items-center text-white bg-primary border-0 shadow-lg" role="alert">
-        <div class="d-flex p-2">
-            <div class="toast-body py-1 fs-6" id="globalSyncToastMsg">
-                Syncing emails...
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="document.getElementById('globalSyncAlertToast').style.display='none';"></button>
+<div id="globalSyncAlertToast" class="position-fixed top-0 end-0 p-3" style="z-index: 10850; display: none;">
+    <div id="globalSyncToastInner" class="align-items-center text-white bg-primary border-0 shadow-lg rounded-3 p-3 d-flex" style="min-width: 320px; max-width: 480px;">
+        <div class="flex-grow-1 fs-6 pe-2" id="globalSyncToastMsg">
+            Syncing emails...
         </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" id="globalSyncToastCloseBtn" aria-label="Close"></button>
     </div>
 </div>
 
@@ -124,10 +122,13 @@
     {% block content %}{% endblock %}
 </div>
 
-<!-- Global Page & Process Loading Overlay -->
+<!-- Global Top Navigation Progress Bar -->
+<div id="dprTopProgressBar" style="display:none; position:fixed; top:0; left:0; width:0%; height:3px; background:#0d6efd; z-index:999999; transition:width 0.3s ease; box-shadow:0 0 8px rgba(13,110,253,0.6);"></div>
+
+<!-- Global Page & Process Loading Overlay (fallback for slow operations > 800ms) -->
 <div id="dprGlobalLoader" class="dpr-loader-overlay d-none">
     <div class="dpr-loader-content text-center p-4 rounded-4 shadow-lg">
-        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+        <div class="spinner-border text-primary mb-3" style="width: 2.8rem; height: 2.8rem;" role="status">
             <span class="visually-hidden">Loading...</span>
         </div>
         <div class="fw-bold text-dark fs-5 mb-0">Loading...</div>
@@ -151,16 +152,14 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background-color: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background-color: rgba(15, 23, 42, 0.40);
     z-index: 99999;
     display: flex;
     align-items: center;
     justify-content: center;
     opacity: 0;
     pointer-events: none !important;
-    transition: opacity 0.2s ease-in-out;
+    transition: opacity 0.15s ease-in-out;
 }
 
 .dpr-loader-overlay.active {
@@ -169,10 +168,10 @@
 }
 
 .dpr-loader-content {
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    min-width: 240px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    min-width: 220px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
 }
 </style>
 
@@ -188,17 +187,55 @@ window.escapeHtml = function(value) {
 };
 
 (function() {
+    let loaderTimeout = null;
+    let linkLoadingTimer = null;
+    let progressTimer = null;
+
+    function startTopProgress() {
+        const bar = document.getElementById('dprTopProgressBar');
+        if (!bar) return;
+        bar.style.display = 'block';
+        bar.style.width = '35%';
+        clearInterval(progressTimer);
+        progressTimer = setInterval(function() {
+            const current = parseFloat(bar.style.width) || 35;
+            if (current < 85) {
+                bar.style.width = (current + Math.random() * 12) + '%';
+            }
+        }, 200);
+    }
+
+    function stopTopProgress() {
+        clearInterval(progressTimer);
+        const bar = document.getElementById('dprTopProgressBar');
+        if (!bar) return;
+        bar.style.width = '100%';
+        setTimeout(function() {
+            bar.style.display = 'none';
+            bar.style.width = '0%';
+        }, 200);
+    }
+
     window.showLoading = function() {
+        startTopProgress();
         const loader = document.getElementById('dprGlobalLoader');
         if (loader) {
+            clearTimeout(loaderTimeout);
             loader.classList.remove('d-none');
             requestAnimationFrame(function() {
                 loader.classList.add('active');
             });
+            // Safety timeout: automatically dismiss after 6 seconds in case navigation is cancelled or delayed
+            loaderTimeout = setTimeout(function() {
+                window.hideLoading();
+            }, 6000);
         }
     };
 
     window.hideLoading = function() {
+        clearTimeout(loaderTimeout);
+        clearTimeout(linkLoadingTimer);
+        stopTopProgress();
         const loader = document.getElementById('dprGlobalLoader');
         if (loader) {
             loader.classList.remove('active');
@@ -206,30 +243,52 @@ window.escapeHtml = function(value) {
         }
     };
 
-    window.addEventListener('beforeunload', function() {
-        showLoading();
-    });
-
+    // Ensure loader is hidden when page is loaded, shown from cache, or ready
     window.addEventListener('pageshow', function() {
+        hideLoading();
+    });
+    window.addEventListener('load', function() {
         hideLoading();
     });
     document.addEventListener('DOMContentLoaded', function() {
         hideLoading();
     });
 
+    // Dismiss loader if user clicks the overlay or presses Escape
+    const loaderOverlay = document.getElementById('dprGlobalLoader');
+    if (loaderOverlay) {
+        loaderOverlay.addEventListener('click', function() {
+            hideLoading();
+        });
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideLoading();
+        }
+    });
+
+    // Non-blocking navigation: immediately animate sleek top progress bar,
+    // only show the centered modal if the transition takes longer than 800ms
     document.addEventListener('click', function(e) {
         const link = e.target.closest('a');
         if (!link) return;
         const href = link.getAttribute('href');
         const target = link.getAttribute('target');
-        
+
         if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
         if (target === '_blank' || link.hasAttribute('download')) return;
+        // Skip loader for file-download URLs – the browser handles them inline, the page never unloads
+        if (/\/download\/?$/.test(href) || href.includes('/documents/download') || href.includes('/quotation/download') || link.dataset.skipLoader === 'true') return;
         if (e.ctrlKey || e.metaKey || e.shiftKey) return;
 
-        showLoading();
+        startTopProgress();
+        clearTimeout(linkLoadingTimer);
+        linkLoadingTimer = setTimeout(function() {
+            showLoading();
+        }, 800);
     });
 
+    // Form submissions (like creating/updating entities) show loading
     document.addEventListener('submit', function(e) {
         const form = e.target;
         if (form.target === '_blank') return;
@@ -240,43 +299,63 @@ window.escapeHtml = function(value) {
 
         showLoading();
     });
-
-    if (window.fetch) {
-        const originalFetch = window.fetch;
-        window.fetch = function(resource, init) {
-            const skipLoader = init && (init.skipLoader || (init.headers && (init.headers['X-Skip-Loader'] || init.headers['x-skip-loader'])));
-            if (!skipLoader) showLoading();
-            return originalFetch.apply(this, arguments)
-                .then(function(response) {
-                    if (!skipLoader) hideLoading();
-                    return response;
-                })
-                .catch(function(error) {
-                    if (!skipLoader) hideLoading();
-                    throw error;
-                });
-        };
-    }
 })();
 
+let globalSyncTimer = null;
+
+function showSyncToast(htmlMessage, bgClass, autoDismissMs) {
+    if (globalSyncTimer) {
+        clearTimeout(globalSyncTimer);
+        globalSyncTimer = null;
+    }
+    const container = document.getElementById('globalSyncAlertToast');
+    const inner = document.getElementById('globalSyncToastInner');
+    const msg = document.getElementById('globalSyncToastMsg');
+    if (!container || !inner || !msg) return;
+
+    inner.className = `align-items-center text-white ${bgClass} border-0 shadow-lg rounded-3 p-3 d-flex`;
+    msg.innerHTML = htmlMessage;
+    container.style.display = 'block';
+
+    if (autoDismissMs && autoDismissMs > 0) {
+        globalSyncTimer = setTimeout(function() {
+            container.style.display = 'none';
+            globalSyncTimer = null;
+        }, autoDismissMs);
+    }
+}
+
+function hideSyncToast() {
+    if (globalSyncTimer) {
+        clearTimeout(globalSyncTimer);
+        globalSyncTimer = null;
+    }
+    const container = document.getElementById('globalSyncAlertToast');
+    if (container) {
+        container.style.display = 'none';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    const closeBtn = document.getElementById('globalSyncToastCloseBtn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', hideSyncToast);
+    }
+
     const syncBtn = document.getElementById('globalSyncMailBtn');
     if (syncBtn) {
         syncBtn.addEventListener('click', function() {
             const btn = this;
             const spinner = document.getElementById('globalSyncSpinner');
-            const alertToast = document.getElementById('globalSyncAlertToast');
-            const toastInner = document.getElementById('globalSyncToastInner');
-            const toastMsg = document.getElementById('globalSyncToastMsg');
 
             if (spinner) spinner.classList.add('dash-spinning');
             btn.disabled = true;
 
-            if (alertToast && toastMsg && toastInner) {
-                toastInner.className = 'toast show align-items-center text-white bg-primary border-0 shadow-lg';
-                toastMsg.innerHTML = '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2"></div>Syncing all inboxes (RFQ & Emails)...</div>';
-                alertToast.style.display = 'block';
-            }
+            showSyncToast(
+                '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div><span>Syncing all inboxes (RFQ & Emails)...</span></div>',
+                'bg-primary',
+                0
+            );
 
             fetch('{% url "sync_all_mail" %}', {
                 method: 'POST',
@@ -298,26 +377,43 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (spinner) spinner.classList.remove('dash-spinning');
                 btn.disabled = false;
-                const bgClass = data.status === 'success' ? 'bg-success' : (data.status === 'warning' ? 'bg-warning text-dark' : 'bg-danger');
-                const icon = data.status === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill';
-                if (alertToast && toastMsg && toastInner) {
-                    toastInner.className = `toast show align-items-center text-white ${bgClass} border-0 shadow-lg`;
-                    toastMsg.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-${icon} me-2 fs-5"></i><span>${window.escapeHtml(data.message || 'Sync completed.')}</span></div>`;
-                    setTimeout(function() {
-                        if (alertToast) alertToast.style.display = 'none';
-                    }, 6000);
+
+                const isSuccess = data.status === 'success';
+                const isWarning = data.status === 'warning';
+                const bgClass = isSuccess ? 'bg-success' : (isWarning ? 'bg-warning text-dark' : 'bg-danger');
+                const icon = isSuccess ? 'check-circle-fill' : 'exclamation-triangle-fill';
+                const messageText = data.message || (isSuccess ? 'Sync complete. Inboxes are up to date.' : 'Sync completed with warnings.');
+
+                const totalNew = (data.total_synced || 0);
+                if (totalNew > 0) {
+                    showSyncToast(
+                        `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>${window.escapeHtml(messageText)} Updating list...</span></div>`,
+                        'bg-success',
+                        4000
+                    );
+                    const path = window.location.pathname;
+                    if (path.includes('/email-classifier') || path.includes('/rfq')) {
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 1200);
+                    }
+                } else {
+                    showSyncToast(
+                        `<div class="d-flex align-items-center"><i class="bi bi-${icon} me-2 fs-5"></i><span>${window.escapeHtml(messageText)}</span></div>`,
+                        bgClass,
+                        7000
+                    );
                 }
             })
             .catch(err => {
                 if (spinner) spinner.classList.remove('dash-spinning');
                 btn.disabled = false;
-                if (alertToast && toastMsg && toastInner) {
-                    toastInner.className = 'toast show align-items-center text-white bg-danger border-0 shadow-lg';
-                    toastMsg.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-x-circle-fill me-2 fs-5"></i><span>Sync error: ${window.escapeHtml(err.message)}</span></div>`;
-                    setTimeout(function() {
-                        if (alertToast) alertToast.style.display = 'none';
-                    }, 6000);
-                }
+
+                showSyncToast(
+                    `<div class="d-flex align-items-center"><i class="bi bi-x-circle-fill me-2 fs-5"></i><span>Sync error: ${window.escapeHtml(err.message)}</span></div>`,
+                    'bg-danger',
+                    8000
+                );
             });
         });
     }

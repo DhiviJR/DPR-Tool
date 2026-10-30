@@ -55,6 +55,15 @@
                     <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" data-rate="{{ p.rate_per_unit }}" {% if p.id == sp.customer_product.id %}selected{% endif %}>{{ p.product_name }}</option>
                     {% endfor %}
                   </select>
+                  <div class="product-desc-wrapper mt-1" {% if not sp.customer_product.item_description %}style="display: none;"{% endif %}>
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 toggle-desc-btn d-inline-flex align-items-center" style="font-size: 0.74rem; line-height: 1.6; border-radius: 4px;">
+                      <span>Product Description</span>
+                      <i class="bi bi-chevron-down ms-1 toggle-icon" style="font-size: 0.65rem;"></i>
+                    </button>
+                    <div class="product-item-description-box p-2 mt-1 rounded bg-light border text-dark shadow-xs" style="display: none; font-size: 0.76rem; max-width: 280px; max-height: 160px; overflow-y: auto; white-space: normal; line-height: 1.35; word-break: break-word;">
+                      {{ sp.customer_product.item_description|default:'' }}
+                    </div>
+                  </div>
                 </td>
                 <td>
                   <div class="d-flex">
@@ -79,7 +88,7 @@
                 </td>
                 <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" value="{{ sp.po_value }}" readonly required></td>
                 <td>
-                  <input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" min="{{ today_str }}" required>
+                  <input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ sp.po_validity|date:'Y-m-d' }}" {% if not target_customer_date or target_customer_date >= today %}min="{{ today_str }}"{% endif %} required>
                   <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
                 </td>
                 <td class="text-center" style="width: 50px;">
@@ -99,6 +108,15 @@
                     <option value="{{ prod.id }}" data-max-qty="{{ prod.quantity_ordered }}" data-rate="{{ prod.rate_per_unit }}" {% if prod.id == p.id %}selected{% endif %}>{{ prod.product_name }}</option>
                     {% endfor %}
                   </select>
+                  <div class="product-desc-wrapper mt-1" {% if not p.item_description %}style="display: none;"{% endif %}>
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 toggle-desc-btn d-inline-flex align-items-center" style="font-size: 0.74rem; line-height: 1.6; border-radius: 4px;">
+                      <span>Product Description</span>
+                      <i class="bi bi-chevron-down ms-1 toggle-icon" style="font-size: 0.65rem;"></i>
+                    </button>
+                    <div class="product-item-description-box p-2 mt-1 rounded bg-light border text-dark shadow-xs" style="display: none; font-size: 0.76rem; max-width: 280px; max-height: 160px; overflow-y: auto; white-space: normal; line-height: 1.35; word-break: break-word;">
+                      {{ p.item_description|default:'' }}
+                    </div>
+                  </div>
                 </td>
                 <td>
                   <div class="d-flex">
@@ -123,7 +141,7 @@
                 </td>
                 <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
                 <td>
-                  <input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ default_supplier_validity|date:'Y-m-d' }}" min="{{ today_str }}" required>
+                  <input type="date" name="po_validity[]" class="form-control po-validity-input" value="{{ default_supplier_validity|date:'Y-m-d' }}" {% if not target_customer_date or target_customer_date >= today %}min="{{ today_str }}"{% endif %} required>
                   <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
                 </td>
                 <td>
@@ -138,6 +156,13 @@
                   <select name="product[]" class="form-select product-select" style="min-width: 250px;" required>
                     <option value="">Select</option>
                   </select>
+                  <div class="product-desc-wrapper mt-1" style="display: none;">
+                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 toggle-desc-btn d-inline-flex align-items-center" style="font-size: 0.74rem; line-height: 1.6; border-radius: 4px;">
+                      <span>Product Description</span>
+                      <i class="bi bi-chevron-down ms-1 toggle-icon" style="font-size: 0.65rem;"></i>
+                    </button>
+                    <div class="product-item-description-box p-2 mt-1 rounded bg-light border text-dark shadow-xs" style="display: none; font-size: 0.76rem; max-width: 280px; max-height: 160px; overflow-y: auto; white-space: normal; line-height: 1.35; word-break: break-word;"></div>
+                  </div>
                 </td>
                 <td>
                   <div class="d-flex">
@@ -171,10 +196,22 @@
         </strong>
       </div>
       <button type="button" class="btn btn-secondary mb-3" id="addSupplierRow" {% if total_supplier_quantity >= total_customer_quantity and total_customer_quantity > 0 %}disabled{% endif %}>Add Row</button>
-      <div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button type="button"
+                class="btn btn-primary"
+                id="generatePoBtn"
+                title="Update supplier order and generate Purchase Order PDF">
+          <i class="bi bi-file-earmark-arrow-down me-1"></i> Generate PO & Update
+        </button>
+        <button type="submit"
+                class="btn btn-success"
+                id="saveSupplierOrderBtn"
+                title="Save supplier order">
+          <i class="bi bi-check-circle me-1"></i> Save Supplier Order
+        </button>
         <a href="{% url 'dpr_view' %}" class="btn btn-outline-secondary">Close</a>
         {% if supplier_orders and missing_email_suppliers %}
-        <div class="text-danger small mt-2">
+        <div class="text-danger small w-100 mt-2">
           * Send Email is disabled for suppliers without an Email ID: <strong>{{ missing_email_suppliers|join:", " }}</strong>.
           Please add their email address in <a href="{% url 'supplier_details' %}">Masters -> Suppliers</a>.
         </div>
@@ -257,10 +294,12 @@
 {{ rfq_rate_map|json_script:'rfq-rate-map' }}
 {{ product_default_rate_map|json_script:'product-default-rate-map' }}
 {{ po_data_list|json_script:"po-email-data" }}
+{{ product_desc_map|json_script:"product-desc-map" }}
 <script>
 const rfqRateMap = JSON.parse(document.getElementById('rfq-rate-map').textContent);
 const productDefaultRateMap = JSON.parse(document.getElementById('product-default-rate-map').textContent);
 const poEmailData = JSON.parse(document.getElementById('po-email-data').textContent || '[]');
+const productDescriptions = JSON.parse(document.getElementById('product-desc-map')?.textContent || '{}');
 const targetCustomerDateStr = '{{ target_customer_date|date:"Y-m-d" }}';
 const targetCustomerDateDisplay = '{{ target_customer_date|date:"d-m-Y" }}';
 const defaultSupplierValidityDate = '{{ default_supplier_validity|date:"Y-m-d" }}';
@@ -286,10 +325,17 @@ function validateValidityDateInput(input) {
 
   const inputDate = new Date(input.value + 'T00:00:00');
 
-  // Check 1: Cannot be in the past
+  // Check 1: Cannot be in the past (only if targetCustomerDate is today/future or not set)
   if (todayDateStr) {
     const todayDate = new Date(todayDateStr + 'T00:00:00');
-    if (inputDate < todayDate) {
+    let isCustomerInPast = false;
+    if (targetCustomerDateStr) {
+      const customerDate = new Date(targetCustomerDateStr + 'T00:00:00');
+      if (customerDate < todayDate) {
+        isCustomerInPast = true;
+      }
+    }
+    if (!isCustomerInPast && inputDate < todayDate) {
       input.classList.add('is-invalid');
       input.classList.remove('border-warning');
       msgEl.style.display = 'block';
@@ -352,6 +398,38 @@ function getNextRowIndex() {
   return document.querySelectorAll('#supplierTable tbody tr').length;
 }
 
+
+document.addEventListener('click', function(e) {
+  const toggleBtn = e.target.closest('.toggle-desc-btn');
+  if (toggleBtn) {
+    e.preventDefault();
+    const wrapper = toggleBtn.closest('.product-desc-wrapper');
+    if (!wrapper) return;
+    const box = wrapper.querySelector('.product-item-description-box');
+    const icon = toggleBtn.querySelector('.toggle-icon');
+    if (box) {
+      const isHidden = box.style.display === 'none' || !box.style.display;
+      if (isHidden) {
+        box.style.display = 'block';
+        if (icon) {
+          icon.classList.remove('bi-chevron-down');
+          icon.classList.add('bi-chevron-up');
+        }
+        toggleBtn.classList.remove('btn-outline-secondary');
+        toggleBtn.classList.add('btn-secondary', 'text-white');
+      } else {
+        box.style.display = 'none';
+        if (icon) {
+          icon.classList.remove('bi-chevron-up');
+          icon.classList.add('bi-chevron-down');
+        }
+        toggleBtn.classList.remove('btn-secondary', 'text-white');
+        toggleBtn.classList.add('btn-outline-secondary');
+      }
+    }
+  }
+});
+
 function handleProductChange(row) {
   const productSelect = row.querySelector('.product-select');
   if (!productSelect) return;
@@ -360,6 +438,32 @@ function handleProductChange(row) {
   const supplierDropdown = row.querySelector('.supplier-dropdown');
   const rateInput = row.querySelector('.rate-input');
   const quantityInput = row.querySelector('.quantity-input');
+
+  const wrapper = row.querySelector('.product-desc-wrapper');
+  const descBox = row.querySelector('.product-item-description-box');
+  const toggleBtn = row.querySelector('.toggle-desc-btn');
+  const icon = toggleBtn ? toggleBtn.querySelector('.toggle-icon') : null;
+  const descText = (productDescriptions[productId] || '').trim();
+
+  if (wrapper && descBox) {
+    if (descText) {
+      descBox.textContent = descText;
+      wrapper.style.display = 'block';
+      descBox.style.display = 'none';
+      if (icon) {
+        icon.classList.remove('bi-chevron-up');
+        icon.classList.add('bi-chevron-down');
+      }
+      if (toggleBtn) {
+        toggleBtn.classList.remove('btn-secondary', 'text-white');
+        toggleBtn.classList.add('btn-outline-secondary');
+      }
+    } else {
+      descBox.textContent = '';
+      wrapper.style.display = 'none';
+      descBox.style.display = 'none';
+    }
+  }
 
   if (!productId) {
     if (supplierDropdown) supplierDropdown.value = '';
@@ -563,6 +667,13 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
         <option value="{{ p.id }}" data-max-qty="{{ p.quantity_ordered }}" data-rate="{{ p.rate_per_unit }}">{{ p.product_name }}</option>
         {% endfor %}
       </select>
+      <div class="product-desc-wrapper mt-1" style="display: none;">
+        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 toggle-desc-btn d-inline-flex align-items-center" style="font-size: 0.74rem; line-height: 1.6; border-radius: 4px;">
+          <span>Product Description</span>
+          <i class="bi bi-chevron-down ms-1 toggle-icon" style="font-size: 0.65rem;"></i>
+        </button>
+        <div class="product-item-description-box p-2 mt-1 rounded bg-light border text-dark shadow-xs" style="display: none; font-size: 0.76rem; max-width: 280px; max-height: 160px; overflow-y: auto; white-space: normal; line-height: 1.35; word-break: break-word;"></div>
+      </div>
     </td>
     <td>
       <div class="d-flex">
@@ -587,7 +698,7 @@ document.getElementById('addSupplierRow')?.addEventListener('click', function ()
     </td>
     <td><input type="number" step="0.01" name="po_value[]" class="form-control po-value-input" style="min-width: 180px;" readonly required></td>
     <td>
-      <input type="date" name="po_validity[]" class="form-control po-validity-input" value="${defaultSupplierValidityDate}" min="${todayDateStr}" required>
+      <input type="date" name="po_validity[]" class="form-control po-validity-input" value="${defaultSupplierValidityDate}" ${(!targetCustomerDateStr || new Date(targetCustomerDateStr + 'T00:00:00') >= new Date(todayDateStr + 'T00:00:00')) ? `min="${todayDateStr}"` : ''} required>
       <div class="validity-warning-msg small mt-1" style="display:none; font-size: 0.72rem; line-height: 1.2;"></div>
     </td>
     <td class="text-center" style="width: 50px;">
@@ -864,11 +975,15 @@ document.getElementById('supplierOrderForm').addEventListener('submit', function
       return;
     }
 
-    if ('{{ dpr.po_validity|date:"Y-m-d" }}' && poValidityInput && poValidityInput.value && poValidityInput.value >= '{{ dpr.po_validity|date:"Y-m-d" }}') {
-      e.preventDefault();
-      alert('Supplier PO validity should be before customer PO validity.');
-      poValidityInput.focus();
-      return;
+    if (targetCustomerDateStr && poValidityInput && poValidityInput.value) {
+      const custD = new Date(targetCustomerDateStr + 'T00:00:00');
+      const valD = new Date(poValidityInput.value + 'T00:00:00');
+      if (valD >= custD) {
+        e.preventDefault();
+        alert(`Supplier PO validity must be earlier than Customer PO Date (${targetCustomerDateDisplay}).`);
+        poValidityInput.focus();
+        return;
+      }
     }
   }
 

@@ -4,10 +4,37 @@
 
 {% block extra_head %}
 <style>
-.user-searchable-combobox {
+.user-multi-select-container {
     position: relative;
 }
-.user-custom-dropdown {
+.user-multi-select-trigger {
+    background-color: #ffffff;
+    cursor: pointer;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    min-height: 31px;
+    user-select: none;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.user-multi-select-trigger:focus,
+.user-multi-select-trigger.active {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+    outline: 0;
+}
+.user-multi-select-trigger.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.2);
+}
+.user-multi-select-label {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.82rem;
+    color: #212529;
+}
+.user-multi-select-dropdown {
     position: fixed;
     z-index: 999999 !important;
     background: #ffffff;
@@ -17,37 +44,76 @@
     display: none;
     padding: 0;
     overflow: hidden;
+    min-width: 250px;
+    max-width: 360px;
 }
-.user-custom-dropdown.active-show {
+.user-multi-select-dropdown.active-show {
     display: block !important;
 }
-.user-options-container {
+.user-multi-search-box {
+    padding: 6px 8px;
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8fafc;
+}
+.user-multi-options {
     max-height: 220px;
     overflow-y: auto;
 }
-.user-custom-option {
+.user-multi-option {
     display: flex;
     align-items: center;
-    padding: 7px 12px;
+    padding: 6px 12px;
     font-size: 0.82rem;
     color: #212529;
     cursor: pointer;
     user-select: none;
+    gap: 8px;
     transition: background-color 0.15s ease;
 }
-.user-custom-option:hover,
-.user-custom-option.highlighted {
-    background-color: #e9ecef;
+.user-multi-option:hover,
+.user-multi-option.highlighted {
+    background-color: #f1f5f9;
+}
+.user-multi-option.selected {
+    background-color: #e7f1ff;
     color: #0d6efd;
 }
-.user-custom-add-btn {
+.user-multi-option input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+    pointer-events: none;
+}
+.user-multi-add-btn {
     border-top: 1px solid #dee2e6;
     color: #0d6efd;
     font-weight: 600;
     background-color: #f8fafc;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
 }
-.user-custom-add-btn:hover {
+.user-multi-add-btn:hover {
     background-color: #e7f1ff;
+    color: #0a58ca;
+}
+.user-badge-link {
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #0d6efd;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+}
+.user-badge-link:hover {
+    background-color: #e0edff;
+    border-color: #93c5fd;
     color: #0a58ca;
 }
 </style>
@@ -55,10 +121,37 @@
 
 {% block content %}
 <style>
-.user-searchable-combobox {
+.user-multi-select-container {
     position: relative;
 }
-.user-custom-dropdown {
+.user-multi-select-trigger {
+    background-color: #ffffff;
+    cursor: pointer;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    min-height: 31px;
+    user-select: none;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.user-multi-select-trigger:focus,
+.user-multi-select-trigger.active {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+    outline: 0;
+}
+.user-multi-select-trigger.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.2);
+}
+.user-multi-select-label {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.82rem;
+    color: #212529;
+}
+.user-multi-select-dropdown {
     position: fixed;
     z-index: 999999 !important;
     background: #ffffff;
@@ -68,37 +161,76 @@
     display: none;
     padding: 0;
     overflow: hidden;
+    min-width: 250px;
+    max-width: 360px;
 }
-.user-custom-dropdown.active-show {
+.user-multi-select-dropdown.active-show {
     display: block !important;
 }
-.user-options-container {
+.user-multi-search-box {
+    padding: 6px 8px;
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8fafc;
+}
+.user-multi-options {
     max-height: 220px;
     overflow-y: auto;
 }
-.user-custom-option {
+.user-multi-option {
     display: flex;
     align-items: center;
-    padding: 7px 12px;
+    padding: 6px 12px;
     font-size: 0.82rem;
     color: #212529;
     cursor: pointer;
     user-select: none;
+    gap: 8px;
     transition: background-color 0.15s ease;
 }
-.user-custom-option:hover,
-.user-custom-option.highlighted {
-    background-color: #e9ecef;
+.user-multi-option:hover,
+.user-multi-option.highlighted {
+    background-color: #f1f5f9;
+}
+.user-multi-option.selected {
+    background-color: #e7f1ff;
     color: #0d6efd;
 }
-.user-custom-add-btn {
+.user-multi-option input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+    pointer-events: none;
+}
+.user-multi-add-btn {
     border-top: 1px solid #dee2e6;
     color: #0d6efd;
     font-weight: 600;
     background-color: #f8fafc;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
 }
-.user-custom-add-btn:hover {
+.user-multi-add-btn:hover {
     background-color: #e7f1ff;
+    color: #0a58ca;
+}
+.user-badge-link {
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #0d6efd;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+}
+.user-badge-link:hover {
+    background-color: #e0edff;
+    border-color: #93c5fd;
     color: #0a58ca;
 }
 </style>
@@ -115,13 +247,25 @@
 
 {% if messages %}
     {% for message in messages %}
-    <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show d-flex align-items-center justify-content-between py-2 px-3 shadow-sm mb-3" role="alert">
+        <div class="d-flex align-items-center">
+            {% if message.tags == 'success' %}
+            <i class="bi bi-check-circle-fill text-success me-2 fs-6"></i>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+            <i class="bi bi-exclamation-triangle-fill text-danger me-2 fs-6"></i>
+            {% else %}
+            <i class="bi bi-info-circle-fill text-info me-2 fs-6"></i>
+            {% endif %}
+            <span>{{ message }}</span>
+        </div>
+        <button type="button" class="btn-close ms-2 position-static" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
     {% endfor %}
 {% endif %}
 
 <div class="dpr-card mb-4">
     <div class="card-body">
-        <form method="post" class="row g-2 align-items-end flex-nowrap overflow-x-auto pb-1">
+        <form method="post" id="addSupplierForm" class="row g-2 align-items-end flex-nowrap overflow-x-auto pb-1">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
             <div class="col" style="min-width: 140px;">
@@ -136,36 +280,30 @@
                 <label class="form-label small fw-semibold text-nowrap mb-1">Phone Number</label>
                 <input type="tel" name="phone_number" class="form-control form-control-sm js-phone-input" maxlength="10" inputmode="numeric">
             </div>
-            <div class="col user-searchable-combobox position-relative" style="min-width: 180px;">
+            <div class="col user-multi-select-container" style="min-width: 190px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">User Details *</label>
-                <div class="input-group input-group-sm">
-                    <input type="text" 
-                           class="form-control form-control-sm user-search-input" 
-                           placeholder="Type or select user..." 
-                           autocomplete="off" 
-                           required>
-                    <button class="btn btn-outline-secondary user-search-toggle" type="button" tabindex="-1" title="Show all users">
-                        <i class="bi bi-chevron-down" style="font-size: 0.75rem;"></i>
-                    </button>
+                <div class="user-multi-select-trigger form-control form-control-sm d-flex align-items-center justify-content-between p-1 px-2" tabindex="0" role="button" aria-haspopup="listbox" title="Click to select multiple users">
+                    <span class="user-multi-select-label text-truncate text-muted" style="max-width: 150px;">Select user(s)...</span>
+                    <i class="bi bi-chevron-down ms-1 text-secondary" style="font-size: 0.75rem;"></i>
                 </div>
-                <input type="hidden" name="user_detail_id" class="user-search-hidden" value="{{ selected_user_id|default:'' }}" required>
-                <div class="user-custom-dropdown">
-                    <div class="user-options-container">
+                <input type="hidden" name="user_detail_ids" class="user-multi-hidden-ids" value="{% for uid in prefill_user_ids %}{{ uid }}{% if not forloop.last %},{% endif %}{% endfor %}">
+                <div class="user-multi-select-dropdown">
+                    <div class="user-multi-search-box">
+                        <input type="text" class="form-control form-control-sm user-multi-filter" placeholder="Search user..." autocomplete="off">
+                    </div>
+                    <div class="user-multi-options">
                         {% for u in user_details_list %}
-                        <div class="user-custom-option user-option-item" 
-                             data-id="{{ u.id }}" 
-                             data-name="{{ u.user_name }}" 
-                             data-designation="{{ u.user_designation|default:'' }}"
-                             data-display="{{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}">
+                        <div class="user-multi-option" data-id="{{ u.id }}" data-name="{{ u.user_name }}" data-designation="{{ u.user_designation|default:'' }}" data-display="{{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}">
+                            <input type="checkbox" class="form-check-input user-multi-checkbox" data-id="{{ u.id }}">
                             <span class="fw-semibold">{{ u.user_name }}</span>
-                            {% if u.user_designation %}<span class="text-muted small ms-1">({{ u.user_designation }})</span>{% endif %}
+                            {% if u.user_designation %}<span class="text-muted small ms-auto">({{ u.user_designation }})</span>{% endif %}
                         </div>
                         {% endfor %}
+                        <div class="user-multi-no-results text-muted small px-3 py-2 d-none">No user found</div>
                     </div>
-                    <div class="user-custom-option user-custom-add-btn user-option-add-new">
+                    <div class="user-multi-add-btn">
                         <i class="bi bi-plus-circle me-1"></i>+ Add New User
                     </div>
-                    <div class="user-no-results text-muted small px-3 py-2 d-none">No user found</div>
                 </div>
             </div>
             <div class="col" style="min-width: 130px;">
@@ -228,7 +366,7 @@
                         <th style="min-width: 150px;">Supplier Company Name</th>
                         <th style="min-width: 170px;">Email</th>
                         <th style="min-width: 115px;">Phone Number</th>
-                        <th style="min-width: 140px;">User Details</th>
+                        <th style="min-width: 160px;">User Details</th>
                         <th style="min-width: 130px;">GSTIN</th>
                         <th style="min-width: 85px;">State Code</th>
                         <th style="min-width: 75px;">SEZ</th>
@@ -256,31 +394,54 @@
                             <input type="tel" name="phone_number" form="form-{{ supplier.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ supplier.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
                         </td>
                         <td>
-                            <div class="user-display-wrapper">
-                                {% if supplier.user_display_name %}
-                                <a href="javascript:void(0)" class="js-show-user-modal text-decoration-none fw-semibold text-primary d-inline-flex align-items-center gap-1"
-                                   data-user-name="{{ supplier.user_display_name }}"
-                                   data-user-number="{{ supplier.user_detail.user_number|default:supplier.contact_number|default:'-' }}"
-                                   data-user-email="{{ supplier.user_detail.user_mail_id|default:supplier.user_mail_id|default:'-' }}"
-                                   data-user-designation="{{ supplier.user_detail.user_designation|default:'-' }}"
-                                   data-user-search-url="{% url 'user_details' %}?search={{ supplier.user_display_name|urlencode }}"
-                                   title="Click to view details for {{ supplier.user_display_name }}">
-                                    <span>{{ supplier.user_display_name }}</span>
+                            <div class="user-display-wrapper d-flex flex-wrap gap-1 align-items-center">
+                                {% for u in supplier.users_list %}
+                                <a href="javascript:void(0)" class="js-show-user-modal user-badge-link"
+                                   data-user-name="{{ u.user_name }}"
+                                   data-user-number="{{ u.user_number|default:'-' }}"
+                                   data-user-email="{{ u.user_mail_id|default:'-' }}"
+                                   data-user-designation="{{ u.user_designation|default:'-' }}"
+                                   data-user-search-url="{% url 'user_details' %}?search={{ u.user_name|urlencode }}"
+                                   title="Click to view details for {{ u.user_name }}">
+                                    <span>{{ u.user_name }}</span>
                                     <i class="bi bi-info-circle text-primary" style="font-size: 0.75rem;"></i>
                                 </a>
-                                {% else %}
-                                <span class="text-muted">-</span>
-                                {% endif %}
-                            </div>
-                            <select name="user_detail_id" form="form-{{ supplier.id }}" class="form-select form-select-sm master-edit-field d-none" disabled>
-                                <option value="">Select User</option>
-                                {% for u in user_details_list %}
-                                <option value="{{ u.id }}" {% if supplier.user_detail_id == u.id or supplier.contact_person == u.user_name %}selected{% endif %}>
-                                    {{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}
-                                </option>
+                                {% empty %}
+                                    {% if supplier.contact_person %}
+                                    <span class="fw-semibold text-dark">{{ supplier.contact_person }}</span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
                                 {% endfor %}
-                                <option value="__add_new_user__" class="fw-bold text-primary">+ Add New User</option>
-                            </select>
+                            </div>
+
+                            <div class="user-multi-select-container master-edit-field d-none" style="min-width: 150px;">
+                                <div class="user-multi-select-trigger form-control form-control-sm d-flex align-items-center justify-content-between p-1 px-2" tabindex="0" role="button" aria-haspopup="listbox" title="Click to select multiple users">
+                                    <span class="user-multi-select-label text-truncate" style="max-width: 120px;">
+                                        {% if supplier.user_display_name %}{{ supplier.user_display_name }}{% else %}<span class="text-muted">Select user(s)...</span>{% endif %}
+                                    </span>
+                                    <i class="bi bi-chevron-down ms-1 text-secondary" style="font-size: 0.75rem;"></i>
+                                </div>
+                                <input type="hidden" name="user_detail_ids" form="form-{{ supplier.id }}" class="user-multi-hidden-ids" value="{% for u in supplier.users_list %}{{ u.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+                                <div class="user-multi-select-dropdown">
+                                    <div class="user-multi-search-box">
+                                        <input type="text" class="form-control form-control-sm user-multi-filter" placeholder="Search user..." autocomplete="off">
+                                    </div>
+                                    <div class="user-multi-options">
+                                        {% for u in user_details_list %}
+                                        <div class="user-multi-option" data-id="{{ u.id }}" data-name="{{ u.user_name }}" data-designation="{{ u.user_designation|default:'' }}" data-display="{{ u.user_name }}{% if u.user_designation %} ({{ u.user_designation }}){% endif %}">
+                                            <input type="checkbox" class="form-check-input user-multi-checkbox" data-id="{{ u.id }}" {% if u.id in supplier.user_ids_list %}checked{% endif %}>
+                                            <span class="fw-semibold">{{ u.user_name }}</span>
+                                            {% if u.user_designation %}<span class="text-muted small ms-auto">({{ u.user_designation }})</span>{% endif %}
+                                        </div>
+                                        {% endfor %}
+                                        <div class="user-multi-no-results text-muted small px-3 py-2 d-none">No user found</div>
+                                    </div>
+                                    <div class="user-multi-add-btn">
+                                        <i class="bi bi-plus-circle me-1"></i>+ Add New User
+                                    </div>
+                                </div>
+                            </div>
                         </td>
                         <td>
                             <input type="text" name="gstin" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field js-gstin-input text-uppercase" value="{{ supplier.gstin|default:''|upper }}" maxlength="15" disabled>
@@ -388,22 +549,332 @@ document.addEventListener('input', function (e) {
     }
 });
 
-// Live Table Search Filter
+// Instant As-You-Type Live Table Search Filter
 const supplierSearchInput = document.getElementById('supplierSearchInput');
+const supplierSearchForm = document.getElementById('supplierSearchForm');
+
+function filterSupplierTable() {
+    if (!supplierSearchInput) return;
+    const filter = supplierSearchInput.value.toLowerCase().trim();
+    const tbody = document.querySelector('table tbody');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr');
+    let visibleCount = 0;
+
+    const isEmailSearch = filter.includes('@') || filter.includes('.com') || filter.includes('.in');
+    const isPhoneSearch = /^[\d\s\+\-]+$/.test(filter) && filter.replace(/\D/g, '').length >= 3;
+
+    rows.forEach(row => {
+        if (row.classList.contains('js-search-empty-row') || row.querySelector('td[colspan]')) return;
+
+        if (!filter) {
+            row.style.display = '';
+            visibleCount++;
+            return;
+        }
+
+        const nameInput = row.querySelector('input[name="supplier_name"]');
+        const suppName = nameInput ? nameInput.value.toLowerCase() : '';
+
+        const userWrapper = row.querySelector('.user-display-wrapper');
+        const userText = userWrapper ? userWrapper.textContent.toLowerCase() : '';
+
+        const phoneInput = row.querySelector('input[name="phone_number"]');
+        const phoneText = phoneInput ? phoneInput.value.toLowerCase() : '';
+
+        const emailInput = row.querySelector('input[name="email"]');
+        const emailText = emailInput ? emailInput.value.toLowerCase() : '';
+
+        let isMatch = suppName.includes(filter) || userText.includes(filter);
+        if (isEmailSearch) {
+            isMatch = isMatch || emailText.includes(filter);
+        }
+        if (isPhoneSearch) {
+            isMatch = isMatch || phoneText.includes(filter.replace(/\D/g, ''));
+        }
+
+        row.style.display = isMatch ? '' : 'none';
+        if (isMatch) visibleCount++;
+    });
+
+    const countSpan = document.getElementById('supplierRowCount');
+    if (countSpan) {
+        countSpan.textContent = `Showing ${visibleCount} records`;
+    }
+
+    let emptyRow = tbody.querySelector('.js-search-empty-row');
+    if (visibleCount === 0 && filter) {
+        if (!emptyRow) {
+            emptyRow = document.createElement('tr');
+            emptyRow.className = 'js-search-empty-row';
+            emptyRow.innerHTML = '<td colspan="12" class="text-center py-4 text-muted"><i class="bi bi-search me-1"></i>No matching suppliers found.</td>';
+            tbody.appendChild(emptyRow);
+        } else {
+            emptyRow.style.display = '';
+        }
+    } else if (emptyRow) {
+        emptyRow.style.display = 'none';
+    }
+}
+
+// Hook up search listeners: live typing, search button, and prevent Enter reload
+if (supplierSearchForm) {
+    supplierSearchForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        filterSupplierTable();
+    });
+}
 if (supplierSearchInput) {
-    supplierSearchInput.addEventListener('input', function () {
-        const filter = this.value.toLowerCase().trim();
-        const rows = document.querySelectorAll('tbody tr');
-        let visibleCount = 0;
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            const isMatch = !filter || text.includes(filter);
-            row.style.display = isMatch ? '' : 'none';
-            if (isMatch) visibleCount++;
+    supplierSearchInput.addEventListener('input', filterSupplierTable);
+    supplierSearchInput.addEventListener('keyup', filterSupplierTable);
+    supplierSearchInput.addEventListener('search', filterSupplierTable);
+}
+
+// Global active dropdown tracking for click outside
+let openDropdownManager = null;
+
+// Multi-Select Dropdown Component Logic
+function createUserMultiSelect(container, draftStorageKey, addNewUserUrl) {
+    if (!container) return null;
+
+    const trigger = container.querySelector('.user-multi-select-trigger');
+    const labelSpan = container.querySelector('.user-multi-select-label');
+    const hiddenInput = container.querySelector('.user-multi-hidden-ids');
+    const dropdown = container.querySelector('.user-multi-select-dropdown');
+    const filterInput = container.querySelector('.user-multi-filter');
+    const options = container.querySelectorAll('.user-multi-option');
+    const noResults = container.querySelector('.user-multi-no-results');
+    const addNewBtn = container.querySelector('.user-multi-add-btn');
+
+    if (!trigger || !dropdown || !hiddenInput) return null;
+
+    function getSelectedIds() {
+        const val = hiddenInput.value.trim();
+        if (!val) return [];
+        return val.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    function updateDisplay() {
+        const selectedIds = getSelectedIds();
+        options.forEach(opt => {
+            const id = String(opt.dataset.id);
+            const isSel = selectedIds.includes(id);
+            opt.classList.toggle('selected', isSel);
+            const cb = opt.querySelector('input[type="checkbox"]');
+            if (cb) cb.checked = isSel;
         });
-        const countSpan = document.getElementById('supplierRowCount');
-        if (countSpan) {
-            countSpan.textContent = `Showing ${visibleCount} records`;
+
+        if (selectedIds.length === 0) {
+            labelSpan.innerHTML = '<span class="text-muted">Select user(s)...</span>';
+            labelSpan.title = '';
+        } else if (selectedIds.length === 1) {
+            const firstOpt = Array.from(options).find(o => String(o.dataset.id) === selectedIds[0]);
+            const name = firstOpt ? (firstOpt.dataset.display || firstOpt.dataset.name) : '1 user';
+            labelSpan.textContent = name;
+            labelSpan.title = name;
+        } else {
+            const names = selectedIds.map(id => {
+                const opt = Array.from(options).find(o => String(o.dataset.id) === id);
+                return opt ? opt.dataset.name : id;
+            });
+            labelSpan.textContent = `${selectedIds.length} users selected (${names.slice(0, 2).join(', ')}${names.length > 2 ? '...' : ''})`;
+            labelSpan.title = names.join(', ');
+        }
+    }
+
+    function updateDropdownPosition() {
+        const rect = trigger.getBoundingClientRect();
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = (rect.bottom + 2) + 'px';
+        dropdown.style.left = rect.left + 'px';
+        dropdown.style.width = Math.max(rect.width, 240) + 'px';
+        dropdown.style.zIndex = '999999';
+    }
+
+    function showDropdown() {
+        if (openDropdownManager && openDropdownManager !== hideDropdown) {
+            openDropdownManager();
+        }
+        updateDropdownPosition();
+        dropdown.classList.add('active-show');
+        trigger.classList.add('active');
+        if (filterInput) {
+            filterInput.value = '';
+            filterOptions('');
+            setTimeout(() => filterInput.focus(), 50);
+        }
+        openDropdownManager = hideDropdown;
+    }
+
+    function hideDropdown() {
+        dropdown.classList.remove('active-show');
+        trigger.classList.remove('active');
+        if (openDropdownManager === hideDropdown) {
+            openDropdownManager = null;
+        }
+    }
+
+    function filterOptions(q) {
+        const query = (q || '').toLowerCase().trim();
+        let matchCount = 0;
+        options.forEach(opt => {
+            const name = (opt.dataset.name || '').toLowerCase();
+            const desig = (opt.dataset.designation || '').toLowerCase();
+            const display = (opt.dataset.display || '').toLowerCase();
+            const matches = !query || name.includes(query) || desig.includes(query) || display.includes(query);
+            opt.classList.toggle('d-none', !matches);
+            if (matches) matchCount++;
+        });
+        if (noResults) {
+            noResults.classList.toggle('d-none', matchCount > 0 || !query);
+        }
+    }
+
+    function toggleOption(opt) {
+        const id = String(opt.dataset.id);
+        let selectedIds = getSelectedIds();
+        if (selectedIds.includes(id)) {
+            selectedIds = selectedIds.filter(x => x !== id);
+        } else {
+            selectedIds.push(id);
+        }
+        hiddenInput.value = selectedIds.join(',');
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        trigger.classList.remove('is-invalid');
+        updateDisplay();
+    }
+
+    trigger.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (dropdown.classList.contains('active-show')) {
+            hideDropdown();
+        } else {
+            showDropdown();
+        }
+    });
+
+    trigger.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (dropdown.classList.contains('active-show')) hideDropdown();
+            else showDropdown();
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+
+    if (filterInput) {
+        filterInput.addEventListener('input', function() {
+            filterOptions(this.value);
+        });
+        filterInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hideDropdown();
+                trigger.focus();
+            }
+        });
+        filterInput.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    }
+
+    options.forEach(opt => {
+        opt.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleOption(this);
+        });
+    });
+
+    if (addNewBtn) {
+        addNewBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const form = container.closest('form');
+            if (form && draftStorageKey) {
+                const formData = {};
+                form.querySelectorAll('input, select, textarea').forEach(inp => {
+                    if (inp.name && inp.name !== 'csrfmiddlewaretoken' && inp.name !== 'action') {
+                        formData[inp.name] = inp.value;
+                    }
+                });
+                sessionStorage.setItem(draftStorageKey, JSON.stringify(formData));
+            }
+            const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+            const targetUrl = addNewUserUrl || "{% url 'user_details' %}";
+            window.location.href = `${targetUrl}?return_url=${returnUrl}`;
+        });
+    }
+
+    updateDisplay();
+
+    return {
+        updateDisplay,
+        getSelectedIds,
+        setSelectedIds: function(ids) {
+            hiddenInput.value = (ids || []).join(',');
+            updateDisplay();
+        },
+        reset: function() {
+            hiddenInput.value = hiddenInput.dataset.originalValue || '';
+            updateDisplay();
+        },
+        saveOriginal: function() {
+            hiddenInput.dataset.originalValue = hiddenInput.value;
+        },
+        hideDropdown
+    };
+}
+
+// Global click outside to close open dropdown
+document.addEventListener('click', function(e) {
+    if (openDropdownManager) {
+        const isClickInsideTrigger = e.target.closest('.user-multi-select-trigger');
+        const isClickInsideDropdown = e.target.closest('.user-multi-select-dropdown');
+        if (!isClickInsideTrigger && !isClickInsideDropdown) {
+            openDropdownManager();
+        }
+    }
+});
+
+window.addEventListener('scroll', function() {
+    if (openDropdownManager) {
+        const activeDd = document.querySelector('.user-multi-select-dropdown.active-show');
+        if (activeDd) {
+            const container = activeDd.closest('.user-multi-select-container');
+            if (container) {
+                const trigger = container.querySelector('.user-multi-select-trigger');
+                if (trigger) {
+                    const rect = trigger.getBoundingClientRect();
+                    activeDd.style.top = (rect.bottom + 2) + 'px';
+                    activeDd.style.left = rect.left + 'px';
+                }
+            }
+        }
+    }
+}, true);
+
+window.addEventListener('resize', function() {
+    if (openDropdownManager) {
+        openDropdownManager();
+    }
+});
+
+// Top form submission validation
+const addForm = document.getElementById('addSupplierForm');
+if (addForm) {
+    addForm.addEventListener('submit', function(e) {
+        const hiddenIds = addForm.querySelector('.user-multi-hidden-ids');
+        const trigger = addForm.querySelector('.user-multi-select-trigger');
+        if (hiddenIds && !hiddenIds.value.trim()) {
+            e.preventDefault();
+            if (trigger) {
+                trigger.classList.add('is-invalid');
+                trigger.focus();
+                alert('Please select at least one user from User Details.');
+            }
+            return false;
         }
     });
 }
@@ -438,9 +909,16 @@ document.addEventListener('click', function (e) {
     if (editButton) {
         const row = editButton.closest('tr');
         row.querySelectorAll('.master-edit-field').forEach(field => {
-            field.dataset.originalValue = field.value;
-            field.disabled = false;
-            field.classList.remove('d-none');
+            if (field.classList.contains('user-multi-select-container')) {
+                field.classList.remove('d-none');
+                if (field.multiSelectInstance) {
+                    field.multiSelectInstance.saveOriginal();
+                }
+            } else {
+                field.dataset.originalValue = field.value;
+                field.disabled = false;
+                field.classList.remove('d-none');
+            }
         });
         const displayWrapper = row.querySelector('.user-display-wrapper');
         if (displayWrapper) displayWrapper.classList.add('d-none');
@@ -454,10 +932,15 @@ document.addEventListener('click', function (e) {
     if (cancelButton) {
         const row = cancelButton.closest('tr');
         row.querySelectorAll('.master-edit-field').forEach(field => {
-            field.value = field.dataset.originalValue || '';
-            field.disabled = true;
-            if (field.tagName === 'SELECT' && field.name === 'user_detail_id') {
+            if (field.classList.contains('user-multi-select-container')) {
                 field.classList.add('d-none');
+                if (field.multiSelectInstance) {
+                    field.multiSelectInstance.reset();
+                    field.multiSelectInstance.hideDropdown();
+                }
+            } else {
+                field.value = field.dataset.originalValue || '';
+                field.disabled = true;
             }
         });
         const displayWrapper = row.querySelector('.user-display-wrapper');
@@ -469,10 +952,48 @@ document.addEventListener('click', function (e) {
     }
 });
 
+// Validate inline row edit before submitting
+document.addEventListener('click', function(e) {
+    const saveBtn = e.target.closest('.master-save-btn');
+    if (saveBtn) {
+        const row = saveBtn.closest('tr');
+        if (row) {
+            const hiddenIds = row.querySelector('.user-multi-hidden-ids');
+            const trigger = row.querySelector('.user-multi-select-trigger');
+            if (hiddenIds && !hiddenIds.value.trim()) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (trigger) {
+                    trigger.classList.add('is-invalid');
+                    trigger.focus();
+                    alert('User Details is mandatory. Please select at least one user.');
+                }
+                return false;
+            }
+        }
+    }
+});
+
 document.addEventListener('submit', function (e) {
     if (!e.target.classList.contains('dpr-inline-row-form')) return;
     const isDelete = (e.submitter && e.submitter.value === 'delete') || (document.activeElement && document.activeElement.value === 'delete');
     if (!isDelete) {
+        const formId = e.target.id;
+        const row = document.querySelector(`button[form="${formId}"].master-save-btn`)?.closest('tr') || e.target.closest('tr');
+        if (row) {
+            const hiddenIds = row.querySelector('.user-multi-hidden-ids');
+            const trigger = row.querySelector('.user-multi-select-trigger');
+            if (hiddenIds && !hiddenIds.value.trim()) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (trigger) {
+                    trigger.classList.add('is-invalid');
+                    trigger.focus();
+                    alert('User Details is mandatory. Please select at least one user.');
+                }
+                return false;
+            }
+        }
         Array.from(e.target.elements).forEach(field => {
             if (field.classList.contains('master-edit-field')) {
                 field.disabled = false;
@@ -481,301 +1002,28 @@ document.addEventListener('submit', function (e) {
     }
 });
 
-// Typeable Searchable User Combobox Logic
-function initUserSearchableDropdown(container, draftStorageKey, addNewUserUrl) {
-    if (!container) return;
-    const input = container.querySelector('.user-search-input');
-    const toggleBtn = container.querySelector('.user-search-toggle');
-    const hiddenInput = container.querySelector('.user-search-hidden');
-    const dropdown = container.querySelector('.user-custom-dropdown');
-    const items = container.querySelectorAll('.user-option-item');
-    const noResults = container.querySelector('.user-no-results');
-    const addNewBtn = container.querySelector('.user-option-add-new');
-
-    if (!input || !dropdown) return;
-
-    let activeIndex = -1;
-
-    function getVisibleItems() {
-        return Array.from(items).filter(item => !item.classList.contains('d-none'));
-    }
-
-    function updateDropdownPosition() {
-        const rect = input.getBoundingClientRect();
-        dropdown.style.position = 'fixed';
-        dropdown.style.top = (rect.bottom + 2) + 'px';
-        dropdown.style.left = rect.left + 'px';
-        dropdown.style.width = Math.max(rect.width, 220) + 'px';
-        dropdown.style.zIndex = '999999';
-    }
-
-    function showDropdown() {
-        updateDropdownPosition();
-        dropdown.classList.add('active-show');
-    }
-
-    function hideDropdown() {
-        dropdown.classList.remove('active-show');
-        activeIndex = -1;
-        items.forEach(el => el.classList.remove('highlighted'));
-    }
-
-    window.addEventListener('scroll', function() {
-        if (dropdown.classList.contains('active-show')) {
-            updateDropdownPosition();
-        }
-    }, true);
-
-    window.addEventListener('resize', function() {
-        if (dropdown.classList.contains('active-show')) {
-            updateDropdownPosition();
-        }
-    });
-
-    function filterOptions(query) {
-        const q = (query || '').toLowerCase().trim();
-        let matchCount = 0;
-        items.forEach(item => {
-            const name = (item.dataset.name || '').toLowerCase();
-            const desig = (item.dataset.designation || '').toLowerCase();
-            const display = (item.dataset.display || '').toLowerCase();
-            const matches = !q || name.includes(q) || desig.includes(q) || display.includes(q);
-            if (matches) {
-                item.classList.remove('d-none');
-                matchCount++;
-            } else {
-                item.classList.add('d-none');
-            }
-        });
-        if (noResults) {
-            if (matchCount === 0 && q) {
-                noResults.classList.remove('d-none');
-            } else {
-                noResults.classList.add('d-none');
-            }
-        }
-        activeIndex = -1;
-        items.forEach(el => el.classList.remove('highlighted'));
-    }
-
-    function selectOption(item) {
-        if (!item) return;
-        const id = item.dataset.id;
-        const display = item.dataset.display || item.dataset.name;
-        input.value = display;
-        if (hiddenInput) {
-            hiddenInput.value = id;
-            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        input.setCustomValidity('');
-        hideDropdown();
-    }
-
-    function syncInitialValue() {
-        if (hiddenInput && hiddenInput.value) {
-            const matched = Array.from(items).find(item => String(item.dataset.id) === String(hiddenInput.value));
-            if (matched) {
-                input.value = matched.dataset.display || matched.dataset.name;
-                input.setCustomValidity('');
-            }
-        }
-    }
-    syncInitialValue();
-
-    function openAndShowAll() {
-        filterOptions('');
-        showDropdown();
-        if (hiddenInput && hiddenInput.value) {
-            const selectedItem = Array.from(items).find(item => String(item.dataset.id) === String(hiddenInput.value));
-            if (selectedItem) {
-                items.forEach(el => el.classList.remove('highlighted'));
-                selectedItem.classList.add('highlighted');
-                selectedItem.scrollIntoView({ block: 'nearest' });
-            }
-        }
-    }
-
-    // Input interaction events
-    input.addEventListener('focus', function() {
-        openAndShowAll();
-        setTimeout(() => input.select(), 10);
-    });
-
-    input.addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (!dropdown.classList.contains('active-show')) {
-            openAndShowAll();
-            setTimeout(() => input.select(), 10);
-        }
-    });
-
-    input.addEventListener('input', function() {
-        filterOptions(this.value);
-        showDropdown();
-        const q = this.value.trim().toLowerCase();
-        const exact = Array.from(items).find(item => {
-            const name = (item.dataset.name || '').toLowerCase();
-            const display = (item.dataset.display || '').toLowerCase();
-            return name === q || display === q;
-        });
-        if (exact) {
-            if (hiddenInput) hiddenInput.value = exact.dataset.id;
-            input.setCustomValidity('');
-        } else {
-            if (hiddenInput) hiddenInput.value = '';
-        }
-    });
-
-    input.addEventListener('keydown', function(e) {
-        const visible = getVisibleItems();
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (!dropdown.classList.contains('active-show')) {
-                openAndShowAll();
-            } else if (visible.length > 0) {
-                activeIndex = (activeIndex + 1) % visible.length;
-                visible.forEach((el, idx) => el.classList.toggle('highlighted', idx === activeIndex));
-                visible[activeIndex].scrollIntoView({ block: 'nearest' });
-            }
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (visible.length > 0) {
-                activeIndex = (activeIndex - 1 + visible.length) % visible.length;
-                visible.forEach((el, idx) => el.classList.toggle('highlighted', idx === activeIndex));
-                visible[activeIndex].scrollIntoView({ block: 'nearest' });
-            }
-        } else if (e.key === 'Enter') {
-            if (dropdown.classList.contains('active-show')) {
-                e.preventDefault();
-                if (activeIndex >= 0 && visible[activeIndex]) {
-                    selectOption(visible[activeIndex]);
-                } else if (visible.length === 1) {
-                    selectOption(visible[0]);
-                } else {
-                    hideDropdown();
-                }
-            }
-        } else if (e.key === 'Escape' || e.key === 'Tab') {
-            hideDropdown();
-        }
-    });
-
-    // Toggle button
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (dropdown.classList.contains('active-show')) {
-                hideDropdown();
-            } else {
-                openAndShowAll();
-                input.focus();
-                setTimeout(() => input.select(), 10);
-            }
-        });
-    }
-
-    // Item click
-    items.forEach(item => {
-        item.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            selectOption(this);
-        });
-    });
-
-    // Add new user click
-    if (addNewBtn) {
-        addNewBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const form = container.closest('form');
-            if (form && draftStorageKey) {
-                const formData = {};
-                form.querySelectorAll('input, select, textarea').forEach(inp => {
-                    if (inp.name && inp.name !== 'csrfmiddlewaretoken' && inp.name !== 'action' && inp.name !== 'user_detail_id') {
-                        formData[inp.name] = inp.value;
-                    }
-                });
-                sessionStorage.setItem(draftStorageKey, JSON.stringify(formData));
-            }
-            const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
-            const targetUrl = addNewUserUrl || "{% url 'user_details' %}";
-            window.location.href = `${targetUrl}?return_url=${returnUrl}`;
-        });
-    }
-
-    // Close on click outside
-    document.addEventListener('click', function(e) {
-        if (!container.contains(e.target) && !dropdown.contains(e.target)) {
-            hideDropdown();
-            if (hiddenInput && hiddenInput.value) {
-                const matched = Array.from(items).find(item => String(item.dataset.id) === String(hiddenInput.value));
-                if (matched) {
-                    input.value = matched.dataset.display || matched.dataset.name;
-                    input.setCustomValidity('');
-                }
-            } else {
-                const q = input.value.trim().toLowerCase();
-                if (q) {
-                    const matched = Array.from(items).find(item => {
-                        return (item.dataset.name || '').toLowerCase() === q || (item.dataset.display || '').toLowerCase() === q;
-                    });
-                    if (matched) {
-                        selectOption(matched);
-                    } else {
-                        input.value = '';
-                    }
-                } else {
-                    input.value = '';
-                }
-            }
-        }
-    });
-
-    // Form submit validation check
-    const form = container.closest('form');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            if (hiddenInput && !hiddenInput.value) {
-                input.setCustomValidity('Please select a valid user from the dropdown.');
-                input.reportValidity();
-                e.preventDefault();
-            } else {
-                input.setCustomValidity('');
-            }
-        });
-    }
-
-    return {
-        setValue: function(id) {
-            if (hiddenInput) hiddenInput.value = id;
-            syncInitialValue();
-        }
-    };
-}
-
-// Inline Table Row Change for Add New User
-document.addEventListener('change', function(e) {
-    if (e.target && e.target.name === 'user_detail_id' && e.target.value === '__add_new_user__') {
-        const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `{% url 'user_details' %}?return_url=${returnUrl}`;
-    }
-});
-
-// Page Initialization
+// Initialize multi-select components on page load
 document.addEventListener('DOMContentLoaded', function() {
-    const comboboxEl = document.querySelector('.user-searchable-combobox');
-    let comboboxCtrl = null;
-    if (comboboxEl) {
-        comboboxCtrl = initUserSearchableDropdown(comboboxEl, 'dpr_supplier_form_draft', "{% url 'user_details' %}");
+    // 1. Top Add Form Multi-Select
+    const topMultiEl = document.querySelector('#addSupplierForm .user-multi-select-container');
+    let topMultiCtrl = null;
+    if (topMultiEl) {
+        topMultiCtrl = createUserMultiSelect(topMultiEl, 'dpr_supplier_form_draft', "{% url 'user_details' %}");
+        topMultiEl.multiSelectInstance = topMultiCtrl;
     }
 
+    // 2. Table Row Multi-Selects (for Edit)
+    document.querySelectorAll('tbody tr .user-multi-select-container').forEach(rowMultiEl => {
+        const ctrl = createUserMultiSelect(rowMultiEl, null, "{% url 'user_details' %}");
+        rowMultiEl.multiSelectInstance = ctrl;
+    });
+
+    // 3. Draft data recovery from sessionStorage if returning from Add New User
     const draftData = sessionStorage.getItem('dpr_supplier_form_draft');
     if (draftData) {
         try {
             const parsed = JSON.parse(draftData);
-            const topForm = document.querySelector('.dpr-card form');
+            const topForm = document.getElementById('addSupplierForm');
             if (topForm && parsed) {
                 Object.entries(parsed).forEach(([k, v]) => {
                     const el = topForm.querySelector(`[name="${k}"]`);
@@ -788,10 +1036,15 @@ document.addEventListener('DOMContentLoaded', function() {
         sessionStorage.removeItem('dpr_supplier_form_draft');
     }
 
+    // 4. Handle preselected user id from URL query parameter
     const urlParams = new URLSearchParams(window.location.search);
-    const selectedUserId = urlParams.get('selected_user_id');
-    if (selectedUserId && comboboxCtrl) {
-        comboboxCtrl.setValue(selectedUserId);
+    const selectedUserId = urlParams.get('selected_user_id') || urlParams.get('user_detail_id');
+    if (selectedUserId && topMultiCtrl) {
+        const currentSelected = topMultiCtrl.getSelectedIds();
+        if (!currentSelected.includes(String(selectedUserId))) {
+            currentSelected.push(String(selectedUserId));
+            topMultiCtrl.setSelectedIds(currentSelected);
+        }
     }
 });
 </script>

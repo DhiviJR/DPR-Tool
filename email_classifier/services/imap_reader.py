@@ -129,19 +129,30 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
         close_at_end = True
 
     try:
-        status, _ = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
+        status, select_data = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
         if status != 'OK':
             raise RuntimeError(f'Cannot open mailbox {settings.EMAIL_IMAP_MAILBOX}.')
 
-        status, result = client.search(None, 'ALL')
-        if status != 'OK':
-            raise RuntimeError('Unable to search Inbox emails.')
+        total_messages = 0
+        if select_data and select_data[0] and select_data[0].isdigit():
+            total_messages = int(select_data[0])
 
-        message_numbers = list(reversed(result[0].split()))
-        batch = message_numbers[offset:offset + limit]
+        if total_messages > 0:
+            start_idx = total_messages - offset
+            if start_idx <= 0:
+                return [], total_messages
+            end_idx = max(0, start_idx - limit)
+            batch = [str(i).encode() for i in range(start_idx, end_idx, -1)]
+        else:
+            status, result = client.search(None, 'ALL')
+            if status != 'OK':
+                raise RuntimeError('Unable to search Inbox emails.')
+            message_numbers = list(reversed(result[0].split()))
+            total_messages = len(message_numbers)
+            batch = message_numbers[offset:offset + limit]
 
         if not batch:
-            return [], len(message_numbers)
+            return [], total_messages
 
         # 1. Fast Header-Only fetch for batch in single request
         headers_info = []
@@ -162,7 +173,23 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
                             'date': _parse_date(_decode(msg.get('Date'))),
                         })
         except Exception:
-            pass
+            # Fallback to individual header fetch if bulk fetch failed on server
+            for num_bytes in batch:
+                try:
+                    status, data = client.fetch(num_bytes, '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
+                    if status == 'OK' and data and isinstance(data[0], tuple) and len(data[0]) == 2 and data[0][1]:
+                        msg = email.message_from_bytes(data[0][1])
+                        msg_id = _decode(msg.get('Message-ID'))
+                        uid_val = (msg_id or hashlib.sha256(data[0][1]).hexdigest())[:255]
+                        headers_info.append({
+                            'num': num_bytes,
+                            'uid': uid_val,
+                            'sender': _decode(msg.get('From')),
+                            'subject': _decode(msg.get('Subject')) or '(No subject)',
+                            'date': _parse_date(_decode(msg.get('Date'))),
+                        })
+                except Exception:
+                    pass
 
         # 2. Skip emails already stored in DB (newest-first)
         if headers_info:
@@ -173,7 +200,7 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
 
             if not new_headers:
                 # All emails in batch already imported! Fast return!
-                return [], len(message_numbers)
+                return [], total_messages
 
             # 3. Fetch body & attachments ONLY for brand new emails in fast batch chunks
             messages = []
@@ -227,9 +254,9 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
                                 })
                         except Exception:
                             pass
-            return messages, len(message_numbers)
+            return messages, total_messages
 
-        return [], len(message_numbers)
+        return [], total_messages
     finally:
         if close_at_end and client:
             try:

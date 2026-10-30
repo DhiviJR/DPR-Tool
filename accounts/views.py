@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from .models import CustomUser, UserDetail
@@ -17,7 +18,7 @@ from rfq.models import RFQ, RFQProduct, RFQSupplierPrice, RFQQuotation, RFQEmail
 from .email_services import send_threaded_rfq_email, sync_rfq_inbox, check_customer_email_match
 from django.http import HttpResponse, JsonResponse, Http404
 from django.db import transaction
-from django.db.models import Sum, Case, When, Value, IntegerField, Q
+from django.db.models import Sum, Case, When, Value, IntegerField, Q, Prefetch
 from django.db.models.functions import Coalesce
 from decimal import Decimal, InvalidOperation
 from django.utils import timezone
@@ -457,23 +458,44 @@ def _normalize_product_specifications(raw_specs):
         if not isinstance(val, str):
             return val
         s = html.unescape(val).strip()
-        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
-            s = s[1:-1].strip()
-            s = html.unescape(s).strip()
-        if (s.startswith('{') and s.endswith('}')) or (s.startswith('[') and s.endswith(']')):
-            try:
-                return json.loads(s)
-            except Exception:
+        for _ in range(3):
+            if not isinstance(s, str):
+                break
+            s = s.strip()
+            if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
                 try:
-                    return json.loads(s.replace("'", '"'))
+                    s = json.loads(s)
+                    continue
                 except Exception:
-                    pass
-        m = re.search(r'(?:SPECIFICATION\s*[:\-]\s*)?(\{.*?\})', s, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(1))
-            except Exception:
-                pass
+                    s = s[1:-1].strip()
+            if (s.startswith('{') and s.endswith('}')) or (s.startswith('[') and s.endswith(']')):
+                try:
+                    s = json.loads(s)
+                    continue
+                except Exception:
+                    try:
+                        s = json.loads(s.replace("'", '"'))
+                        continue
+                    except Exception:
+                        try:
+                            import ast
+                            s = ast.literal_eval(s)
+                            continue
+                        except Exception:
+                            pass
+            m = re.search(r'(?:SPECIFICATION\s*[:\-]\s*)?(\{.*?\})', s, re.DOTALL)
+            if m:
+                try:
+                    s = json.loads(m.group(1))
+                    continue
+                except Exception:
+                    try:
+                        import ast
+                        s = ast.literal_eval(m.group(1))
+                        continue
+                    except Exception:
+                        pass
+            break
         return s
 
     if isinstance(specs, str):
@@ -574,6 +596,35 @@ def _format_product_description_lines(product_name, specs_dict, remarks=None):
                 lines.append(rem_part)
 
     return lines
+
+
+def _get_customer_product_item_description(cp, dpr=None):
+    if not cp:
+        return ''
+    raw_specs = _normalize_product_specifications(getattr(cp, 'product_specifications', None))
+    dpr = dpr or getattr(cp, 'dpr', None)
+    if not raw_specs and dpr and getattr(dpr, 'quotation_number', None):
+        quote_candidates = [q.strip() for q in dpr.quotation_number.split(',') if q.strip()]
+        for q_cand in quote_candidates:
+            clean_cand = q_cand.split('(')[0].strip()
+            q_recs = RFQQuotation.objects.filter(quotation_number__icontains=clean_cand).order_by('-revision_number', '-id')
+            for q_rec in q_recs:
+                if q_rec and q_rec.products_snapshot:
+                    for snap in q_rec.products_snapshot:
+                        snap_name = snap.get('product_name', '').strip().lower()
+                        cp_name = (cp.product_name or '').strip().lower()
+                        if snap_name == cp_name or cp_name in snap_name or snap_name in cp_name:
+                            cand = _normalize_product_specifications(snap.get('product_specifications'))
+                            if cand:
+                                raw_specs = cand
+                                break
+                if raw_specs:
+                    break
+            if raw_specs:
+                break
+    lines = _format_product_description_lines(cp.product_name, raw_specs, cp.remarks)
+    desc_lines = lines[1:] if len(lines) > 1 and lines[0].lower().startswith('<b>') else lines
+    return ' | '.join(desc_lines) if desc_lines else (cp.remarks or '')
 
 
 def _serialize_quotation_products(products, custom_terms=None):
@@ -1585,12 +1636,13 @@ def dashboard(request):
     for rfq in all_rfqs:
         rfq.row_class = _get_rfq_row_alert_class(rfq)
         rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
-        rfq_quote_nos = list(rfq.quotations.values_list('quotation_number', flat=True))
+        quotes = list(rfq.quotations.all())
+        rfq_quote_nos = [q.quotation_number for q in quotes if q.quotation_number]
         is_po_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
         is_quote_submitted = (
             rfq.row_class == 'table-success'
             or rfq.quotation_email_sent
-            or rfq.quotations.filter(email_sent=True).exists()
+            or any(q.email_sent for q in quotes)
             or is_po_confirmed
         )
 
@@ -1796,17 +1848,138 @@ def dashboard(request):
     })
 
 
+def _ensure_default_supplier_products(dpr):
+    """
+    Ensure default SupplierProduct records are created for a DPR if CustomerProducts exist
+    and no SupplierProducts have been configured yet.
+    """
+    products = CustomerProduct.objects.filter(dpr=dpr)
+    if not products.exists():
+        return SupplierProduct.objects.none()
+
+    existing_sps = SupplierProduct.objects.filter(
+        customer_product__dpr=dpr
+    ).select_related('customer_product', 'supplier')
+    if existing_sps.exists():
+        return existing_sps
+
+    suppliers = Supplier.objects.all()
+    if not suppliers.exists():
+        return SupplierProduct.objects.none()
+
+    customer_products = list(products)
+    product_lookup = {}
+    for product in customer_products:
+        name_key = (product.product_name or '').strip().lower()
+        type_key = (product.product_type or '').strip().lower()
+        product_lookup[(name_key, type_key)] = product.id
+        if name_key not in product_lookup:
+            product_lookup[name_key] = product.id
+
+    rfq_rate_map = {}
+    product_default_rate_map = {}
+    if dpr.customer:
+        rfq_supplier_prices = RFQSupplierPrice.objects.filter(
+            product__rfq__customer=dpr.customer
+        ).select_related('product', 'supplier').order_by('product__rfq__created_at')
+        for supplier_price in rfq_supplier_prices:
+            name_key = (supplier_price.product.product_name or '').strip().lower()
+            type_key = (supplier_price.product.product_type or '').strip().lower()
+            customer_product_id = product_lookup.get((name_key, type_key))
+            if not customer_product_id:
+                customer_product_id = product_lookup.get(name_key)
+            if not customer_product_id:
+                continue
+            rfq_rate_map.setdefault(str(customer_product_id), {})[
+                str(supplier_price.supplier_id)
+            ] = str(supplier_price.price)
+            if str(customer_product_id) not in product_default_rate_map:
+                product_default_rate_map[str(customer_product_id)] = str(supplier_price.price)
+
+        rfq_products_known = RFQProduct.objects.filter(
+            rfq__customer=dpr.customer,
+            price_known=True,
+            rate_per_unit__gt=0
+        ).order_by('rfq__created_at')
+        for rfq_product in rfq_products_known:
+            name_key = (rfq_product.product_name or '').strip().lower()
+            type_key = (rfq_product.product_type or '').strip().lower()
+            customer_product_id = product_lookup.get((name_key, type_key))
+            if not customer_product_id:
+                customer_product_id = product_lookup.get(name_key)
+            if not customer_product_id:
+                continue
+            product_default_rate_map[str(customer_product_id)] = str(rfq_product.rate_per_unit)
+
+    po_date = dpr.po_date or timezone.localdate()
+    target_customer_date = dpr.po_validity or dpr.po_date
+    validity_date = (target_customer_date - timedelta(days=7)) if target_customer_date else (po_date + timedelta(days=7))
+
+    for p in products:
+        p_id_str = str(p.id)
+        rates_for_prod = rfq_rate_map.get(p_id_str, {})
+        assigned_supplier = None
+        assigned_rate = Decimal('0.00')
+        if rates_for_prod:
+            for s_id_str, s_price in rates_for_prod.items():
+                assigned_supplier = suppliers.filter(id=int(s_id_str)).first()
+                if assigned_supplier:
+                    assigned_rate = Decimal(str(s_price))
+                    break
+        if not assigned_supplier:
+            assigned_supplier = suppliers.first()
+            def_rate = product_default_rate_map.get(p_id_str)
+            assigned_rate = Decimal(str(def_rate)) if def_rate else (p.rate_per_unit or Decimal('0.00'))
+
+        po_val = (p.quantity_ordered or 0) * assigned_rate
+        po_num = f'SPO-{po_date:%Y%m%d}-{dpr.id:04d}-{assigned_supplier.id:04d}' if assigned_supplier else ''
+
+        SupplierProduct.objects.create(
+            customer_product=p,
+            supplier=assigned_supplier,
+            rate_per_unit=assigned_rate,
+            po_value=po_val,
+            po_date=po_date,
+            po_validity=validity_date,
+            quantity=p.quantity_ordered or 0,
+            po_number=po_num,
+        )
+
+    supplier_orders = SupplierProduct.objects.filter(
+        customer_product__dpr=dpr
+    ).select_related('customer_product', 'supplier')
+
+    total_supplier_quantity = supplier_orders.aggregate(
+        total=Coalesce(Sum('quantity'), 0)
+    )['total']
+    if dpr.supplier_qty_ordered != total_supplier_quantity:
+        dpr.supplier_qty_ordered = total_supplier_quantity
+        dpr.save(update_fields=['supplier_qty_ordered'])
+
+    return supplier_orders
+
+
 @role_required('ADMIN', 'PURCHASE')
 def dpr_view(request):
     confirmation_filter = request.GET.get('confirmation')
     case_filter = request.GET.get('case', '')
-    dpr_queryset = DPR.objects.select_related('customer').order_by('-created_at')
+    dpr_queryset = DPR.objects.select_related('customer', 'source_email').order_by('-created_at')
     is_mail_filter = confirmation_filter == 'mail'
     if is_mail_filter:
         dpr_queryset = dpr_queryset.filter(confirmation_type__icontains='mail')
 
     dprs = list(dpr_queryset)
 
+    # Ensure default SupplierProducts are initialized FIRST for any DPRs that need them
+    dprs_needing_sp = [
+        d for d in dprs
+        if CustomerProduct.objects.filter(dpr=d).exists()
+        and not SupplierProduct.objects.filter(customer_product__dpr=d).exists()
+    ]
+    for d in dprs_needing_sp:
+        _ensure_default_supplier_products(d)
+
+    # 1. Total Customer Ordered Quantity per DPR
     customer_qty_map = {
         row['dpr_id']: row['total']
         for row in CustomerProduct.objects.values('dpr_id').annotate(
@@ -1814,10 +1987,27 @@ def dpr_view(request):
         )
     }
 
+    # 2. Total Customer Delivered Quantity per DPR
+    customer_delivered_map = {
+        row['dpr_id']: row['total']
+        for row in CustomerProduct.objects.values('dpr_id').annotate(
+            total=Coalesce(Sum('quantity_delivered'), 0)
+        )
+    }
+
+    # 3. Total Supplier Ordered Quantity per DPR
     supplier_qty_map = {
         row['customer_product__dpr_id']: row['total']
         for row in SupplierProduct.objects.values('customer_product__dpr_id').annotate(
             total=Coalesce(Sum('quantity'), 0)
+        )
+    }
+
+    # 4. Total Supplier Received Quantity per DPR
+    supplier_received_map = {
+        row['customer_product__dpr_id']: row['total']
+        for row in SupplierProduct.objects.values('customer_product__dpr_id').annotate(
+            total=Coalesce(Sum('quantity_received'), 0)
         )
     }
 
@@ -1887,9 +2077,21 @@ def dpr_view(request):
         dpr.supplier_po_links = sp_links
         dpr.total_quantity_ordered = customer_qty_map.get(dpr.id, 0)
         dpr.supplier_quantity_ordered = supplier_qty_map.get(dpr.id, 0)
+        dpr.customer_qty_delivered = customer_delivered_map.get(dpr.id, 0)
+        dpr.supplier_qty_received = supplier_received_map.get(dpr.id, 0)
+
+        fields_to_update = []
         if dpr.supplier_qty_ordered != dpr.supplier_quantity_ordered:
             dpr.supplier_qty_ordered = dpr.supplier_quantity_ordered
-            dpr.save(update_fields=['supplier_qty_ordered'])
+            fields_to_update.append('supplier_qty_ordered')
+        if dpr.supplier_qty_received != supplier_received_map.get(dpr.id, 0):
+            dpr.supplier_qty_received = supplier_received_map.get(dpr.id, 0)
+            fields_to_update.append('supplier_qty_received')
+        if dpr.customer_qty_delivered != customer_delivered_map.get(dpr.id, 0):
+            dpr.customer_qty_delivered = customer_delivered_map.get(dpr.id, 0)
+            fields_to_update.append('customer_qty_delivered')
+        if fields_to_update:
+            dpr.save(update_fields=fields_to_update)
         conf = (dpr.confirmation_type or '').lower()
         dpr.is_alert_row = (
             dpr.po_date is not None
@@ -1945,6 +2147,16 @@ def dpr_view(request):
         dpr.row_class = _get_dpr_row_class(dpr.filter_state)
 
     dprs.sort(key=lambda dpr: 1 if dpr.filter_state == 'completed' else 0)
+
+    # Annotate each DPR with whether it has any bunch documents attached (for Download button enable/disable)
+    from dpr.models import DPRBunchDocument as _DBD
+    dpr_ids_with_docs = set(
+        _DBD.objects.filter(dpr_id__in=[d.id for d in dprs])
+        .values_list('dpr_id', flat=True)
+        .distinct()
+    )
+    for dpr in dprs:
+        dpr.has_bunch_docs = dpr.id in dpr_ids_with_docs
 
     return render(
         request,
@@ -2058,6 +2270,8 @@ def _resequence_product_type_fields(product_type):
 def product_type_master(request):
     if request.method == 'POST':
         action = request.POST.get('action')
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '')
+
         if action == 'save_product_type':
             pt_id = request.POST.get('pt_id')
             name = request.POST.get('name', '').strip()
@@ -2072,6 +2286,8 @@ def product_type_master(request):
                 delivery_weeks = 3
 
             if not name or not code:
+                if is_ajax:
+                    return JsonResponse({'status': 'error', 'message': 'Product Type Name and Code are required.'}, status=400)
                 messages.error(request, 'Product Type Name and Code are required.')
                 return redirect('product_type_master')
 
@@ -2083,10 +2299,29 @@ def product_type_master(request):
                 pt.hsn_code = hsn_code
                 pt.default_delivery_weeks = delivery_weeks
                 pt.save()
-                messages.success(request, f'Product type "{pt.name}" updated successfully.')
+                msg = f'Product type "{pt.name}" updated successfully.'
+                messages.success(request, msg)
+                if is_ajax:
+                    return JsonResponse({
+                        'status': 'ok',
+                        'action': 'save_product_type',
+                        'is_edit': True,
+                        'message': msg,
+                        'pt': {
+                            'id': pt.id,
+                            'name': pt.name,
+                            'code': pt.code,
+                            'category': pt.category or '',
+                            'hsn': pt.hsn_code,
+                            'weeks': pt.default_delivery_weeks,
+                        }
+                    })
             else:
                 if ProductType.objects.filter(code__iexact=code).exists():
-                    messages.error(request, f'Product type code "{code}" already exists.')
+                    msg = f'Product type code "{code}" already exists.'
+                    if is_ajax:
+                        return JsonResponse({'status': 'error', 'message': msg}, status=400)
+                    messages.error(request, msg)
                     return redirect('product_type_master')
                 pt = ProductType.objects.create(
                     name=name,
@@ -2095,7 +2330,23 @@ def product_type_master(request):
                     hsn_code=hsn_code,
                     default_delivery_weeks=delivery_weeks
                 )
-                messages.success(request, f'Product type "{pt.name}" created successfully.')
+                msg = f'Product type "{pt.name}" created successfully.'
+                messages.success(request, msg)
+                if is_ajax:
+                    return JsonResponse({
+                        'status': 'ok',
+                        'action': 'save_product_type',
+                        'is_edit': False,
+                        'message': msg,
+                        'pt': {
+                            'id': pt.id,
+                            'name': pt.name,
+                            'code': pt.code,
+                            'category': pt.category or '',
+                            'hsn': pt.hsn_code,
+                            'weeks': pt.default_delivery_weeks,
+                        }
+                    })
             return redirect('product_type_master')
 
         elif action == 'seed_default_types':
@@ -2140,9 +2391,11 @@ def product_type_master(request):
                 f.depends_on_value = depends_on_value or None
                 f.sort_order = sort_order
                 f.save()
-                messages.success(request, f'Field "{f.field_label}" updated for {pt.code}.')
+                msg = f'Field "{f.field_label}" updated for {pt.code}.'
+                messages.success(request, msg)
+                is_edit = True
             else:
-                ProductTypeSpecField.objects.create(
+                f = ProductTypeSpecField.objects.create(
                     product_type=pt,
                     field_label=field_label,
                     field_key=field_key,
@@ -2154,8 +2407,33 @@ def product_type_master(request):
                     depends_on_value=depends_on_value or None,
                     sort_order=sort_order
                 )
-                messages.success(request, f'Field "{field_label}" added to {pt.code}.')
+                msg = f'Field "{field_label}" added to {pt.code}.'
+                messages.success(request, msg)
+                is_edit = False
+
             _resequence_product_type_fields(pt)
+            if is_ajax:
+                return JsonResponse({
+                    'status': 'ok',
+                    'action': 'save_spec_field',
+                    'is_edit': is_edit,
+                    'pt_id': pt.id,
+                    'pt_code': pt.code,
+                    'message': msg,
+                    'field': {
+                        'id': f.id,
+                        'field_label': f.field_label,
+                        'field_key': f.field_key,
+                        'field_type': f.field_type,
+                        'field_type_display': f.get_field_type_display(),
+                        'select_options': f.select_options or '',
+                        'is_required': f.is_required,
+                        'placeholder': f.placeholder or '',
+                        'depends_on_field': f.depends_on_field or '',
+                        'depends_on_value': f.depends_on_value or '',
+                        'sort_order': f.sort_order,
+                    }
+                })
             return redirect('product_type_master')
 
         elif action == 'delete_spec_field':
@@ -2167,7 +2445,16 @@ def product_type_master(request):
                 label = f.field_label
                 f.delete()
                 _resequence_product_type_fields(pt)
-                messages.success(request, f'Field "{label}" deleted from {pt_name}.')
+                msg = f'Field "{label}" deleted from {pt_name}.'
+                messages.success(request, msg)
+                if is_ajax:
+                    return JsonResponse({
+                        'status': 'ok',
+                        'action': 'delete_spec_field',
+                        'field_id': int(field_id),
+                        'message': msg
+                    })
+                return redirect('product_type_master')
             return redirect('product_type_master')
 
         elif action == 'toggle_status':
@@ -2176,7 +2463,17 @@ def product_type_master(request):
                 pt = get_object_or_404(ProductType, pk=int(pt_id))
                 pt.is_active = not pt.is_active
                 pt.save()
-                messages.success(request, f'Status for "{pt.name}" changed to {"Active" if pt.is_active else "Inactive"}.')
+                msg = f'Status for "{pt.name}" changed to {"Active" if pt.is_active else "Inactive"}.'
+                messages.success(request, msg)
+                if is_ajax:
+                    return JsonResponse({
+                        'status': 'ok',
+                        'action': 'toggle_status',
+                        'pt_id': pt.id,
+                        'is_active': pt.is_active,
+                        'message': msg
+                    })
+                return redirect('product_type_master')
             return redirect('product_type_master')
 
     product_types = ProductType.objects.prefetch_related('spec_fields').order_by('name')
@@ -2259,6 +2556,21 @@ def dpr_documents_download(request, dpr_id):
                 if supplier_product.po_attachment else ''
             )
 
+        # Include DPR Bunch Documents
+        for b_doc in dpr.bunch_documents.all():
+            doc_folder = {
+                'rfq_screenshot': 'rfq_screenshots',
+                'quotation': 'quotation',
+                'customer_po': 'customer_po',
+                'vendor_price': 'vendor_price_details',
+                'drawing': 'drawings',
+            }.get(b_doc.doc_type, 'bunch_documents')
+            add_file(
+                zip_file,
+                b_doc.file,
+                f'bunch_documents/{doc_folder}/{b_doc.file_name}'
+            )
+
         if not added_files:
             zip_file.writestr(
                 'README.txt',
@@ -2339,7 +2651,7 @@ def customer_po_product_details(request):
         else:
             product.generated_invoice_number = f"MES-F{product.id:04d}"
 
-        product.generated_invoices = list(product.invoices.all().order_by('id'))
+        product.generated_invoices = sorted(product.invoices.all(), key=lambda inv: inv.id)
 
     # Group products by DPR
     from collections import OrderedDict
@@ -3668,6 +3980,8 @@ def customer_order_edit(request, dpr_id):
         dpr.cust_qty_ordered = total_products
         dpr.save(update_fields=['po_value', 'cust_qty_ordered'])
 
+        _ensure_default_supplier_products(dpr)
+
         messages.success(request, 'DPR updated successfully')
         if request.POST.get('save_action') == 'supplier_order':
             return redirect('dpr_supplier', dpr_id=dpr.id)
@@ -3751,45 +4065,8 @@ def dpr_supplier(request, dpr_id):
         # Known-price products override the supplier-price default
         product_default_rate_map[str(customer_product_id)] = str(rfq_product.rate_per_unit)
 
-    if not supplier_orders.exists() and products.exists() and request.method == 'GET':
-        from datetime import timedelta
-        po_date = timezone.localdate()
-        target_customer_date = dpr.po_validity or dpr.po_date
-        validity_date = (target_customer_date - timedelta(days=7)) if target_customer_date else (po_date + timedelta(days=7))
-
-        for p in products:
-            p_id_str = str(p.id)
-            rates_for_prod = rfq_rate_map.get(p_id_str, {})
-            assigned_supplier = None
-            assigned_rate = Decimal('0.00')
-            if rates_for_prod:
-                for s_id_str, s_price in rates_for_prod.items():
-                    assigned_supplier = suppliers.filter(id=int(s_id_str)).first()
-                    if assigned_supplier:
-                        assigned_rate = Decimal(str(s_price))
-                        break
-            if not assigned_supplier:
-                assigned_supplier = suppliers.first()
-                def_rate = product_default_rate_map.get(p_id_str)
-                assigned_rate = Decimal(str(def_rate)) if def_rate else (p.rate_per_unit or Decimal('0.00'))
-
-            po_val = (p.quantity_ordered or 0) * assigned_rate
-            po_num = f'SPO-{po_date:%Y%m%d}-{dpr.id:04d}-{assigned_supplier.id:04d}' if assigned_supplier else ''
-
-            SupplierProduct.objects.create(
-                customer_product=p,
-                supplier=assigned_supplier,
-                rate_per_unit=assigned_rate,
-                po_value=po_val,
-                po_date=po_date,
-                po_validity=validity_date,
-                quantity=p.quantity_ordered or 0,
-                po_number=po_num,
-            )
-
-        supplier_orders = SupplierProduct.objects.filter(
-            customer_product__dpr=dpr
-        ).select_related('customer_product', 'supplier')
+    if not supplier_orders.exists() and products.exists():
+        supplier_orders = _ensure_default_supplier_products(dpr)
 
     total_supplier_quantity = supplier_orders.aggregate(
         total=Coalesce(Sum('quantity'), 0)
@@ -3804,7 +4081,6 @@ def dpr_supplier(request, dpr_id):
     )
 
     if request.method == 'GET' and request.GET.get('po_generated') == '1':
-        from django.contrib import messages
         messages.success(request, 'Supplier orders updated and PO generated successfully.')
 
     if request.method == 'POST':
@@ -3893,14 +4169,18 @@ def dpr_supplier(request, dpr_id):
                     from datetime import datetime
                     sp_val_dt = datetime.strptime(po_validities[i], '%Y-%m-%d').date()
                     today = timezone.localdate()
-                    if sp_val_dt < today:
-                        messages.error(
-                            request,
-                            f"Supplier PO validity in row {i + 1} ({sp_val_dt.strftime('%d-%m-%Y')}) cannot be in the past (Today is {today.strftime('%d-%m-%Y')})."
-                        )
-                        return redirect('dpr_supplier', dpr_id=dpr.id)
-
                     target_customer_date = dpr.po_validity or dpr.po_date
+
+                    # Check 1: Cannot be in the past (only enforced if customer PO date is today/future or not set)
+                    if not target_customer_date or target_customer_date >= today:
+                        if sp_val_dt < today:
+                            messages.error(
+                                request,
+                                f"Supplier PO validity in row {i + 1} ({sp_val_dt.strftime('%d-%m-%Y')}) cannot be in the past (Today is {today.strftime('%d-%m-%Y')})."
+                            )
+                            return redirect('dpr_supplier', dpr_id=dpr.id)
+
+                    # Check 2: Must be earlier than Customer PO date
                     if target_customer_date and sp_val_dt >= target_customer_date:
                         messages.error(
                             request,
@@ -4036,10 +4316,23 @@ def dpr_supplier(request, dpr_id):
     target_customer_date = dpr.po_validity or dpr.po_date
     default_supplier_validity = (target_customer_date - timedelta(days=7)) if target_customer_date else (timezone.localdate() + timedelta(days=7))
 
+    for p in products:
+        p.item_description = _get_customer_product_item_description(p, dpr)
+
+    for sp in supplier_orders:
+        if sp.customer_product:
+            sp.customer_product.item_description = getattr(sp.customer_product, 'item_description', None) or _get_customer_product_item_description(sp.customer_product, dpr)
+
+    product_desc_map = {
+        str(p.id): getattr(p, 'item_description', '')
+        for p in products
+    }
+
     today = timezone.localdate()
     context = {
         'dpr': dpr,
         'products': products,
+        'product_desc_map': product_desc_map,
         'suppliers': suppliers,
         'supplier_orders': supplier_orders,
         'total_customer_quantity': total_customer_quantity,
@@ -4089,6 +4382,25 @@ def _validate_customer_region(region):
     return None
 
 
+def _preserve_customer_form_draft(request, customer_name, region, email, phone_number, user_ids, contact_person, address, gstin, state_code, is_sez, payment_terms):
+    try:
+        request.session['cust_form_draft'] = {
+            'customer_name': customer_name,
+            'region': region,
+            'email': email,
+            'phone_number': phone_number,
+            'user_detail_ids': [str(uid) for uid in user_ids],
+            'contact_person': contact_person,
+            'address': address,
+            'gstin': gstin,
+            'state_code': state_code,
+            'is_sez': is_sez,
+            'payment_terms': payment_terms,
+        }
+    except Exception:
+        pass
+
+
 @role_required('ADMIN', 'SALES')
 def customer_details(request):
     user_details_list = UserDetail.objects.order_by('user_name')
@@ -4099,32 +4411,68 @@ def customer_details(request):
         region = request.POST.get('region', '').strip()
         email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
-        user_detail_id = request.POST.get('user_detail_id')
-        ud = UserDetail.objects.filter(pk=user_detail_id).first() if user_detail_id else None
-        contact_person = ud.user_name if ud else request.POST.get('contact_person', '').strip()
-        contact_number = ud.user_number if ud else request.POST.get('contact_number', '').strip()
-        user_mail_id = ud.user_mail_id if ud else request.POST.get('user_mail_id', '').strip()
+
+        # Handle multiple user selection
+        raw_user_ids = request.POST.getlist('user_detail_ids') or request.POST.getlist('user_detail_id')
+        if not raw_user_ids:
+            single_val = request.POST.get('user_detail_ids') or request.POST.get('user_detail_id', '')
+            if single_val:
+                raw_user_ids = [x.strip() for x in str(single_val).split(',') if x.strip()]
+
+        valid_user_ids = []
+        for uid in raw_user_ids:
+            if isinstance(uid, str) and ',' in uid:
+                for part in uid.split(','):
+                    if part.strip().isdigit():
+                        valid_user_ids.append(int(part.strip()))
+            elif str(uid).isdigit():
+                valid_user_ids.append(int(uid))
+
+        seen = set()
+        deduped_user_ids = []
+        for uid in valid_user_ids:
+            if uid not in seen:
+                seen.add(uid)
+                deduped_user_ids.append(uid)
+
+        selected_users = list(UserDetail.objects.filter(pk__in=deduped_user_ids))
+        users_by_id = {u.id: u for u in selected_users}
+        selected_users = [users_by_id[uid] for uid in deduped_user_ids if uid in users_by_id]
+
+        ud = selected_users[0] if selected_users else None
+        contact_person = ', '.join([u.user_name for u in selected_users]) if selected_users else request.POST.get('contact_person', '').strip()
+        contact_number = ', '.join([u.user_number for u in selected_users if u.user_number]) if selected_users else request.POST.get('contact_number', '').strip()
+        user_mail_id = ', '.join([u.user_mail_id for u in selected_users if u.user_mail_id]) if selected_users else request.POST.get('user_mail_id', '').strip()
+
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
         state_code = request.POST.get('state_code', '').strip().upper()
+        if not state_code and region in ('Chennai', 'Hosur'):
+            state_code = '33'
         is_sez = 'Yes' if request.POST.get('is_sez', '').strip().lower() == 'yes' else 'No'
         payment_terms = request.POST.get('payment_terms', '').strip()
-
 
         if action in ('add', 'edit'):
             if not customer_name:
                 messages.error(request, 'Customer Name is required.')
+                if action == 'add':
+                    _preserve_customer_form_draft(request, customer_name, region, email, phone_number, deduped_user_ids, contact_person, address, gstin, state_code, is_sez, payment_terms)
+                return redirect('customer_details')
+            if not selected_users and not contact_person:
+                messages.error(request, 'User Details is mandatory. Please select at least one user.')
+                if action == 'add':
+                    _preserve_customer_form_draft(request, customer_name, region, email, phone_number, deduped_user_ids, contact_person, address, gstin, state_code, is_sez, payment_terms)
                 return redirect('customer_details')
             if action == 'add':
-                if not user_detail_id and not contact_person:
-                    messages.error(request, 'User Details is required.')
-                    return redirect('customer_details')
                 if not state_code:
                     messages.error(request, 'State Code is required.')
+                    _preserve_customer_form_draft(request, customer_name, region, email, phone_number, deduped_user_ids, contact_person, address, gstin, state_code, is_sez, payment_terms)
                     return redirect('customer_details')
             region_error = _validate_customer_region(region)
             if region_error:
                 messages.error(request, region_error)
+                if action == 'add':
+                    _preserve_customer_form_draft(request, customer_name, region, email, phone_number, deduped_user_ids, contact_person, address, gstin, state_code, is_sez, payment_terms)
                 return redirect('customer_details')
             if email:
                 emails_list = [e.strip() for e in re.split(r'[,;\s]+', email) if e.strip()]
@@ -4133,29 +4481,51 @@ def customer_details(request):
                         validate_email(em)
                     except ValidationError:
                         messages.error(request, f'Enter a valid customer email address ("{em}" is invalid).')
+                        if action == 'add':
+                            _preserve_customer_form_draft(request, customer_name, region, email, phone_number, deduped_user_ids, contact_person, address, gstin, state_code, is_sez, payment_terms)
                         return redirect('customer_details')
                 email = ', '.join(emails_list)
+
+            # Sanitize phone number (strip spaces/dashes, clean 91 or leading 0 if 10-digit)
+            if phone_number:
+                digits_only = re.sub(r'\D', '', phone_number)
+                if digits_only.startswith('91') and len(digits_only) == 12:
+                    digits_only = digits_only[2:]
+                elif digits_only.startswith('0') and len(digits_only) == 11:
+                    digits_only = digits_only[1:]
+                if len(digits_only) == 10:
+                    phone_number = digits_only
             phone_error = _validate_master_phone(phone_number)
             if phone_error:
                 messages.error(request, phone_error)
+                if action == 'add':
+                    _preserve_customer_form_draft(request, customer_name, region, email, phone_number, deduped_user_ids, contact_person, address, gstin, state_code, is_sez, payment_terms)
                 return redirect('customer_details')
 
         if action == 'add':
-            new_customer = Customer.objects.create(
-                customer_name=customer_name,
-                region=region,
-                email=email or None,
-                phone_number=phone_number or None,
-                user_detail=ud,
-                contact_person=contact_person or None,
-                contact_number=contact_number or None,
-                user_mail_id=user_mail_id or None,
-                address=address or None,
-                gstin=gstin or None,
-                state_code=state_code or None,
-                is_sez=is_sez,
-                payment_terms=payment_terms or None
-            )
+            try:
+                new_customer = Customer.objects.create(
+                    customer_name=customer_name,
+                    region=region,
+                    email=email or None,
+                    phone_number=phone_number or None,
+                    user_detail=ud,
+                    contact_person=contact_person or None,
+                    contact_number=contact_number or None,
+                    user_mail_id=user_mail_id or None,
+                    address=address or None,
+                    gstin=gstin or None,
+                    state_code=state_code or None,
+                    is_sez=is_sez,
+                    payment_terms=payment_terms or None
+                )
+                if selected_users:
+                    new_customer.user_details.set(selected_users)
+            except Exception as e:
+                messages.error(request, f'Could not add customer: {str(e)}')
+                _preserve_customer_form_draft(request, customer_name, region, email, phone_number, deduped_user_ids, contact_person, address, gstin, state_code, is_sez, payment_terms)
+                return redirect('customer_details')
+
             from_email_id = request.POST.get('from_email_id', '').strip()
             mail_date_param = request.POST.get('mail_date_param', '').strip()
             enquiry_details_param = request.POST.get('enquiry_details_param', '').strip()
@@ -4204,8 +4574,12 @@ def customer_details(request):
             customer.state_code = state_code or customer.state_code or None
             customer.is_sez = is_sez
             customer.payment_terms = payment_terms or None
-            customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'user_detail', 'contact_person', 'contact_number', 'user_mail_id', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
-            messages.success(request, 'Customer updated successfully.')
+            try:
+                customer.save(update_fields=['customer_name', 'region', 'email', 'phone_number', 'user_detail', 'contact_person', 'contact_number', 'user_mail_id', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
+                customer.user_details.set(selected_users)
+                messages.success(request, 'Customer updated successfully.')
+            except Exception as e:
+                messages.error(request, f'Could not update customer: {str(e)}')
         elif action == 'delete':
             try:
                 customer = Customer.objects.get(pk=customer_id)
@@ -4222,24 +4596,43 @@ def customer_details(request):
         return redirect('customer_details')
 
     search_query = request.GET.get('search', '').strip()
-    customers = Customer.objects.select_related('user_detail').order_by('customer_name')
+    customers = Customer.objects.select_related('user_detail').prefetch_related('user_details').order_by('customer_name')
     if search_query:
-        customers = customers.filter(
+        q_filter = (
             Q(customer_name__icontains=search_query) |
             Q(contact_person__icontains=search_query) |
-            Q(user_detail__user_name__icontains=search_query)
+            Q(user_detail__user_name__icontains=search_query) |
+            Q(user_details__user_name__icontains=search_query)
         )
+        if '@' in search_query or search_query.endswith('.com') or search_query.endswith('.in'):
+            q_filter |= Q(email__icontains=search_query)
+        clean_digits = search_query.replace('+', '').replace('-', '').replace(' ', '')
+        if clean_digits.isdigit() and len(clean_digits) >= 3:
+            q_filter |= Q(phone_number__icontains=clean_digits)
+        customers = customers.filter(q_filter).distinct()
+
+    draft = request.session.pop('cust_form_draft', {}) or {}
+    prefill_user_ids = draft.get('user_detail_ids') or []
+    if not prefill_user_ids and request.GET.get('selected_user_id'):
+        prefill_user_ids = [request.GET.get('selected_user_id').strip()]
+    elif not prefill_user_ids and request.GET.get('user_detail_id'):
+        prefill_user_ids = [request.GET.get('user_detail_id').strip()]
 
     prefill_data = {
-        'customer_name': request.GET.get('customer_name', '').strip(),
-        'region': request.GET.get('region', '').strip(),
-        'email': request.GET.get('email', '').strip(),
-        'phone_number': request.GET.get('phone_number', '').strip(),
-        'user_detail_id': request.GET.get('selected_user_id', '').strip() or request.GET.get('user_detail_id', '').strip(),
-        'contact_person': request.GET.get('contact_person', '').strip(),
+        'customer_name': draft.get('customer_name') or request.GET.get('customer_name', '').strip(),
+        'region': draft.get('region') or request.GET.get('region', '').strip(),
+        'email': draft.get('email') or request.GET.get('email', '').strip(),
+        'phone_number': draft.get('phone_number') or request.GET.get('phone_number', '').strip(),
+        'user_detail_id': prefill_user_ids[0] if prefill_user_ids else '',
+        'user_detail_ids': prefill_user_ids,
+        'contact_person': draft.get('contact_person') or request.GET.get('contact_person', '').strip(),
         'contact_number': request.GET.get('contact_number', '').strip(),
         'user_mail_id': request.GET.get('user_mail_id', '').strip(),
-        'state_code': request.GET.get('state_code', '').strip() or ('33' if request.GET.get('region', '').strip() in ('Chennai', 'Hosur') else ''),
+        'address': draft.get('address') or '',
+        'gstin': draft.get('gstin') or '',
+        'state_code': draft.get('state_code') or request.GET.get('state_code', '').strip() or ('33' if (draft.get('region') or request.GET.get('region', '').strip()) in ('Chennai', 'Hosur') else ''),
+        'is_sez': draft.get('is_sez') or 'No',
+        'payment_terms': draft.get('payment_terms') or '',
         'from_email_id': request.GET.get('from_email_id', '').strip(),
         'mail_date_param': request.GET.get('mail_date_param', '').strip(),
         'enquiry_details_param': request.GET.get('enquiry_details_param', '').strip(),
@@ -4816,7 +5209,18 @@ def rfq_details(request):
         return redirect('rfq_details')
 
     status_filter = request.GET.get('status', 'all')
-    all_rfqs = list(RFQ.objects.select_related('customer').prefetch_related('products__suppliers', 'products__supplier_prices__supplier', 'quotations').order_by('-created_at', '-id'))
+    all_rfqs = list(
+        RFQ.objects
+        .select_related('customer__user_detail')
+        .prefetch_related(
+            'customer__user_details',
+            'products__suppliers',
+            'products__supplier_prices__supplier',
+            'quotations',
+            'email_messages'
+        )
+        .order_by('-created_at', '-id')
+    )
     
     confirmed_dprs = list(DPR.objects.exclude(po_attachment='').exclude(po_attachment__isnull=True).values_list('quotation_number', flat=True))
     confirmed_quote_set = set()
@@ -4833,31 +5237,36 @@ def rfq_details(request):
     for rfq in all_rfqs:
         rfq.row_class = _get_rfq_row_alert_class(rfq)
         rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
-        rfq.quotation_prepared = rfq.quotation_prepared or rfq.quotations.exists() or any(p.quotation_prepared or p.quotation_email_sent for p in rfq.products.all())
+        quotes = list(rfq.quotations.all())
+        quotes_asc = sorted(quotes, key=lambda q: (q.created_at or timezone.now(), q.id))
+        quotes_desc = sorted(quotes, key=lambda q: (q.created_at or timezone.now(), q.id), reverse=True)
+        latest_quotation = quotes_desc[0] if quotes_desc else None
 
-        rfq.quotation_records_display = list(rfq.quotations.order_by('created_at', 'id'))
-        latest_quotation = rfq.quotations.order_by('-created_at', '-id').first()
-        if latest_quotation:
-            rfq.quotation_no_display = latest_quotation.quotation_number
-        else:
-            rfq.quotation_no_display = '-'
+        rfq.quotation_records_display = quotes_asc
+        rfq.quotation_no_display = latest_quotation.quotation_number if latest_quotation else '-'
 
-        rfq_quote_nos = list(rfq.quotations.values_list('quotation_number', flat=True))
+        rfq_quote_nos = [q.quotation_number for q in quotes if q.quotation_number]
         is_po_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
+        has_email_sent_quote = any(q.email_sent for q in quotes)
+        products = list(rfq.products.all())
+
+        rfq.quotation_prepared = rfq.quotation_prepared or bool(quotes) or any(p.quotation_prepared or p.quotation_email_sent for p in products)
+
         is_quote_submitted = (
             rfq.row_class == 'table-success'
             or rfq.quotation_email_sent
-            or rfq.quotations.filter(email_sent=True).exists()
+            or has_email_sent_quote
             or is_po_confirmed
         )
 
-        rfq.has_prices = any(p.price_known and p.value and p.value > 0 for p in rfq.products.all())
+        rfq.has_prices = any(p.price_known and p.value and p.value > 0 for p in products)
         rfq.has_sent_email = (
             bool(rfq.email_sent_date)
             or rfq.quotation_email_sent
-            or rfq.quotations.filter(email_sent=True).exists()
-            or any(p.quotation_email_sent for p in rfq.products.all())
+            or has_email_sent_quote
+            or any(p.quotation_email_sent for p in products)
         )
+        rfq.email_count = len(list(rfq.email_messages.all()))
 
         if is_quote_submitted:
             rfq.order_status = 'confirmed'
@@ -4899,40 +5308,54 @@ def rfq_details(request):
     }
 
     rfq_payloads = []
+    cached_next_quote_no = _get_next_mes_quote_base_no()
     for rfq in rfqs_to_display:
         row_class = rfq.row_class
-        latest_quotation = rfq.quotations.order_by('-created_at', '-id').first()
+        quotes = list(rfq.quotations.all())
+        quotes_desc = sorted(quotes, key=lambda q: (q.created_at or timezone.now(), q.id), reverse=True)
+        latest_quotation = quotes_desc[0] if quotes_desc else None
+        customer = rfq.customer
+        customer_users_str = ''
+        if customer:
+            customer_users_str = ', '.join([
+                f"{u.user_name} ({u.user_designation})" if u.user_designation else u.user_name
+                for u in customer.users_list
+            ])
+
+        default_quote_no = latest_quotation.quotation_number if latest_quotation else cached_next_quote_no
+
         rfq_payloads.append({
             'id': rfq.id,
             'rfq_no': rfq.rfq_no,
             'quotation_no': rfq.quotation_no_display,
-            'default_quotation_no': latest_quotation.quotation_number if latest_quotation else _get_mes_quote_no(rfq),
+            'default_quotation_no': default_quote_no,
             'mail_date': rfq.mail_date.strftime('%Y-%m-%d') if rfq.mail_date else '',
             'customer_id': rfq.customer_id,
-            'customer_name': rfq.customer.customer_name,
-            'customer_user_detail_id': getattr(rfq.customer, 'user_detail_id', '') or '',
-            'customer_contact_person': getattr(rfq.customer, 'kind_attention_display', '') or getattr(rfq.customer, 'contact_person', '') or '',
-            'customer_contact_number': getattr(rfq.customer, 'contact_number', '') or '',
-            'customer_user_mail_id': getattr(rfq.customer, 'user_mail_id', '') or '',
-            'customer_address': rfq.customer.address or '',
-            'customer_gstin': rfq.customer.gstin or '',
-            'customer_phone': rfq.customer.phone_number or '',
-            'customer_region': rfq.customer.region or '',
-            'customer_email': rfq.customer.email or '',
-            'customer_payment_terms': getattr(rfq.customer, 'payment_terms', '') or '',
+            'customer_name': customer.customer_name if customer else '',
+            'customer_user_detail_id': getattr(customer, 'user_detail_id', '') or '',
+            'customer_contact_person': getattr(customer, 'kind_attention_display', '') or getattr(customer, 'contact_person', '') or '',
+            'customer_contact_number': getattr(customer, 'contact_number', '') or '',
+            'customer_user_mail_id': getattr(customer, 'user_mail_id', '') or '',
+            'customer_address': customer.address if customer else '',
+            'customer_users': customer_users_str,
+            'customer_gstin': customer.gstin if customer else '',
+            'customer_phone': customer.phone_number if customer else '',
+            'customer_region': customer.region if customer else '',
+            'customer_email': customer.email if customer else '',
+            'customer_payment_terms': getattr(customer, 'payment_terms', '') or '',
             'enquiry_details': rfq.enquiry_details,
             'remarks': rfq.remarks or '',
             'attachment_url': rfq.attachment.url if rfq.attachment else '',
             'attachment_name': rfq.attachment.name.split('/')[-1] if rfq.attachment else '',
             'has_sent_email': rfq.has_sent_email,
             'has_prices': rfq.has_prices,
-            'row_class': row_class,  # Row highlighting class for color-based alerts
+            'row_class': row_class,
             'latest_quotation_snapshot': latest_quotation.products_snapshot if latest_quotation else None,
             'latest_quotation_terms': (
                 next(
-                    (p.get('custom_terms') for p in (rfq.quotations.order_by('-created_at', '-id').first().products_snapshot or []) if isinstance(p, dict) and p.get('custom_terms')),
+                    (p.get('custom_terms') for p in (latest_quotation.products_snapshot or []) if isinstance(p, dict) and p.get('custom_terms')),
                     []
-                ) if rfq.quotations.exists() and rfq.quotations.order_by('-created_at', '-id').first().products_snapshot else []
+                ) if latest_quotation and latest_quotation.products_snapshot else []
             ),
             'quotation_records': [
                 {
@@ -4944,8 +5367,8 @@ def rfq_details(request):
                     'download_url': f"/rfq/{rfq.id}/quotation/download/?quotation_id={q.id}",
                     'products_snapshot': q.products_snapshot,
                 }
-                for q in rfq.quotations.order_by('-created_at', '-id')
-            ] if hasattr(rfq, 'quotations') else [],
+                for q in quotes_desc
+            ],
             'products': [
                 {
                     'id': product.id,
@@ -4956,7 +5379,7 @@ def rfq_details(request):
                     'quotation_email_sent': product.quotation_email_sent,
                     'quotation_prepared': product.quotation_prepared,
                     'supplier_id': product.supplier_id,
-                    'supplier_ids': list(product.suppliers.values_list('id', flat=True)),
+                    'supplier_ids': [s.id for s in product.suppliers.all()],
                     'supplier_prices': [
                         {
                             'id': supplier_price.id,
@@ -4976,7 +5399,27 @@ def rfq_details(request):
                 for product in rfq.products.all()
             ],
         })
-    customers = Customer.objects.order_by('customer_name')
+    customers = list(Customer.objects.select_related('user_detail').prefetch_related('user_details').order_by('customer_name'))
+    for c in customers:
+        c.address_single_line = re.sub(r'[\r\n]+', ', ', c.address.strip()).strip() if c.address else ''
+        u_list = []
+        for u in c.users_list:
+            display = f"{u.user_name} ({u.user_designation})" if u.user_designation else u.user_name
+            u_list.append({
+                'id': u.id,
+                'name': u.user_name,
+                'designation': u.user_designation or '',
+                'display': display
+            })
+        if not u_list and c.contact_person:
+            u_list.append({
+                'id': '',
+                'name': c.contact_person,
+                'designation': '',
+                'display': c.contact_person
+            })
+        c.users_data_json = json.dumps(u_list)
+        c.users_display_str = ', '.join([u['display'] for u in u_list])
     suppliers = Supplier.objects.order_by('supplier_name')
     last_rfq = RFQ.objects.order_by('-id').first()
     next_rfq_id = (last_rfq.id + 1) if last_rfq else 1
@@ -4988,7 +5431,11 @@ def rfq_details(request):
     else:
         email_prefill_products_json = request.session.get('email_prefill_products_json', '')
 
-    active_pts = list(ProductType.objects.filter(is_active=True).prefetch_related('spec_fields').order_by('name'))
+    active_pts = list(
+        ProductType.objects.filter(is_active=True)
+        .prefetch_related(Prefetch('spec_fields', queryset=ProductTypeSpecField.objects.order_by('sort_order', 'id')))
+        .order_by('name')
+    )
     existing_codes = {pt.code for pt in active_pts}
     product_type_choices = [(pt.code, pt.name if pt.name else pt.code) for pt in active_pts]
     for code, label in CustomerProduct.PRODUCT_TYPE_CHOICES:
@@ -4997,9 +5444,8 @@ def rfq_details(request):
 
     product_types_specs_data = {}
     for pt in active_pts:
-        fields = []
-        for f in pt.spec_fields.all().order_by('sort_order', 'id'):
-            fields.append({
+        fields = [
+            {
                 'id': f.id,
                 'label': f.field_label,
                 'key': f.field_key or f.field_label,
@@ -5011,7 +5457,9 @@ def rfq_details(request):
                 'depends_on_field': f.depends_on_field or '',
                 'depends_on_value': f.depends_on_value or '',
                 'sort_order': f.sort_order,
-            })
+            }
+            for f in pt.spec_fields.all()
+        ]
         pt_dict = {
             'id': pt.id,
             'name': pt.name,
@@ -5198,26 +5646,52 @@ def supplier_details(request):
         supplier_name = request.POST.get('supplier_name', '').strip()
         email = request.POST.get('email', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
-        user_detail_id = request.POST.get('user_detail_id')
-        ud = UserDetail.objects.filter(pk=user_detail_id).first() if user_detail_id else None
-        contact_person = ud.user_name if ud else request.POST.get('contact_person', '').strip()
-        contact_number = ud.user_number if ud else request.POST.get('contact_number', '').strip()
-        user_mail_id = ud.user_mail_id if ud else request.POST.get('user_mail_id', '').strip()
+
+        # Handle multiple user selection
+        raw_user_ids = request.POST.getlist('user_detail_ids') or request.POST.getlist('user_detail_id')
+        if not raw_user_ids:
+            single_val = request.POST.get('user_detail_ids') or request.POST.get('user_detail_id', '')
+            if single_val:
+                raw_user_ids = [x.strip() for x in str(single_val).split(',') if x.strip()]
+
+        valid_user_ids = []
+        for uid in raw_user_ids:
+            if isinstance(uid, str) and ',' in uid:
+                for part in uid.split(','):
+                    if part.strip().isdigit():
+                        valid_user_ids.append(int(part.strip()))
+            elif str(uid).isdigit():
+                valid_user_ids.append(int(uid))
+
+        seen = set()
+        deduped_user_ids = []
+        for uid in valid_user_ids:
+            if uid not in seen:
+                seen.add(uid)
+                deduped_user_ids.append(uid)
+
+        selected_users = list(UserDetail.objects.filter(pk__in=deduped_user_ids))
+        users_by_id = {u.id: u for u in selected_users}
+        selected_users = [users_by_id[uid] for uid in deduped_user_ids if uid in users_by_id]
+
+        ud = selected_users[0] if selected_users else None
+        contact_person = ', '.join([u.user_name for u in selected_users]) if selected_users else request.POST.get('contact_person', '').strip()
+        contact_number = ', '.join([u.user_number for u in selected_users if u.user_number]) if selected_users else request.POST.get('contact_number', '').strip()
+        user_mail_id = ', '.join([u.user_mail_id for u in selected_users if u.user_mail_id]) if selected_users else request.POST.get('user_mail_id', '').strip()
+
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
         state_code = request.POST.get('state_code', '').strip().upper()
         is_sez = 'Yes' if request.POST.get('is_sez', '').strip().lower() == 'yes' else 'No'
         payment_terms = request.POST.get('payment_terms', '').strip()
 
-
         if action in ('add', 'edit'):
             if not supplier_name:
                 messages.error(request, 'Supplier Name is required.')
                 return redirect('supplier_details')
-            if action == 'add':
-                if not user_detail_id and not contact_person:
-                    messages.error(request, 'User Details is required.')
-                    return redirect('supplier_details')
+            if not selected_users and not contact_person:
+                messages.error(request, 'User Details is mandatory. Please select at least one user.')
+                return redirect('supplier_details')
             if email:
                 emails_list = [e.strip() for e in re.split(r'[,;\s]+', email) if e.strip()]
                 for em in emails_list:
@@ -5227,13 +5701,23 @@ def supplier_details(request):
                         messages.error(request, f'Enter a valid supplier email address ("{em}" is invalid).')
                         return redirect('supplier_details')
                 email = ', '.join(emails_list)
+
+            # Sanitize phone number (strip spaces/dashes, clean 91 or leading 0 if 10-digit)
+            if phone_number:
+                digits_only = re.sub(r'\D', '', phone_number)
+                if digits_only.startswith('91') and len(digits_only) == 12:
+                    digits_only = digits_only[2:]
+                elif digits_only.startswith('0') and len(digits_only) == 11:
+                    digits_only = digits_only[1:]
+                if len(digits_only) == 10:
+                    phone_number = digits_only
             phone_error = _validate_master_phone(phone_number)
             if phone_error:
                 messages.error(request, phone_error)
                 return redirect('supplier_details')
 
         if action == 'add':
-            Supplier.objects.create(
+            supplier = Supplier.objects.create(
                 supplier_name=supplier_name,
                 email=email or None,
                 phone_number=phone_number or None,
@@ -5247,6 +5731,8 @@ def supplier_details(request):
                 is_sez=is_sez,
                 payment_terms=payment_terms or None
             )
+            if selected_users:
+                supplier.user_details.set(selected_users)
             messages.success(request, 'Supplier added successfully.')
         elif action == 'edit':
             try:
@@ -5266,6 +5752,7 @@ def supplier_details(request):
             supplier.is_sez = is_sez
             supplier.payment_terms = payment_terms or None
             supplier.save(update_fields=['supplier_name', 'email', 'phone_number', 'user_detail', 'contact_person', 'contact_number', 'user_mail_id', 'address', 'gstin', 'state_code', 'is_sez', 'payment_terms'])
+            supplier.user_details.set(selected_users)
             messages.success(request, 'Supplier updated successfully.')
         elif action == 'delete':
             try:
@@ -5286,18 +5773,33 @@ def supplier_details(request):
         return redirect('supplier_details')
 
     search_query = request.GET.get('search', '').strip()
-    suppliers = Supplier.objects.select_related('user_detail').order_by('supplier_name')
+    suppliers = Supplier.objects.select_related('user_detail').prefetch_related('user_details').order_by('supplier_name')
     if search_query:
-        suppliers = suppliers.filter(
+        q_filter = (
             Q(supplier_name__icontains=search_query) |
             Q(contact_person__icontains=search_query) |
-            Q(user_detail__user_name__icontains=search_query)
+            Q(user_detail__user_name__icontains=search_query) |
+            Q(user_details__user_name__icontains=search_query)
         )
+        if '@' in search_query or search_query.endswith('.com') or search_query.endswith('.in'):
+            q_filter |= Q(email__icontains=search_query)
+        clean_digits = search_query.replace('+', '').replace('-', '').replace(' ', '')
+        if clean_digits.isdigit() and len(clean_digits) >= 3:
+            q_filter |= Q(phone_number__icontains=clean_digits)
+        suppliers = suppliers.filter(q_filter).distinct()
+
+    prefill_user_ids = []
+    if request.GET.get('selected_user_id'):
+        prefill_user_ids = [request.GET.get('selected_user_id').strip()]
+    elif request.GET.get('user_detail_id'):
+        prefill_user_ids = [request.GET.get('user_detail_id').strip()]
+
     return render(request, 'supplier_details.html', {
         'suppliers': suppliers,
         'user_details_list': user_details_list,
         'search_query': search_query,
         'selected_user_id': request.GET.get('selected_user_id', '').strip(),
+        'prefill_user_ids': prefill_user_ids,
     })
 
 
@@ -5480,11 +5982,22 @@ def customer_order(request):
                     quotation_attachment = matching_rfq.attachment
                     break
 
+        source_email_obj = None
+        from_email_id_val = request.POST.get('from_email_id') or request.GET.get('from_email_id')
+        if from_email_id_val and str(from_email_id_val).isdigit():
+            from email_classifier.models import EmailRecord
+            source_email_obj = EmailRecord.objects.filter(pk=int(from_email_id_val)).first()
+            if source_email_obj:
+                source_email_obj.is_added_to_po = True
+                source_email_obj.save(update_fields=['is_added_to_po'])
+
         # CREATE DPR
 
         dpr = DPR.objects.create(
 
             customer=customer,
+
+            source_email=source_email_obj,
 
             enquiry_attachment=enquiry_attachment,
 
@@ -5612,6 +6125,7 @@ def customer_order(request):
         'dpr': None,
         'products': None,
         'is_edit': False,
+        'from_email_id': from_email_id,
         'email_products_json': email_products_json,
         'next_dpr_no': _get_next_dpr_no(),
     }
@@ -6256,22 +6770,59 @@ def _build_single_po_story(dpr, supplier, items, delivery_address='hosur'):
         basic_total += line_total
         
         raw_specs = getattr(sp.customer_product, 'product_specifications', None)
+        raw_specs = _normalize_product_specifications(raw_specs)
+
         if not raw_specs:
             if dpr.quotation_number:
-                q_rec = RFQQuotation.objects.filter(quotation_number__icontains=dpr.quotation_number.strip()).first()
-                if q_rec and q_rec.products_snapshot:
-                    for snap in q_rec.products_snapshot:
-                        if (snap.get('product_name', '').strip().lower() == sp.customer_product.product_name.strip().lower()
-                                or (sp.customer_product.product_type and snap.get('product_type', '').strip().lower() == sp.customer_product.product_type.strip().lower())):
-                            raw_specs = snap.get('product_specifications')
+                quote_candidates = [q.strip() for q in dpr.quotation_number.split(',') if q.strip()]
+                for q_cand in quote_candidates:
+                    clean_cand = q_cand.split('(')[0].strip()
+                    base_cand = re.sub(r'_r\d+$', '', clean_cand, flags=re.IGNORECASE)
+                    q_recs = RFQQuotation.objects.filter(
+                        Q(quotation_number__iexact=clean_cand) |
+                        Q(quotation_number__icontains=clean_cand) |
+                        Q(quotation_number__icontains=base_cand)
+                    ).order_by('-revision_number', '-id')
+
+                    for q_rec in q_recs:
+                        if q_rec and q_rec.products_snapshot:
+                            for snap in q_rec.products_snapshot:
+                                snap_name = snap.get('product_name', '').strip().lower()
+                                cp_name = sp.customer_product.product_name.strip().lower()
+                                snap_type = (snap.get('product_type') or '').strip().lower()
+                                cp_type = (sp.customer_product.product_type or '').strip().lower()
+                                if (snap_name == cp_name or (snap_type and cp_type and snap_type == cp_type) or (cp_name and cp_name in snap_name) or (snap_name and snap_name in cp_name)):
+                                    cand_specs = _normalize_product_specifications(snap.get('product_specifications'))
+                                    if cand_specs:
+                                        raw_specs = cand_specs
+                                        break
+                        if raw_specs:
                             break
+                    if raw_specs:
+                        break
+
             if not raw_specs and dpr.customer:
-                rfq_p = RFQProduct.objects.filter(
-                    rfq__customer=dpr.customer,
-                    product_name__icontains=sp.customer_product.product_name
-                ).order_by('-id').first()
-                if rfq_p and rfq_p.product_specifications:
-                    raw_specs = rfq_p.product_specifications
+                rfq_prods = RFQProduct.objects.filter(rfq__customer=dpr.customer).order_by('-id')
+                for rp in rfq_prods:
+                    rp_name = (rp.product_name or '').strip().lower()
+                    cp_name = sp.customer_product.product_name.strip().lower()
+                    rp_type = (rp.product_type or '').strip().lower()
+                    cp_type = (sp.customer_product.product_type or '').strip().lower()
+                    if (rp_name == cp_name or (rp_type and cp_type and rp_type == cp_type) or (cp_name and cp_name in rp_name) or (rp_name and rp_name in cp_name)):
+                        cand_specs = _normalize_product_specifications(rp.product_specifications)
+                        if cand_specs:
+                            raw_specs = cand_specs
+                            break
+
+            if not raw_specs and sp.customer_product.remarks:
+                emb, _ = _extract_embedded_specs_from_text(sp.customer_product.remarks)
+                if emb:
+                    raw_specs = emb
+
+            if not raw_specs and sp.customer_product.product_name:
+                emb, _ = _extract_embedded_specs_from_text(sp.customer_product.product_name)
+                if emb:
+                    raw_specs = emb
 
         desc_lines = _format_product_description_lines(
             sp.customer_product.product_name,
@@ -6485,6 +7036,12 @@ def generate_supplier_po(request, dpr_id):
     ).select_related('customer_product', 'supplier')
 
     if not supplier_products.exists():
+        _ensure_default_supplier_products(dpr)
+        supplier_products = SupplierProduct.objects.filter(
+            customer_product__dpr=dpr
+        ).select_related('customer_product', 'supplier')
+
+    if not supplier_products.exists():
         messages.error(request, 'No supplier orders found for this DPR to generate a PO.')
         return redirect('dpr_supplier', dpr_id=dpr_id)
 
@@ -6604,6 +7161,12 @@ def send_supplier_po_email(request, dpr_id):
     supplier_products = SupplierProduct.objects.filter(
         customer_product__dpr=dpr
     ).select_related('customer_product', 'supplier')
+
+    if not supplier_products.exists():
+        _ensure_default_supplier_products(dpr)
+        supplier_products = SupplierProduct.objects.filter(
+            customer_product__dpr=dpr
+        ).select_related('customer_product', 'supplier')
 
     if not supplier_products.exists():
         messages.error(request, 'No supplier orders found for this DPR to send a PO email.')
@@ -8264,6 +8827,12 @@ def sync_all_mail(request):
         except Exception as e:
             logger.exception("RFQ sync failed during unified sync: %s", e)
             rfq_err = str(e)
+            if mail_client:
+                try:
+                    mail_client.logout()
+                except Exception:
+                    pass
+                mail_client = None
 
         # 2. Sync EMAILS classifier inbox
         try:
@@ -8283,8 +8852,20 @@ def sync_all_mail(request):
                         offset=offset, limit=BATCH_SIZE, mail_client=mail_client
                     )
                 except Exception as fetch_err:
-                    logger.warning("fetch_all_messages failed at offset %d: %s", offset, fetch_err)
-                    break
+                    logger.warning("fetch_all_messages failed at offset %d with shared client: %s", offset, fetch_err)
+                    if mail_client is not None:
+                        mail_client = None
+                        try:
+                            messages_list, inbox_total = fetch_all_messages(
+                                offset=offset, limit=BATCH_SIZE, mail_client=None
+                            )
+                        except Exception as retry_err:
+                            logger.exception("fetch_all_messages retry failed: %s", retry_err)
+                            email_err = str(retry_err)
+                            break
+                    else:
+                        email_err = str(fetch_err)
+                        break
 
                 if not messages_list:
                     if not is_full:
@@ -9536,3 +10117,118 @@ def delete_supplier_datasheet(request, datasheet_id):
         except SupplierDatasheet.DoesNotExist:
             messages.error(request, 'Rate card not found.')
     return redirect('supplier_rate_cards')
+
+
+@login_required
+def dpr_bunch_documents(request, dpr_id):
+    from dpr.models import DPR, DPRBunchDocument
+    from pathlib import PurePath
+    try:
+        dpr = DPR.objects.select_related('customer').get(pk=dpr_id)
+    except DPR.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'DPR not found.'}, status=404)
+
+    if request.method == 'GET':
+        docs = dpr.bunch_documents.all().order_by('-uploaded_at')
+        docs_by_type = {
+            'rfq_screenshot': [],
+            'quotation': [],
+            'customer_po': [],
+            'vendor_price': [],
+            'drawing': [],
+        }
+        for d in docs:
+            docs_by_type.setdefault(d.doc_type, []).append({
+                'id': d.id,
+                'name': d.file_name or (PurePath(d.file.name).name if d.file else 'Document'),
+                'url': d.file.url if d.file else '',
+                'uploaded_at': timezone.localtime(d.uploaded_at).strftime('%d %b %Y, %H:%M') if d.uploaded_at else '',
+            })
+
+        return JsonResponse({
+            'status': 'ok',
+            'dpr_id': dpr.id,
+            'serial_number': dpr.serial_number or f"DPR-{dpr.id}",
+            'customer_name': dpr.customer.customer_name if dpr.customer else '',
+            'documents': docs_by_type,
+        })
+
+    elif request.method == 'POST':
+        field_mapping = {
+            'rfq_screenshots': 'rfq_screenshot',
+            'quotation': 'quotation',
+            'customer_po': 'customer_po',
+            'vendor_price_details': 'vendor_price',
+            'drawings': 'drawing',
+        }
+
+        saved_count = 0
+        for form_field, doc_type in field_mapping.items():
+            files = request.FILES.getlist(form_field)
+            for f in files:
+                doc = DPRBunchDocument(
+                    dpr=dpr,
+                    doc_type=doc_type,
+                    file=f,
+                    file_name=f.name
+                )
+                doc.save()
+                saved_count += 1
+
+        return JsonResponse({
+            'status': 'ok',
+            'saved_count': saved_count,
+            'message': f'Successfully uploaded {saved_count} document(s).' if saved_count > 0 else 'No new files selected.'
+        })
+
+    return JsonResponse({'status': 'error', 'message': 'Invalid method.'}, status=405)
+
+
+@login_required
+@login_required
+def get_email_record_detail(request, record_id):
+    """Return JSON details of an email record for modals in DPR view."""
+    from email_classifier.models import EmailRecord
+    from urllib.parse import quote
+    try:
+        record = EmailRecord.objects.get(pk=record_id)
+    except EmailRecord.DoesNotExist:
+        return JsonResponse({'error': 'Email not found'}, status=404)
+
+    attachments = []
+    if record.attachments_list:
+        for att in record.attachments_list:
+            attachments.append({
+                'name': att,
+                'url': f"/email-classifier/emails/{record.id}/attachment/?file={quote(att)}"
+            })
+
+    cat_display = record.get_displayed_category_display() if hasattr(record, 'get_displayed_category_display') else record.displayed_category
+
+    return JsonResponse({
+        'id': record.id,
+        'subject': record.subject or '(No Subject)',
+        'sender': record.sender or 'Unknown',
+        'received_at': record.received_at.strftime('%d %b %Y, %H:%M') if record.received_at else '',
+        'category': cat_display or 'Purchase Order',
+        'body': record.body or 'No message body text.',
+        'attachments': attachments,
+    })
+
+
+def delete_dpr_bunch_document(request, doc_id):
+    from dpr.models import DPRBunchDocument
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid method.'}, status=405)
+
+    try:
+        doc = DPRBunchDocument.objects.get(pk=doc_id)
+        if doc.file:
+            try:
+                doc.file.delete(save=False)
+            except Exception:
+                pass
+        doc.delete()
+        return JsonResponse({'status': 'ok', 'message': 'Document deleted successfully.'})
+    except DPRBunchDocument.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Document not found.'}, status=404)
