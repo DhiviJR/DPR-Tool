@@ -2239,15 +2239,8 @@ function getDynamicQuotationNumber(rfq, isRevision = false) {
     }
 
     // Brand new RFQ - Calculate next sequential base quotation number dynamically across all RFQs in system
-    const now = new Date();
-    let year = now.getFullYear();
-    if (rfq.mail_date) {
-        const d = new Date(rfq.mail_date);
-        if (!isNaN(d.getTime())) year = d.getFullYear();
-    }
-    const yearSuffix = `${String(year).slice(-2)}-${String(year + 1).slice(-2)}`;
-
-    let maxSeq = (yearSuffix === '26-27') ? 472 : 0;
+    const yearSuffix = '25-26';
+    let maxSeq = 517;
 
     if (typeof rfqData !== 'undefined' && Array.isArray(rfqData)) {
         rfqData.forEach(r => {
@@ -2276,7 +2269,7 @@ function getDynamicQuotationNumber(rfq, isRevision = false) {
     });
 
     const nextSeq = maxSeq + 1;
-    return `MES_Q${String(nextSeq).padStart(4, '0')}/${yearSuffix}`;
+    return `MES_Q${String(nextSeq).padStart(5, '0')}_${yearSuffix}`;
 }
 
 const prepareQuoteFormEl = document.getElementById('prepareQuotationForm');
