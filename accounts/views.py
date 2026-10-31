@@ -4365,6 +4365,35 @@ def dpr_status_update(request, dpr_id):
     return JsonResponse({'status': 'ok'})
 
 
+def delete_dpr(request, dpr_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+    try:
+        dpr = DPR.objects.get(pk=dpr_id)
+        serial_no = dpr.serial_number or f'DPR-{dpr.id}'
+        from products.models import CustomerProduct, SupplierProduct, CustomerInvoice
+        from dpr.models import DPRBunchDocument
+        SupplierProduct.objects.filter(customer_product__dpr=dpr).delete()
+        CustomerInvoice.objects.filter(customer_product__dpr=dpr).delete()
+        CustomerProduct.objects.filter(dpr=dpr).delete()
+        DPRBunchDocument.objects.filter(dpr=dpr).delete()
+        dpr.delete()
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', ''):
+            return JsonResponse({'status': 'success', 'message': f'{serial_no} deleted successfully.'})
+        messages.success(request, f'{serial_no} deleted successfully.')
+        return redirect('dpr_view')
+    except DPR.DoesNotExist:
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', ''):
+            return JsonResponse({'status': 'error', 'message': 'DPR not found.'}, status=404)
+        messages.error(request, 'DPR not found.')
+        return redirect('dpr_view')
+    except Exception as e:
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', ''):
+            return JsonResponse({'status': 'error', 'message': f'Error deleting DPR: {str(e)}'}, status=500)
+        messages.error(request, f'Error deleting DPR: {e}')
+        return redirect('dpr_view')
+
+
 def _validate_master_phone(phone_number):
     if phone_number and not re.fullmatch(r'\d{10}', phone_number):
         return 'Enter a valid 10-digit mobile number.'

@@ -103,9 +103,10 @@
 
                             <option value="{{ customer.id }}"
                                     data-region="{{ customer.region|default:'' }}"
+                                    data-address="{{ customer.address_single_line|default:customer.address|default:'' }}"
                                     {% if dpr and dpr.customer.id == customer.id %}selected{% endif %}>
 
-                                {{ customer.clean_customer_name }}{% if customer.address %} - {{ customer.address }}{% endif %}
+                                {{ customer.clean_customer_name }}
 
                             </option>
 
@@ -119,6 +120,18 @@
                                 data-bs-target="#customerModal">
                             +
                         </button>
+                    </div>
+
+                    <div id="customerAddressBox" class="mt-1 d-none" style="font-size: 0.75rem; color: #4b5563; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 8px; line-height: 1.35; cursor: pointer; user-select: none;" title="Click to view full address">
+                        <div class="d-flex align-items-start gap-1">
+                            <i class="bi bi-geo-alt text-danger flex-shrink-0 mt-0.5"></i>
+                            <div class="flex-grow-1" style="min-width: 0;">
+                                <span id="customerAddressDisplay" class="d-block" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></span>
+                            </div>
+                            <span id="customerAddressToggleHint" class="badge bg-light text-secondary border px-1 py-0 ms-1 flex-shrink-0 d-none" style="font-size: 0.65rem; font-weight: 500;">
+                                <span class="hint-text">More</span> <i class="bi bi-chevron-down"></i>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -914,11 +927,83 @@ function filterCustomersByRegion() {
     }
 
     loadCustomerQuotations();
+    syncCustomerOrderAddress();
 }
 
+function syncCustomerOrderAddress() {
+    const dropdown = document.getElementById('customerDropdown');
+    const addressBox = document.getElementById('customerAddressBox');
+    const addressDisplay = document.getElementById('customerAddressDisplay');
+    const toggleHint = document.getElementById('customerAddressToggleHint');
+
+    if (!dropdown || !addressBox || !addressDisplay) return;
+    const selectedOption = dropdown.options[dropdown.selectedIndex];
+    if (!selectedOption || !selectedOption.value) {
+        addressBox.classList.add('d-none');
+        addressDisplay.textContent = '';
+        if (toggleHint) toggleHint.classList.add('d-none');
+        return;
+    }
+
+    const addr = (selectedOption.dataset.address || '').trim();
+    if (!addr) {
+        addressBox.classList.add('d-none');
+        addressDisplay.textContent = '';
+        if (toggleHint) toggleHint.classList.add('d-none');
+        return;
+    }
+
+    addressDisplay.textContent = addr;
+    addressDisplay.style.whiteSpace = 'nowrap';
+    addressDisplay.style.wordBreak = 'normal';
+    addressBox.classList.remove('d-none');
+
+    if (addr.length > 40) {
+        if (toggleHint) {
+            toggleHint.classList.remove('d-none');
+            const hintText = toggleHint.querySelector('.hint-text');
+            if (hintText) hintText.textContent = 'More';
+            const hintIcon = toggleHint.querySelector('i');
+            if (hintIcon) hintIcon.className = 'bi bi-chevron-down';
+        }
+    } else if (toggleHint) {
+        toggleHint.classList.add('d-none');
+    }
+}
+
+document.getElementById('customerAddressBox')?.addEventListener('click', function() {
+    const display = document.getElementById('customerAddressDisplay');
+    const hint = document.getElementById('customerAddressToggleHint');
+    if (!display || !display.textContent.trim()) return;
+    const isCollapsed = display.style.whiteSpace !== 'normal';
+    if (isCollapsed) {
+        display.style.whiteSpace = 'normal';
+        display.style.wordBreak = 'break-word';
+        if (hint) {
+            const hintText = hint.querySelector('.hint-text');
+            if (hintText) hintText.textContent = 'Less';
+            const hintIcon = hint.querySelector('i');
+            if (hintIcon) hintIcon.className = 'bi bi-chevron-up';
+        }
+    } else {
+        display.style.whiteSpace = 'nowrap';
+        display.style.wordBreak = 'normal';
+        if (hint) {
+            const hintText = hint.querySelector('.hint-text');
+            if (hintText) hintText.textContent = 'More';
+            const hintIcon = hint.querySelector('i');
+            if (hintIcon) hintIcon.className = 'bi bi-chevron-down';
+        }
+    }
+});
+
 document.getElementById('regionDropdown').addEventListener('change', filterCustomersByRegion);
-document.getElementById('customerDropdown').addEventListener('change', loadCustomerQuotations);
+document.getElementById('customerDropdown').addEventListener('change', function() {
+    loadCustomerQuotations();
+    syncCustomerOrderAddress();
+});
 filterCustomersByRegion();
+syncCustomerOrderAddress();
 
 document.addEventListener('input', function (e) {
     if (e.target.id !== 'customerPhone') {
@@ -1182,11 +1267,9 @@ document.addEventListener(
                 let option = document.createElement('option');
                 option.value = data.id;
                 let optText = data.name;
-                if (customerAddress.trim()) {
-                    optText += ' - ' + customerAddress.trim();
-                }
                 option.text = optText;
                 option.dataset.region = data.region;
+                option.dataset.address = customerAddress.trim();
                 option.selected = true;
                 dropdown.appendChild(option);
 

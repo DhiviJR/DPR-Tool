@@ -150,6 +150,7 @@
                                     <option value="cancel" {% if dpr.status == 'cancel' %}selected{% endif %}>Cancel</option>
                                 </select>
                                 {% endif %}
+                                <button type="button" class="btn btn-danger btn-sm btn-delete-dpr" data-dpr-id="{{ dpr.id }}" data-dpr-no="{{ dpr.serial_number }}">Delete</button>
                             </div>
                         </td>
                         <td data-sort-value="download">
@@ -272,6 +273,47 @@ document.addEventListener('click', function (e) {
 
     if (e.target.classList.contains('btn-edit-supplier')) {
         window.location.href = `/dpr/${dprId}/supplier/`;
+    }
+
+    if (e.target.classList.contains('btn-delete-dpr')) {
+        const dprNo = e.target.getAttribute('data-dpr-no') || row.querySelector('td:nth-child(2)')?.textContent?.trim() || `DPR #${dprId}`;
+        if (confirm(`Are you sure you want to delete ${dprNo}? This action cannot be undone.`)) {
+            const btn = e.target;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+            fetch(`/dpr/${dprId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    row.style.transition = 'all 0.3s ease';
+                    row.style.opacity = '0';
+                    setTimeout(() => {
+                        row.remove();
+                        const rowCountEl = document.getElementById('dprRowCount');
+                        if (rowCountEl) {
+                            const remaining = document.querySelectorAll('#dprTable tbody tr[data-dpr-id]').length;
+                            rowCountEl.textContent = `Showing ${remaining} records`;
+                        }
+                    }, 300);
+                } else {
+                    alert(data.message || 'Error deleting DPR');
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            })
+            .catch(err => {
+                alert('Failed to delete DPR. Please try again.');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        }
     }
 });
 

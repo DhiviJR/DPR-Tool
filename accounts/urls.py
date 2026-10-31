@@ -46,6 +46,7 @@ urlpatterns = [
     path('dpr/<int:dpr_id>/edit/', views.customer_order_edit, name='customer_order_edit'),
     path('dpr/<int:dpr_id>/supplier/', views.dpr_supplier, name='dpr_supplier'),
     path('dpr/<int:dpr_id>/status/', views.dpr_status_update, name='dpr_status_update'),
+    path('dpr/<int:dpr_id>/delete/', views.delete_dpr, name='delete_dpr'),
 
     path('login/', views.user_login, name='login'),
     path('logout/', views.user_logout, name='logout'),
