@@ -182,11 +182,14 @@
                                         data-address="{{ customer.address_single_line|default:'' }}"
                                         data-users="{{ customer.users_display_str|default:'' }}"
                                         data-users-json="{{ customer.users_data_json|escape }}">
-                                    {{ customer.customer_name }}{% if customer.address_single_line %} - {{ customer.address_single_line }}{% endif %}
+                                    {{ customer.customer_name }}
                                 </option>
                                 {% endfor %}
                             </select>
                             <input type="hidden" id="rfqCustomerAddress" name="customer_address" value="">
+                            <div id="rfqCustomerAddressBox" class="mt-1 d-none" style="font-size: 0.75rem; color: #4b5563; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 8px; line-height: 1.35; max-height: 52px; overflow-y: auto;">
+                                <i class="bi bi-geo-alt text-danger me-1"></i><span id="rfqCustomerAddressDisplay"></span>
+                            </div>
                         </div>
                         <div class="col-lg-3" id="rfqUserSelectCol">
                             <label class="form-label">User Details</label>
@@ -3493,6 +3496,8 @@ function resetRfqForm() {
 function syncRfqCustomerAddress() {
     const customerDropdown = document.getElementById('rfqCustomer');
     const addressInput = document.getElementById('rfqCustomerAddress');
+    const addressBox = document.getElementById('rfqCustomerAddressBox');
+    const addressDisplay = document.getElementById('rfqCustomerAddressDisplay');
     const optionsContainer = document.getElementById('rfqUserMultiOptions');
     const labelSpan = document.getElementById('rfqUserMultiLabel');
     const hiddenInput = document.getElementById('rfqCustomerUsers');
@@ -3503,6 +3508,8 @@ function syncRfqCustomerAddress() {
 
     if (!selectedOption || !selectedOption.value || selectedOption.value === '__add_new_user__') {
         if (addressInput) addressInput.value = '';
+        if (addressBox) addressBox.classList.add('d-none');
+        if (addressDisplay) addressDisplay.textContent = '';
         if (hiddenInput) hiddenInput.value = '';
         if (hiddenIdsInput) hiddenIdsInput.value = '';
         if (labelSpan) {
@@ -3518,6 +3525,15 @@ function syncRfqCustomerAddress() {
 
     const addr = (selectedOption.dataset.address || '').trim();
     if (addressInput) addressInput.value = addr;
+    if (addressBox && addressDisplay) {
+        if (addr) {
+            addressDisplay.textContent = addr;
+            addressBox.classList.remove('d-none');
+        } else {
+            addressDisplay.textContent = '';
+            addressBox.classList.add('d-none');
+        }
+    }
 
     let users = [];
     try {
