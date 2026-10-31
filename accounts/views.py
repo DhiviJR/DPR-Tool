@@ -7323,7 +7323,7 @@ def check_customer_po_number(request):
     dpr_id = request.GET.get('dpr_id', '')
     if not po_number:
         return JsonResponse({'exists': False})
-    qs = DPR.objects.filter(customer_po_number__iexact=po_number)
+    qs = DPR.objects.filter(po_number__iexact=po_number)
     if dpr_id:
         try:
             qs = qs.exclude(pk=int(dpr_id))
