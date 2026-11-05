@@ -426,6 +426,7 @@
                             <td>
                                 <input type="file"
                                        class="form-control"
+                                       multiple
                                        name="product_attachment_{{ forloop.counter0 }}">
                                 <input type="hidden"
                                        name="existing_attachment_{{ forloop.counter0 }}"
@@ -506,6 +507,7 @@
                             <td>
                                 <input type="file"
                                        class="form-control"
+                                       multiple
                                        name="product_attachment_0">
                                 <input type="hidden"
                                        name="existing_attachment_0"
@@ -669,7 +671,7 @@ function generateProductRow(index, p = {}) {
                 <input type="text" class="form-control" name="remarks[]" value="${remarks}">
             </td>
             <td>
-                <input type="file" class="form-control" name="product_attachment_${index}">
+                <input type="file" class="form-control" multiple name="product_attachment_${index}">
                 <input type="hidden" name="existing_attachment_${index}" value="">
             </td>
             <td>
@@ -1623,7 +1625,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const custId = document.getElementById('modalQuoteCustomerId').value;
             const custName = document.getElementById('modalQuoteCustomerDisplay').value.trim();
             const quoteNumber = document.getElementById('modalQuoteNumber').value.trim();
-            const quoteAttachment = document.getElementById('modalQuoteAttachment').files[0];
+            const quoteAttachmentFiles = document.getElementById('modalQuoteAttachment').files;
 
             let hasError = false;
             const numErr = document.getElementById('modalQuoteNumberError');
@@ -1651,7 +1653,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const formData = new FormData();
             formData.append('customer_id', custId);
             formData.append('quotation_number', quoteNumber);
-            if (quoteAttachment) formData.append('quotation_attachment', quoteAttachment);
+            if (quoteAttachmentFiles && quoteAttachmentFiles.length > 0) {
+                for (let i = 0; i < quoteAttachmentFiles.length; i++) {
+                    formData.append('quotation_attachment', quoteAttachmentFiles[i]);
+                }
+            }
 
             const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
 
@@ -1814,7 +1820,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <!-- Quotation Attachment -->
                     <div class="col-12">
                         <label class="form-label small fw-semibold">Quotation Attachment</label>
-                        <input type="file" id="modalQuoteAttachment" class="form-control form-control-sm" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg">
+                        <input type="file" id="modalQuoteAttachment" class="form-control form-control-sm" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" multiple>
                         <div class="form-text small">Attach quotation document (PDF/Doc/Image).</div>
                     </div>
                 </div>

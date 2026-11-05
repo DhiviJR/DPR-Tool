@@ -136,9 +136,9 @@ def _quote_number_sequence(quotation_number):
 
 
 def _get_next_mes_quote_base_no(rfq=None):
-    # Quotation sequence configured to start from MES_Q00518_25-26 and follow in order
+    # Quotation sequence configured to start from MES_Q00632_25-26 and follow in order
     year_suffix = '25-26'
-    max_seq = 517
+    max_seq = 631
 
     for quote_no in RFQQuotation.objects.values_list('quotation_number', flat=True):
         seq, suffix = _quote_number_sequence(quote_no)
@@ -283,9 +283,16 @@ def _format_mes_quote_no(rfq, revision_number=0, base_quote_no=None):
 
 
 def _get_next_dpr_no():
-    last_dpr = DPR.objects.order_by('-id').first()
-    next_dpr_id = (last_dpr.id + 1) if last_dpr else 1
-    return f"DPR-{timezone.now().year}-{next_dpr_id:04d}"
+    import re
+    # Starting base for DPR number order is configured to start from DPR-2026-3948 and follow the order
+    year = timezone.now().year
+    max_dpr_seq = 3947
+    for sn in DPR.objects.values_list('serial_number', flat=True):
+        m = re.match(r'^DPR-\d+-(\d+)$', sn or '')
+        if m:
+            max_dpr_seq = max(max_dpr_seq, int(m.group(1)))
+    next_dpr_seq = max_dpr_seq + 1
+    return f"DPR-{year}-{next_dpr_seq:04d}"
 
 
 def _normalize_spec_key(key):
@@ -776,7 +783,7 @@ def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False, c
         while RFQQuotation.objects.filter(quotation_number=quotation_number).exists():
             seq, suffix = _quote_number_sequence(quotation_number)
             year_suffix = suffix or '25-26'
-            quotation_number = f"MES_Q{(seq or 517) + 1:05d}_{year_suffix}"
+            quotation_number = f"MES_Q{(seq or 631) + 1:05d}_{year_suffix}"
 
     quotation = RFQQuotation.objects.create(
         rfq=rfq,
@@ -1321,13 +1328,20 @@ def _send_rfq_supplier_price_requests(
 
     sent_count = 0
     failed_suppliers = []
-    attachment_payload = None
+    attachment_payloads = []
     if email_attachment:
-        attachment_payload = (
-            email_attachment.name,
-            email_attachment.read(),
-            getattr(email_attachment, 'content_type', None) or 'application/octet-stream'
-        )
+        att_list = email_attachment if isinstance(email_attachment, (list, tuple)) else [email_attachment]
+        for att in att_list:
+            if att:
+                try:
+                    att.seek(0)
+                except Exception:
+                    pass
+                attachment_payloads.append((
+                    att.name,
+                    att.read(),
+                    getattr(att, 'content_type', None) or 'application/octet-stream'
+                ))
 
     def render_template(template, context):
         rendered = template or ''
@@ -1407,8 +1421,8 @@ def _send_rfq_supplier_price_requests(
                 bcc=recipient_list,
                 cc=cc_list,
             )
-            if attachment_payload:
-                email.attach(*attachment_payload)
+            for att_payload in attachment_payloads:
+                email.attach(*att_payload)
             email.send(fail_silently=False)
             sent_count += 1
         except Exception as exc:
@@ -2778,7 +2792,8 @@ def customer_product_status_update(request, product_id):
     if status in ('delivered', 'invoice_pending'):
         delivery_detail_type = request.POST.get('delivery_detail_type', '').strip()
         invoice_dc_number = request.POST.get('invoice_dc_number', '').strip()
-        invoice_dc_attachment = request.FILES.get('invoice_dc_attachment')
+        invoice_dc_attachments = request.FILES.getlist('invoice_dc_attachment')
+        invoice_dc_attachment = invoice_dc_attachments[0] if invoice_dc_attachments else request.FILES.get('invoice_dc_attachment')
         if delivery_detail_type not in ('invoice', 'dc'):
             return JsonResponse({'status': 'error', 'message': 'Delivery Detail is required'}, status=400)
         if not invoice_dc_number:
@@ -2792,6 +2807,14 @@ def customer_product_status_update(request, product_id):
         customer_product.invoice_dc_number = invoice_dc_number
         if invoice_dc_attachment:
             customer_product.invoice_dc_attachment = invoice_dc_attachment
+            if invoice_dc_attachments and customer_product.dpr:
+                from dpr.models import DPRBunchDocument
+                for idc in invoice_dc_attachments:
+                    DPRBunchDocument.objects.create(
+                        dpr=customer_product.dpr,
+                        doc_type='customer_po',
+                        file=idc
+                    )
     elif status == 'cancelled':
         customer_product.quantity_delivered = 0
         customer_product.delivery_detail_type = None
@@ -2801,7 +2824,8 @@ def customer_product_status_update(request, product_id):
         delivered_qty_raw = request.POST.get('quantity_delivered', '').strip()
         delivery_detail_type = request.POST.get('delivery_detail_type', '').strip()
         invoice_dc_number = request.POST.get('invoice_dc_number', '').strip()
-        invoice_dc_attachment = request.FILES.get('invoice_dc_attachment')
+        invoice_dc_attachments = request.FILES.getlist('invoice_dc_attachment')
+        invoice_dc_attachment = invoice_dc_attachments[0] if invoice_dc_attachments else request.FILES.get('invoice_dc_attachment')
         if not delivered_qty_raw:
             return JsonResponse({'status': 'error', 'message': 'Quantity delivered is required'}, status=400)
         try:
@@ -2826,6 +2850,14 @@ def customer_product_status_update(request, product_id):
         customer_product.invoice_dc_number = invoice_dc_number
         if invoice_dc_attachment:
             customer_product.invoice_dc_attachment = invoice_dc_attachment
+            if invoice_dc_attachments and customer_product.dpr:
+                from dpr.models import DPRBunchDocument
+                for idc in invoice_dc_attachments:
+                    DPRBunchDocument.objects.create(
+                        dpr=customer_product.dpr,
+                        doc_type='customer_po',
+                        file=idc
+                    )
     else:
         customer_product.quantity_delivered = 0
         customer_product.delivery_detail_type = None
@@ -2927,10 +2959,7 @@ def supplier_po_product_details(request):
             supplier_product.status,
             supplier_product.validity_state
         )
-        supplier_product.quantity_ok = max(
-            supplier_product.quantity_received - supplier_product.quantity_not_ok,
-            0
-        )
+        supplier_product.quantity_ok = supplier_product.quantity_received
 
     return render(
         request,
@@ -2987,10 +3016,7 @@ def rework_tracking(request):
             sp.status,
             sp.validity_state
         )
-        sp.quantity_ok = max(
-            sp.quantity_received - sp.quantity_not_ok,
-            0
-        )
+        sp.quantity_ok = sp.quantity_received
         if sp.quantity_not_ok > 0 and not sp.rework_sent_date:
             sp.rework_sent_date = sp.invoice_date or today
 
@@ -3626,12 +3652,21 @@ def supplier_product_status_update(request, supplier_product_id):
                 )
             }, status=400)
 
-        if ok_quantity + not_ok_quantity > received_quantity:
+        if ok_quantity > supplier_product.quantity:
+            return JsonResponse({
+                'status': 'error',
+                'message': (
+                    'OK quantity cannot be greater than '
+                    f'ordered quantity ({supplier_product.quantity}).'
+                )
+            }, status=400)
+
+        if ok_quantity + not_ok_quantity > supplier_product.quantity:
             return JsonResponse({
                 'status': 'error',
                 'message': (
                     'OK quantity plus NOT OK quantity cannot exceed '
-                    f'received quantity ({received_quantity}).'
+                    f'ordered quantity ({supplier_product.quantity}).'
                 )
             }, status=400)
 
@@ -3643,19 +3678,19 @@ def supplier_product_status_update(request, supplier_product_id):
             }, status=400)
 
         if (
-            received_quantity == supplier_product.quantity
-            and ok_quantity == supplier_product.quantity
+            (received_quantity == supplier_product.quantity or ok_quantity == supplier_product.quantity)
             and not_ok_quantity == 0
         ):
             supplier_product.status = 'delivered'
-        elif received_quantity > 0:
+        elif received_quantity > 0 or ok_quantity > 0 or not_ok_quantity > 0:
             supplier_product.status = 'partially_delivered'
         else:
             supplier_product.status = None
 
         supplier_invoice_number = request.POST.get('supplier_invoice_number', '').strip() or None
         supplier_bill_amount_raw = request.POST.get('supplier_bill_amount', '').strip()
-        bill_attachment = request.FILES.get('bill_attachment')
+        bill_attachments = request.FILES.getlist('bill_attachment')
+        bill_attachment = bill_attachments[0] if bill_attachments else request.FILES.get('bill_attachment')
 
         if 'supplier_invoice_number' in request.POST:
             if not supplier_invoice_number:
@@ -3703,6 +3738,14 @@ def supplier_product_status_update(request, supplier_product_id):
         if bill_attachment:
             supplier_product.bill_attachment = bill_attachment
             update_fields.append('bill_attachment')
+            if bill_attachments and supplier_product.customer_product and supplier_product.customer_product.dpr:
+                from dpr.models import DPRBunchDocument
+                for bf in bill_attachments:
+                    DPRBunchDocument.objects.create(
+                        dpr=supplier_product.customer_product.dpr,
+                        doc_type='vendor_price',
+                        file=bf
+                    )
 
         if received_quantity > 0 and not supplier_product.invoice_date:
             supplier_product.invoice_date = timezone.localdate()
@@ -3898,7 +3941,14 @@ def customer_order_edit(request, dpr_id):
         dpr.po_value = request.POST.get('po_value') or None
         dpr.po_validity = request.POST.get('po_validity') or None
         dpr.po_date = request.POST.get('po_date') or None
-        dpr.po_attachment = request.FILES.get('po_attachment') or dpr.po_attachment
+        po_attachments = request.FILES.getlist('po_attachment')
+        if po_attachments:
+            dpr.po_attachment = po_attachments[0]
+            from dpr.models import DPRBunchDocument
+            for pa in po_attachments:
+                DPRBunchDocument.objects.create(dpr=dpr, doc_type='customer_po', file=pa)
+        elif request.FILES.get('po_attachment'):
+            dpr.po_attachment = request.FILES.get('po_attachment')
 
         # Handle PO confirmation date for Customer PO
         if confirmation_type == 'Customer PO':
@@ -3945,7 +3995,8 @@ def customer_order_edit(request, dpr_id):
                 mes_value = Decimal('0.00')
 
             remarks = remarks_list[i] if i < len(remarks_list) else None
-            attachment = request.FILES.get(f'product_attachment_{i}')
+            prod_attachments = request.FILES.getlist(f'product_attachment_{i}')
+            attachment = prod_attachments[0] if prod_attachments else request.FILES.get(f'product_attachment_{i}')
             existing_attachment = request.POST.get(f'existing_attachment_{i}', '')
             if not attachment and existing_attachment:
                 attachment = existing_attachment
@@ -3966,6 +4017,10 @@ def customer_order_edit(request, dpr_id):
                 remarks=remarks,
                 attachment=attachment
             )
+            if prod_attachments:
+                from dpr.models import DPRBunchDocument
+                for pa in prod_attachments:
+                    DPRBunchDocument.objects.create(dpr=dpr, doc_type='drawing', file=pa)
 
         total_value = CustomerProduct.objects.filter(dpr=dpr).aggregate(
             total=Coalesce(Sum('value'), Decimal('0.00'))
@@ -4370,6 +4425,16 @@ def delete_dpr(request, dpr_id):
         return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
     try:
         dpr = DPR.objects.get(pk=dpr_id)
+        is_completed = (
+            dpr.total_quantity_ordered > 0
+            and dpr.total_quantity_ordered == dpr.customer_qty_delivered
+            and dpr.supplier_quantity_ordered == dpr.supplier_qty_received
+        )
+        if is_completed:
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', ''):
+                return JsonResponse({'status': 'error', 'message': 'Completed DPR records cannot be deleted.'}, status=400)
+            messages.error(request, 'Completed DPR records cannot be deleted.')
+            return redirect('dpr_view')
         serial_no = dpr.serial_number or f'DPR-{dpr.id}'
         from products.models import CustomerProduct, SupplierProduct, CustomerInvoice
         from dpr.models import DPRBunchDocument
@@ -4685,7 +4750,8 @@ def rfq_details(request):
         customer_id = request.POST.get('customer_id', '').strip()
         enquiry_details = request.POST.get('enquiry_details', '').strip()
         remarks = request.POST.get('remarks', '').strip()
-        attachment = request.FILES.get('attachment')
+        attachments = request.FILES.getlist('attachment')
+        attachment = attachments[0] if attachments else request.FILES.get('attachment')
         product_names = request.POST.getlist('product_name[]')
         product_ids = request.POST.getlist('product_id[]')
         product_types = request.POST.getlist('product_type[]')
@@ -4699,7 +4765,8 @@ def rfq_details(request):
         supplier_email_cc = request.POST.get('supplier_email_cc', '').strip().lower()
         supplier_email_subject = request.POST.get('supplier_email_subject', '').strip()
         supplier_email_body = request.POST.get('supplier_email_body', '').strip()
-        supplier_email_attachment = request.FILES.get('supplier_email_attachment')
+        supplier_email_attachments = request.FILES.getlist('supplier_email_attachment')
+        supplier_email_attachment = supplier_email_attachments if supplier_email_attachments else request.FILES.get('supplier_email_attachment')
         has_unknown_price = any(val == 'no' for val in price_known_values)
         target_supplier_id = request.POST.get('target_supplier_id', '').strip()
         target_supplier_ids = [s.strip() for s in target_supplier_id.split(',') if s.strip()] if target_supplier_id else None
@@ -4874,9 +4941,13 @@ def rfq_details(request):
         if action == 'add':
             from_email_id = request.POST.get('from_email_id', '').strip()
             source_email_obj = None
-            if from_email_id and from_email_id.isdigit():
+            source_email_objs = []
+            if from_email_id:
                 from email_classifier.models import EmailRecord
-                source_email_obj = EmailRecord.objects.filter(pk=int(from_email_id)).first()
+                email_id_list = [int(x.strip()) for x in re.split(r'[,; ]+', from_email_id) if x.strip().isdigit()]
+                if email_id_list:
+                    source_email_objs = list(EmailRecord.objects.filter(pk__in=email_id_list))
+                    source_email_obj = source_email_objs[0] if source_email_objs else None
 
             with transaction.atomic():
                 rfq = RFQ.objects.create(
@@ -4887,25 +4958,29 @@ def rfq_details(request):
                     attachment=attachment,
                     source_email=source_email_obj
                 )
-                if source_email_obj:
-                    source_email_obj.is_added_to_rfq = True
-                    source_email_obj.save(update_fields=['is_added_to_rfq'])
+                from rfq.models import RFQAttachment
+                for att_file in attachments:
+                    RFQAttachment.objects.create(rfq=rfq, file=att_file)
+                if source_email_objs:
+                    for s_obj in source_email_objs:
+                        s_obj.is_added_to_rfq = True
+                        s_obj.save(update_fields=['is_added_to_rfq'])
 
-                    # Convert / Link this EmailRecord into RFQEmailMessage for this RFQ
-                    msg_id = source_email_obj.imap_uid or f"<er-{source_email_obj.id}@inbox>"
-                    if not msg_id.startswith('<'):
-                        msg_id = f"<{msg_id}>"
-                    if not RFQEmailMessage.objects.filter(message_id=msg_id).exists():
-                        RFQEmailMessage.objects.create(
-                            rfq=rfq,
-                            message_id=msg_id,
-                            sender=source_email_obj.sender or (rfq.customer.email if rfq.customer else 'Unknown'),
-                            recipients=settings.DEFAULT_FROM_EMAIL,
-                            subject=source_email_obj.subject or f"Enquiry - {rfq.rfq_no}",
-                            body=source_email_obj.body or rfq.enquiry_details,
-                            direction='IN',
-                            sent_at=source_email_obj.received_at or rfq.created_at
-                        )
+                        # Convert / Link each EmailRecord into RFQEmailMessage for this RFQ
+                        msg_id = s_obj.imap_uid or f"<er-{s_obj.id}@inbox>"
+                        if not msg_id.startswith('<'):
+                            msg_id = f"<{msg_id}>"
+                        if not RFQEmailMessage.objects.filter(message_id=msg_id).exists():
+                            RFQEmailMessage.objects.create(
+                                rfq=rfq,
+                                message_id=msg_id,
+                                sender=s_obj.sender or (rfq.customer.email if rfq.customer else 'Unknown'),
+                                recipients=settings.DEFAULT_FROM_EMAIL,
+                                subject=s_obj.subject or f"Enquiry - {rfq.rfq_no}",
+                                body=s_obj.body or rfq.enquiry_details,
+                                direction='IN',
+                                sent_at=s_obj.received_at or rfq.created_at
+                            )
                 for product_row in product_rows:
                     selected_suppliers = product_row.pop('suppliers', [])
                     supplier_prices = product_row.pop('supplier_prices', [])
@@ -4963,7 +5038,14 @@ def rfq_details(request):
                 'enquiry_details',
                 'remarks',
             ]
-            if attachment:
+            from rfq.models import RFQAttachment
+            if attachments:
+                for att_file in attachments:
+                    RFQAttachment.objects.create(rfq=rfq, file=att_file)
+                if not rfq.attachment:
+                    rfq.attachment = attachments[0]
+                    update_fields.append('attachment')
+            elif attachment and not rfq.attachment:
                 rfq.attachment = attachment
                 update_fields.append('attachment')
             with transaction.atomic():
@@ -5059,7 +5141,8 @@ def rfq_details(request):
             customer_email = request.POST.get('customer_email', '').strip()
             quotation_email_subject = request.POST.get('quotation_email_subject', '').strip()
             quotation_email_body = request.POST.get('quotation_email_body', '').strip()
-            quotation_attachment = request.FILES.get('quotation_email_attachment')
+            quotation_attachments = request.FILES.getlist('quotation_email_attachment')
+            quotation_attachment = quotation_attachments[0] if quotation_attachments else request.FILES.get('quotation_email_attachment')
             quotation_product_ids = request.POST.getlist('quotation_product_ids')
             quotation_supplier_price_ids = request.POST.getlist('quotation_supplier_price_ids')
             mes_rates = request.POST.getlist('mes_rates')
@@ -5107,7 +5190,7 @@ def rfq_details(request):
                     messages.error(request, 'Select valid RFQ products or supplier prices for quotation attachment.')
                     return redirect('rfq_details')
 
-            if not quotation_products and not quotation_attachment:
+            if not quotation_products and not quotation_attachments and not quotation_attachment:
                 messages.error(request, 'Select products to auto-attach quotation or upload an attachment.')
                 return redirect('rfq_details')
 
@@ -5176,7 +5259,14 @@ def rfq_details(request):
 
                     filename = f"{quote_no.replace('/', '_')}.pdf"
                     attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
-                if quotation_attachment:
+                if quotation_attachments:
+                    for q_att in quotation_attachments:
+                        attachments_to_send.append((
+                            q_att.name,
+                            q_att.read(),
+                            getattr(q_att, 'content_type', None) or 'application/octet-stream'
+                        ))
+                elif quotation_attachment:
                     attachments_to_send.append((
                         quotation_attachment.name,
                         quotation_attachment.read(),
@@ -5371,6 +5461,14 @@ def rfq_details(request):
             'remarks': rfq.remarks or '',
             'attachment_url': rfq.attachment.url if rfq.attachment else '',
             'attachment_name': rfq.attachment.name.split('/')[-1] if rfq.attachment else '',
+            'attachments': [
+                {
+                    'id': getattr(att, 'id', 0) or 0,
+                    'url': att.file.url if hasattr(att, 'file') and att.file else (att.url if hasattr(att, 'url') else ''),
+                    'name': getattr(att, 'file_name', '') or (att.file.name.split('/')[-1] if hasattr(att, 'file') and att.file else '')
+                }
+                for att in rfq.all_attachments
+            ],
             'has_sent_email': rfq.has_sent_email,
             'has_prices': rfq.has_prices,
             'row_class': row_class,
@@ -5425,7 +5523,6 @@ def rfq_details(request):
         })
     customers = list(Customer.objects.select_related('user_detail').prefetch_related('user_details').order_by('customer_name'))
     for c in customers:
-        c.address_single_line = re.sub(r'[\r\n]+', ', ', c.address.strip()).strip() if c.address else ''
         u_list = []
         for u in c.users_list:
             display = f"{u.user_name} ({u.user_designation})" if u.user_designation else u.user_name
@@ -5450,8 +5547,17 @@ def rfq_details(request):
     next_rfq_no = f"RFQ-{timezone.now().year}-{next_rfq_id:04d}"
 
     from_email_id = request.GET.get('from_email_id', '').strip()
-    if from_email_id and from_email_id.isdigit():
-        email_prefill_products_json = request.session.pop(f'email_products_{from_email_id}', None) or request.session.pop('email_prefill_products_json', '')
+    if from_email_id:
+        email_prefill_products_json = (
+            request.session.pop(f'email_products_{from_email_id}', None)
+            or request.session.pop('email_prefill_products_json', '')
+        )
+        if not email_prefill_products_json:
+            # Check individual IDs if comma-separated
+            for sub_id in [x.strip() for x in from_email_id.split(',') if x.strip().isdigit()]:
+                email_prefill_products_json = request.session.pop(f'email_products_{sub_id}', None)
+                if email_prefill_products_json:
+                    break
     else:
         email_prefill_products_json = request.session.get('email_prefill_products_json', '')
 
@@ -5994,7 +6100,8 @@ def customer_order(request):
 
         po_date = request.POST.get('po_date')
 
-        po_attachment = request.FILES.get('po_attachment')
+        po_attachments = request.FILES.getlist('po_attachment')
+        po_attachment = po_attachments[0] if po_attachments else request.FILES.get('po_attachment')
 
         if not quotation_attachment and quotation_number:
             quote_nos = [q.strip() for q in quotation_number.split(',') if q.strip()]
@@ -6043,6 +6150,11 @@ def customer_order(request):
 
             po_attachment=po_attachment
         )
+
+        if po_attachments:
+            from dpr.models import DPRBunchDocument
+            for pa in po_attachments:
+                DPRBunchDocument.objects.create(dpr=dpr, doc_type='customer_po', file=pa)
 
         # PRODUCT DETAILS
 
@@ -6100,7 +6212,8 @@ def customer_order(request):
             spec_raw = specs_list[i] if i < len(specs_list) else ''
             spec_dict = _normalize_product_specifications(spec_raw)
 
-            attachment = request.FILES.get(f'product_attachment_{i}')
+            prod_attachments = request.FILES.getlist(f'product_attachment_{i}')
+            attachment = prod_attachments[0] if prod_attachments else request.FILES.get(f'product_attachment_{i}')
 
             CustomerProduct.objects.create(
                 dpr=dpr,
@@ -6115,6 +6228,10 @@ def customer_order(request):
                 remarks=remarks,
                 attachment=attachment
             )
+            if prod_attachments:
+                from dpr.models import DPRBunchDocument
+                for pa in prod_attachments:
+                    DPRBunchDocument.objects.create(dpr=dpr, doc_type='drawing', file=pa)
 
         total_value = CustomerProduct.objects.filter(dpr=dpr).aggregate(
             total=Coalesce(Sum('value'), Decimal('0.00'))
@@ -6351,7 +6468,8 @@ def add_quotation_ajax(request):
     customer_id = request.POST.get('customer_id')
     quotation_number = request.POST.get('quotation_number', '').strip()
     quotation_value = request.POST.get('quotation_value', '').strip()
-    quotation_attachment = request.FILES.get('quotation_attachment')
+    quotation_attachments = request.FILES.getlist('quotation_attachment')
+    quotation_attachment = quotation_attachments[0] if quotation_attachments else request.FILES.get('quotation_attachment')
 
     if not customer_id:
         return JsonResponse({'status': 'error', 'message': 'Customer is required.'}, status=400)
@@ -6373,6 +6491,9 @@ def add_quotation_ajax(request):
         if quotation_attachment:
             rfq.attachment = quotation_attachment
             rfq.save(update_fields=['attachment'])
+        from rfq.models import RFQAttachment
+        for qa in quotation_attachments:
+            RFQAttachment.objects.create(rfq=rfq, file=qa)
         quote_obj = existing_quote
     else:
         rfq = RFQ.objects.create(
@@ -6383,6 +6504,9 @@ def add_quotation_ajax(request):
             quotation_prepared=True,
             quotation_email_sent=True,
         )
+        from rfq.models import RFQAttachment
+        for qa in quotation_attachments:
+            RFQAttachment.objects.create(rfq=rfq, file=qa)
         quote_obj = RFQQuotation.objects.create(
             rfq=rfq,
             quotation_number=quotation_number,
@@ -7205,7 +7329,8 @@ def send_supplier_po_email(request, dpr_id):
         supplier_email = request.POST.get('supplier_email', '').strip()
         email_subject = request.POST.get('email_subject', '').strip()
         email_body = request.POST.get('email_body', '').strip()
-        email_attachment = request.FILES.get('email_attachment')
+        email_attachments = request.FILES.getlist('email_attachment')
+        email_attachment = email_attachments[0] if email_attachments else request.FILES.get('email_attachment')
 
         supplier_emails = [
             email.strip()
@@ -7258,7 +7383,14 @@ def send_supplier_po_email(request, dpr_id):
             filename = f"{safe_po_num}{item_suffix}.pdf"
             email.attach(filename, pdf_buffer.getvalue(), 'application/pdf')
 
-            if email_attachment:
+            if email_attachments:
+                for ea in email_attachments:
+                    email.attach(
+                        ea.name,
+                        ea.read(),
+                        getattr(ea, 'content_type', None) or 'application/octet-stream'
+                    )
+            elif email_attachment:
                 email.attach(
                     email_attachment.name,
                     email_attachment.read(),
@@ -8034,7 +8166,8 @@ def upload_customer_address_attachment(request, product_id):
         return JsonResponse({'status': 'error', 'message': 'Product not found'}, status=404)
 
     if request.method == 'POST':
-        attachment_file = request.FILES.get('address_attachment')
+        attachment_files = request.FILES.getlist('address_attachment')
+        attachment_file = attachment_files[0] if attachment_files else request.FILES.get('address_attachment')
         if attachment_file:
             product.address_attachment = attachment_file
             product.save(update_fields=['address_attachment'])
@@ -8621,7 +8754,8 @@ def send_rfq_email_reply(request, rfq_id):
     subject = request.POST.get('subject', '').strip()
     body = request.POST.get('body', '').strip()
     parent_message_id = request.POST.get('parent_message_id', '').strip()
-    reply_attachment = request.FILES.get('reply_attachment')
+    reply_attachments = request.FILES.getlist('reply_attachment')
+    reply_attachment = reply_attachments[0] if reply_attachments else request.FILES.get('reply_attachment')
 
     if not to_emails_raw:
         return JsonResponse({'status': 'error', 'message': 'Recipient email address (To) is required.'}, status=400)
@@ -8722,8 +8856,15 @@ def send_rfq_email_reply(request, rfq_id):
     except Exception as e:
         logger.warning(f"Could not auto-attach quotation PDF to reply: {e}")
 
-    # 2. Add manual user file attachment if provided
-    if reply_attachment:
+    # 2. Add manual user file attachment(s) if provided
+    if reply_attachments:
+        for r_att in reply_attachments:
+            attachments.append((
+                r_att.name,
+                r_att.read(),
+                getattr(r_att, 'content_type', 'application/octet-stream')
+            ))
+    elif reply_attachment:
         attachments.append((
             reply_attachment.name,
             reply_attachment.read(),
@@ -9126,7 +9267,8 @@ def send_supplier_email_reply(request, dpr_id):
     supplier_id = request.POST.get('supplier_id')
     po_number = request.POST.get('po_number')
     delivery_address = request.POST.get('delivery_address') or 'hosur'
-    reply_attachment = request.FILES.get('reply_attachment')
+    reply_attachments = request.FILES.getlist('reply_attachment')
+    reply_attachment = reply_attachments[0] if reply_attachments else request.FILES.get('reply_attachment')
 
     if not to_emails_raw:
         return JsonResponse({'status': 'error', 'message': 'Recipient email address (To) is required.'}, status=400)
@@ -9159,7 +9301,14 @@ def send_supplier_email_reply(request, dpr_id):
         except Exception as exc:
             logger.warning(f"Could not auto-attach Supplier PO PDF to reply: {exc}")
 
-    if reply_attachment:
+    if reply_attachments:
+        for r_att in reply_attachments:
+            attachments.append((
+                r_att.name,
+                r_att.read(),
+                getattr(r_att, 'content_type', 'application/octet-stream')
+            ))
+    elif reply_attachment:
         attachments.append((
             reply_attachment.name,
             reply_attachment.read(),
@@ -9318,7 +9467,8 @@ def send_invoice_email(request):
     recipient_email = request.POST.get('recipient_email', '').strip()
     subject = request.POST.get('email_subject', '').strip()
     body = request.POST.get('email_body', '').strip()
-    extra_attachment = request.FILES.get('extra_attachment')
+    extra_attachments = request.FILES.getlist('extra_attachment')
+    extra_attachment = extra_attachments[0] if extra_attachments else request.FILES.get('extra_attachment')
 
     from products.models import CustomerProduct
     products = list(CustomerProduct.objects.select_related('dpr', 'dpr__customer').filter(id__in=product_ids))
@@ -9340,16 +9490,16 @@ def send_invoice_email(request):
     missing_email_customers = []
     messages_to_send = []
 
-    attachment_data = None
-    if extra_attachment:
+    attachment_datas = []
+    for ea in (extra_attachments if extra_attachments else ([extra_attachment] if extra_attachment else [])):
         try:
-            attachment_data = (
-                extra_attachment.name,
-                extra_attachment.read(),
-                getattr(extra_attachment, 'content_type', None) or 'application/octet-stream'
-            )
+            attachment_datas.append((
+                ea.name,
+                ea.read(),
+                getattr(ea, 'content_type', None) or 'application/octet-stream'
+            ))
         except Exception:
-            attachment_data = None
+            pass
 
     for cust, items in customer_groups.items():
         cust_email = (cust.email or '').strip()
@@ -9389,8 +9539,8 @@ def send_invoice_email(request):
         )
         email.content_subtype = "html"
 
-        if attachment_data:
-            email.attach(*attachment_data)
+        for att_data in attachment_datas:
+            email.attach(*att_data)
 
         messages_to_send.append(email)
         sent_details.append(f"{cust.customer_name} ({', '.join(valid_to_emails)})")
@@ -9537,7 +9687,8 @@ def send_supplier_invoice_email(request):
     recipient_email = request.POST.get('recipient_email', '').strip()
     subject = request.POST.get('email_subject', '').strip()
     body = request.POST.get('email_body', '').strip()
-    extra_attachment = request.FILES.get('extra_attachment')
+    extra_attachments = request.FILES.getlist('extra_attachment')
+    extra_attachment = extra_attachments[0] if extra_attachments else request.FILES.get('extra_attachment')
 
     products = list(SupplierProduct.objects.select_related('supplier', 'customer_product', 'customer_product__dpr').filter(id__in=product_ids))
     if not products:
@@ -9557,16 +9708,16 @@ def send_supplier_invoice_email(request):
     missing_email_suppliers = []
     messages_to_send = []
 
-    attachment_data = None
-    if extra_attachment:
+    attachment_datas = []
+    for ea in (extra_attachments if extra_attachments else ([extra_attachment] if extra_attachment else [])):
         try:
-            attachment_data = (
-                extra_attachment.name,
-                extra_attachment.read(),
-                getattr(extra_attachment, 'content_type', None) or 'application/octet-stream'
-            )
+            attachment_datas.append((
+                ea.name,
+                ea.read(),
+                getattr(ea, 'content_type', None) or 'application/octet-stream'
+            ))
         except Exception:
-            attachment_data = None
+            pass
 
     for supp, items in supplier_groups.items():
         supp_email = (supp.email or '').strip()
@@ -9606,8 +9757,8 @@ def send_supplier_invoice_email(request):
         )
         email.content_subtype = "html"
 
-        if attachment_data:
-            email.attach(*attachment_data)
+        for att_data in attachment_datas:
+            email.attach(*att_data)
 
         messages_to_send.append(email)
         sent_details.append(f"{supp.supplier_name} ({', '.join(valid_to_emails)})")

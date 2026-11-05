@@ -316,7 +316,7 @@
                 </div>
                 <div class="mb-3">
                     <label for="partialInvoiceDcAttachment" class="form-label">Attachment</label>
-                    <input type="file" id="partialInvoiceDcAttachment" class="form-control">
+                    <input type="file" id="partialInvoiceDcAttachment" class="form-control" multiple>
                 </div>
             </div>
             <div class="modal-footer">
@@ -348,7 +348,7 @@
                 </div>
                 <div class="mb-3">
                     <label for="invoiceDcAttachment" class="form-label">Attachment</label>
-                    <input type="file" id="invoiceDcAttachment" class="form-control">
+                    <input type="file" id="invoiceDcAttachment" class="form-control" multiple>
                 </div>
             </div>
             <div class="modal-footer">
@@ -436,7 +436,11 @@ function postStatusUpdate(row, selectElement, status, payload = {}) {
     if (payload.invoiceDcNumber) {
         formData.append('invoice_dc_number', payload.invoiceDcNumber);
     }
-    if (payload.invoiceDcAttachment) {
+    if (payload.invoiceDcAttachments && payload.invoiceDcAttachments.length > 0) {
+        for (let i = 0; i < payload.invoiceDcAttachments.length; i++) {
+            formData.append('invoice_dc_attachment', payload.invoiceDcAttachments[i]);
+        }
+    } else if (payload.invoiceDcAttachment) {
         formData.append('invoice_dc_attachment', payload.invoiceDcAttachment);
     }
 
@@ -645,7 +649,8 @@ document.getElementById('savePartialDeliveryBtn').addEventListener('click', func
 
     const deliveryDetailType = document.getElementById('partialDeliveryDetailType').value;
     const invoiceDcNumber = document.getElementById('partialInvoiceDcNumber').value.trim();
-    const invoiceDcAttachment = document.getElementById('partialInvoiceDcAttachment').files[0];
+    const invoiceDcAttachmentFiles = document.getElementById('partialInvoiceDcAttachment').files;
+    const invoiceDcAttachment = invoiceDcAttachmentFiles[0];
     const numberLabel = deliveryDetailType === 'dc' ? 'DC Number' : 'Invoice number';
 
     if (!invoiceDcNumber) {
@@ -665,7 +670,8 @@ document.getElementById('savePartialDeliveryBtn').addEventListener('click', func
             quantityDelivered: enteredQty,
             deliveryDetailType: deliveryDetailType,
             invoiceDcNumber: invoiceDcNumber,
-            invoiceDcAttachment: invoiceDcAttachment
+            invoiceDcAttachment: invoiceDcAttachment,
+            invoiceDcAttachments: invoiceDcAttachmentFiles
         }
     );
 
@@ -687,7 +693,8 @@ document.getElementById('saveDeliveredDetailsBtn').addEventListener('click', fun
     if (!pendingDeliveredUpdate) return;
     const deliveryDetailType = document.getElementById('deliveryDetailType').value;
     const invoiceDcNumber = document.getElementById('invoiceDcNumber').value.trim();
-    const invoiceDcAttachment = document.getElementById('invoiceDcAttachment').files[0];
+    const invoiceDcAttachmentFiles = document.getElementById('invoiceDcAttachment').files;
+    const invoiceDcAttachment = invoiceDcAttachmentFiles[0];
     const numberLabel = deliveryDetailType === 'dc' ? 'DC Number' : 'Invoice number';
 
     if (!invoiceDcNumber) {
@@ -706,7 +713,8 @@ document.getElementById('saveDeliveredDetailsBtn').addEventListener('click', fun
         {
             deliveryDetailType: deliveryDetailType,
             invoiceDcNumber: invoiceDcNumber,
-            invoiceDcAttachment: invoiceDcAttachment
+            invoiceDcAttachment: invoiceDcAttachment,
+            invoiceDcAttachments: invoiceDcAttachmentFiles
         }
     );
 
@@ -1592,7 +1600,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Select Address Printout Attachment:</label>
-                        <input type="file" name="address_attachment" id="addressPrintoutFileInput" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" required>
+                        <input type="file" name="address_attachment" id="addressPrintoutFileInput" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" multiple required>
                     </div>
                     <div id="addressPrintoutPreviewContainer" class="d-none alert alert-light border">
                         <span class="small text-muted d-block mb-1">Current Attachment:</span>

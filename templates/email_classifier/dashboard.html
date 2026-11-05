@@ -150,6 +150,23 @@ tr:hover .email-subject-title {
 
     <!-- Main Table Card -->
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+        <!-- Floating Batch Action Bar for Multiple Email Selection -->
+        <div id="batchActionCard" class="bg-primary text-white py-2.5 px-4 d-none align-items-center justify-content-between border-bottom shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge bg-white text-primary fw-bold px-2.5 py-1 rounded-pill fs-6" id="selectedCountBadge">0</span>
+                <span class="fw-semibold small" id="selectedSenderText">Emails selected from sender</span>
+                <span class="badge bg-primary-subtle text-primary border border-white-50 px-2 py-0.5 rounded-pill" style="font-size: 0.75rem;" id="selectedSenderEmailBadge"></span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-light px-3" onclick="clearSelectedEmails()">
+                    <i class="bi bi-x-circle me-1"></i>Clear Selection
+                </button>
+                <button type="button" class="btn btn-sm btn-success fw-semibold px-3 shadow-sm" id="batchAddRfqBtn" onclick="addRfqFromSelectedEmails(this)">
+                    <i class="bi bi-plus-circle me-1"></i>Add RFQ for Selected (<span id="batchBtnCount">0</span>) Emails
+                </button>
+            </div>
+        </div>
+
         <div class="card-header bg-white py-3 px-4 d-flex justify-content-between align-items-center border-bottom">
             <h5 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
                 <i class="bi bi-inbox-fill text-primary"></i>
@@ -161,17 +178,37 @@ tr:hover .email-subject-title {
             <table class="table table-hover align-middle mb-0">
                 <thead class="bg-light text-uppercase small text-muted border-bottom" style="font-size: 0.75rem; letter-spacing: 0.5px;">
                     <tr>
-                        <th class="ps-4 py-3" style="width: 13%;">Received & Source</th>
-                        <th class="py-3" style="width: 39%;">Email Details & Content Preview</th>
-                        <th class="py-3" style="width: 18%;">Category & Status</th>
-                        <th class="py-3" style="width: 11%;">Confidence</th>
+                        <th class="ps-3 py-3 text-center" style="width: 44px;">
+                            <input type="checkbox" class="form-check-input" id="masterSelectCheckbox" title="Select all visible emails from active sender" disabled onchange="handleMasterCheckboxToggle(this)">
+                        </th>
+                        <th class="py-3" style="width: 13%;">Received & Source</th>
+                        <th class="py-3" style="width: 37%;">Email Details & Content Preview</th>
+                        <th class="py-3" style="width: 17%;">Category & Status</th>
+                        <th class="py-3" style="width: 10%;">Confidence</th>
                         <th class="pe-4 py-3 text-end" style="width: 19%;">Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for record in records %}
-                    <tr>
-                        <td class="ps-4 align-top py-3 email-cell-clickable" data-bs-toggle="modal" data-bs-target="#emailDetailModal{{ record.id }}">
+                    <tr id="emailRow{{ record.id }}" data-record-id="{{ record.id }}" data-sender="{{ record.sender_email }}">
+                        <td class="ps-3 text-center align-top py-3">
+                            {% if record.displayed_category == 'ENQUIRY' or record.displayed_category == 'QUOTATION_REQUEST' %}
+                                {% if not record.is_added_to_rfq %}
+                                    <input type="checkbox" class="form-check-input email-select-checkbox" 
+                                           value="{{ record.id }}"
+                                           data-id="{{ record.id }}"
+                                           data-sender="{{ record.sender_email }}"
+                                           data-sender-raw="{{ record.sender|escape }}"
+                                           title="Select email for batch RFQ (same sender only)"
+                                           onchange="handleEmailCheckboxChange(this)">
+                                {% else %}
+                                    <span class="text-muted" title="Already added to RFQ"><i class="bi bi-dash"></i></span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted"><i class="bi bi-dash"></i></span>
+                            {% endif %}
+                        </td>
+                        <td class="align-top py-3 email-cell-clickable" data-bs-toggle="modal" data-bs-target="#emailDetailModal{{ record.id }}">
                             <div class="small text-dark fw-medium mb-1"><i class="bi bi-calendar3 me-1 text-muted"></i>{{ record.received_at|date:'d M Y, H:i' }}</div>
                             <div>
                                 {% if record.source == 'imap' %}
@@ -480,6 +517,182 @@ tr:hover .email-subject-title {
 </div>
 
 <script>
+let currentActiveSender = null;
+
+function getCheckedEmailCheckboxes() {
+    return Array.from(document.querySelectorAll('.email-select-checkbox:checked'));
+}
+
+function updateBatchBarAndCheckboxes() {
+    const checked = getCheckedEmailCheckboxes();
+    const batchBar = document.getElementById('batchActionCard');
+    const masterCheckbox = document.getElementById('masterSelectCheckbox');
+    const selectedCountBadge = document.getElementById('selectedCountBadge');
+    const batchBtnCount = document.getElementById('batchBtnCount');
+    const selectedSenderText = document.getElementById('selectedSenderText');
+    const selectedSenderEmailBadge = document.getElementById('selectedSenderEmailBadge');
+
+    if (checked.length === 0) {
+        currentActiveSender = null;
+        if (batchBar) {
+            batchBar.classList.add('d-none');
+            batchBar.classList.remove('d-flex');
+        }
+        if (masterCheckbox) {
+            masterCheckbox.checked = false;
+            masterCheckbox.disabled = true;
+            masterCheckbox.indeterminate = false;
+        }
+
+        // Re-enable all checkboxes
+        document.querySelectorAll('.email-select-checkbox').forEach(cb => {
+            cb.disabled = false;
+            const tr = cb.closest('tr');
+            if (tr) {
+                tr.classList.remove('table-light', 'opacity-50', 'table-active');
+            }
+        });
+        return;
+    }
+
+    // There are checked emails
+    currentActiveSender = checked[0].dataset.sender;
+    const senderDisplay = checked[0].dataset.senderRaw || currentActiveSender;
+
+    if (batchBar) {
+        batchBar.classList.remove('d-none');
+        batchBar.classList.add('d-flex');
+    }
+    if (selectedCountBadge) selectedCountBadge.textContent = checked.length;
+    if (batchBtnCount) batchBtnCount.textContent = checked.length;
+    if (selectedSenderText) selectedSenderText.textContent = `Emails selected from: ${senderDisplay}`;
+    if (selectedSenderEmailBadge) selectedSenderEmailBadge.textContent = currentActiveSender || 'sender';
+
+    // Disable all checkboxes with different sender and style them
+    let matchingCheckboxes = 0;
+    let checkedMatching = 0;
+
+    document.querySelectorAll('.email-select-checkbox').forEach(cb => {
+        const tr = cb.closest('tr');
+        if (cb.dataset.sender === currentActiveSender) {
+            cb.disabled = false;
+            matchingCheckboxes++;
+            if (cb.checked) {
+                checkedMatching++;
+                if (tr) {
+                    tr.classList.add('table-active');
+                    tr.classList.remove('opacity-50');
+                }
+            } else {
+                if (tr) {
+                    tr.classList.remove('table-active', 'opacity-50');
+                }
+            }
+        } else {
+            cb.disabled = true;
+            cb.checked = false;
+            if (tr) {
+                tr.classList.remove('table-active');
+                tr.classList.add('opacity-50');
+            }
+        }
+    });
+
+    if (masterCheckbox) {
+        masterCheckbox.disabled = false;
+        if (checkedMatching === matchingCheckboxes && matchingCheckboxes > 0) {
+            masterCheckbox.checked = true;
+            masterCheckbox.indeterminate = false;
+        } else if (checkedMatching > 0) {
+            masterCheckbox.checked = false;
+            masterCheckbox.indeterminate = true;
+        } else {
+            masterCheckbox.checked = false;
+            masterCheckbox.indeterminate = false;
+        }
+    }
+}
+
+function handleEmailCheckboxChange(checkbox) {
+    if (checkbox.checked && currentActiveSender && checkbox.dataset.sender !== currentActiveSender) {
+        alert(`You can only select emails from the same sender (${currentActiveSender}). Please clear or complete the current selection first.`);
+        checkbox.checked = false;
+        return;
+    }
+    updateBatchBarAndCheckboxes();
+}
+
+function handleMasterCheckboxToggle(masterCb) {
+    if (!currentActiveSender) return;
+    const shouldCheck = masterCb.checked;
+    document.querySelectorAll('.email-select-checkbox').forEach(cb => {
+        if (cb.dataset.sender === currentActiveSender) {
+            cb.checked = shouldCheck;
+        }
+    });
+    updateBatchBarAndCheckboxes();
+}
+
+function clearSelectedEmails() {
+    document.querySelectorAll('.email-select-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    updateBatchBarAndCheckboxes();
+}
+
+function addRfqFromSelectedEmails(btn) {
+    const checked = getCheckedEmailCheckboxes();
+    if (checked.length === 0) {
+        alert('Please select at least one email.');
+        return;
+    }
+
+    const recordIds = checked.map(cb => cb.dataset.id).join(',');
+    const url = `{% url 'email_classifier:add_rfq_from_multiple_emails' %}?record_ids=${encodeURIComponent(recordIds)}`;
+
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Processing RFQ...';
+
+    fetch(url, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(data => { throw new Error(data.message || 'Server error'); });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+
+        if (data.status === 'found') {
+            window.open(data.redirect_url, '_blank');
+        } else if (data.status === 'new_customer') {
+            var modal = document.getElementById('newCustomerAlertModal');
+            modal.querySelector('#newCustModalName').textContent = data.customer_name;
+            modal.querySelector('#newCustOkBtn').setAttribute('href', data.add_customer_url);
+            modal.querySelector('#newCustSkipBtn').setAttribute('href', data.skip_rfq_url);
+            var bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+        } else if (data.status === 'error') {
+            alert(data.message || 'Error creating RFQ from selected emails.');
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        console.error('Batch RFQ error:', err);
+        // Fallback to opening direct URL
+        window.open(url, '_blank');
+    });
+}
+
 function handleDateFilterChange(selectEl) {
     const customDiv = document.getElementById('customDateInputs');
     if (selectEl.value === 'custom') {

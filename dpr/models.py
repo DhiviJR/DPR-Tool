@@ -96,15 +96,15 @@ class DPR(models.Model):
     def save(self, *args, **kwargs):
 
         if not self.serial_number:
-
+            import re
             year = datetime.now().year
-
-            last_record = DPR.objects.order_by('-id').first()
-
-            if last_record:
-                next_id = last_record.id + 1
-            else:
-                next_id = 1
+            # Starting sequence for DPR is configured to start from DPR-2026-3948 and follow the order
+            max_dpr_seq = 3947
+            for sn in DPR.objects.values_list('serial_number', flat=True):
+                m = re.match(r'^DPR-\d+-(\d+)$', sn or '')
+                if m:
+                    max_dpr_seq = max(max_dpr_seq, int(m.group(1)))
+            next_id = max_dpr_seq + 1
 
             self.serial_number = f"DPR-{year}-{next_id:04d}"
 

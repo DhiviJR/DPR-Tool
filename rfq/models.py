@@ -55,6 +55,47 @@ class RFQ(models.Model):
             self.rfq_no = f"RFQ-{year}-{next_id:04d}"
         super().save(*args, **kwargs)
 
+    @property
+    def all_attachments(self):
+        atts = list(self.attachments.all())
+        if atts:
+            return atts
+        if self.attachment:
+            class LegacyAttachmentWrapper:
+                def __init__(self, file_field):
+                    self.id = 0
+                    self.file = file_field
+                    from pathlib import PurePath
+                    self.file_name = PurePath(file_field.name).name if file_field else ''
+                @property
+                def url(self):
+                    return self.file.url
+            return [LegacyAttachmentWrapper(self.attachment)]
+        return []
+
+
+class RFQAttachment(models.Model):
+    rfq = models.ForeignKey(RFQ, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='rfq_attachments/')
+    file_name = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+
+    @property
+    def url(self):
+        return self.file.url if self.file else ''
+
+    def save(self, *args, **kwargs):
+        if not self.file_name and self.file:
+            from pathlib import PurePath
+            self.file_name = PurePath(self.file.name).name
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.rfq.rfq_no} - {self.file_name}"
+
 
 class RFQProduct(models.Model):
     rfq = models.ForeignKey(RFQ, on_delete=models.CASCADE, related_name='products')

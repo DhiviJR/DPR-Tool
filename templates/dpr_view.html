@@ -149,8 +149,8 @@
                                     <option value="hold" {% if dpr.status == 'hold' %}selected{% endif %}>Hold</option>
                                     <option value="cancel" {% if dpr.status == 'cancel' %}selected{% endif %}>Cancel</option>
                                 </select>
-                                {% endif %}
                                 <button type="button" class="btn btn-danger btn-sm btn-delete-dpr" data-dpr-id="{{ dpr.id }}" data-dpr-no="{{ dpr.serial_number }}">Delete</button>
+                                {% endif %}
                             </div>
                         </td>
                         <td data-sort-value="download">

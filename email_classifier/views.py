@@ -1216,6 +1216,261 @@ def add_rfq_from_email(request, record_id):
         return redirect(add_cust_redirect)
 
 
+@login_required
+def add_rfq_from_multiple_emails(request):
+    """
+    Handles creating an RFQ from multiple emails with the SAME sender address.
+    Combines extracted products, enquiry details, and links all selected emails.
+    """
+    from urllib.parse import urlencode
+    from django.urls import reverse
+    from email.utils import parseaddr
+    import re
+    from customers.models import Customer
+    from django.utils import timezone
+    import json
+
+    ids_raw = request.GET.get('record_ids') or request.POST.get('record_ids') or ''
+    # support comma separated or list
+    if isinstance(ids_raw, str):
+        id_list = [int(x.strip()) for x in ids_raw.split(',') if x.strip().isdigit()]
+    elif isinstance(ids_raw, list):
+        id_list = [int(x) for x in ids_raw if str(x).isdigit()]
+    else:
+        id_list = []
+
+    if not id_list:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({'status': 'error', 'message': 'No emails selected.'}, status=400)
+        messages.error(request, 'No emails selected.')
+        return redirect('email_classifier:dashboard')
+
+    records = list(EmailRecord.objects.filter(pk__in=id_list).order_by('received_at'))
+    if not records:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({'status': 'error', 'message': 'Selected emails not found.'}, status=404)
+        messages.error(request, 'Selected emails not found.')
+        return redirect('email_classifier:dashboard')
+
+    # Verify that all selected emails have the exact same sender email
+    sender_emails = {r.sender_email for r in records if r.sender_email}
+    if len(sender_emails) > 1:
+        msg = "All selected emails must be from the same sender address."
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({'status': 'error', 'message': msg}, status=400)
+        messages.error(request, msg)
+        return redirect('email_classifier:dashboard')
+
+    primary_record = records[-1]  # most recent record for date/customer resolution
+    first_record = records[0]
+
+    sender_raw = primary_record.sender or ''
+    sender_name, sender_email = parseaddr(sender_raw)
+    sender_email = sender_email.strip().lower()
+    clean_sname = _clean_sender_name(sender_name)
+
+    # Aggregate extracted info across all records
+    combined_body = "\n\n".join(r.body or '' for r in records)
+    combined_subject = " / ".join(dict.fromkeys(r.subject.strip() for r in records if r.subject))
+
+    ext_person_name = _extract_person_name(combined_body)
+    ext_company_name, ext_region, is_domain_fb = _extract_company_and_region(combined_body, combined_subject, sender_name, sender_email)
+
+    if ext_company_name and not is_domain_fb:
+        target_cust_name = ext_company_name
+    elif clean_sname and clean_sname.lower() not in GENERIC_SENDER_WORDS:
+        target_cust_name = clean_sname
+    elif ext_person_name:
+        target_cust_name = ext_person_name
+    elif ext_company_name:
+        target_cust_name = ext_company_name
+    else:
+        target_cust_name = ''
+
+    if target_cust_name:
+        clean_target = re.sub(r'[\-\s]*\b\d{7,12}\b', '', target_cust_name).strip(' -_')
+        clean_target = re.sub(r'^\d+[\s\-_]+', '', clean_target).strip(' -_')
+        clean_target = re.sub(r'[\s\-_]+\d+$', '', clean_target).strip(' -_')
+        if clean_target:
+            target_cust_name = clean_target
+
+    customer = None
+    if sender_email and not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS):
+        customer = Customer.objects.filter(email__icontains=sender_email).first()
+
+    if not customer and target_cust_name:
+        customer = Customer.objects.filter(customer_name__iexact=target_cust_name).first()
+
+    if not customer and ext_company_name:
+        customer = Customer.objects.filter(customer_name__iexact=ext_company_name).first()
+
+    if not customer and clean_sname:
+        customer = Customer.objects.filter(customer_name__iexact=clean_sname).first()
+
+    if not customer and target_cust_name and len(target_cust_name) >= 4:
+        if target_cust_name.lower() not in GENERIC_COMPANY_WORDS and target_cust_name.lower() not in GENERIC_SENDER_WORDS:
+            customer = Customer.objects.filter(customer_name__icontains=target_cust_name).first()
+
+    if not customer and ext_company_name and len(ext_company_name) >= 4:
+        if ext_company_name.lower() not in GENERIC_COMPANY_WORDS:
+            customer = Customer.objects.filter(customer_name__icontains=ext_company_name).first()
+
+    if not customer and target_cust_name:
+        words = [w for w in target_cust_name.split() if len(w) >= 3 and w.lower() not in GENERIC_COMPANY_WORDS and w.lower() not in GENERIC_SENDER_WORDS]
+        if len(words) >= 2:
+            sig_phrase = ' '.join(words[:2])
+            customer = Customer.objects.filter(customer_name__icontains=sig_phrase).first()
+
+    phone_match = re.search(r'\b[6-9]\d{9}\b', f"{combined_subject} {combined_body}")
+    extracted_phone = phone_match.group(0) if phone_match else ''
+
+    # Extract and merge all products across all selected emails
+    all_extracted_products = []
+    for r in records:
+        r_prods = _extract_all_products(r.subject, r.body)
+        if r_prods:
+            all_extracted_products.extend(r_prods)
+        else:
+            p_name = _extract_product_name(r.subject, r.body)
+            p_type = _extract_product_type(p_name, r.body)
+            p_qty, p_unit = _extract_qty_and_unit(r.body)
+            p_remarks = _extract_product_remarks(r.body)
+            p_specs = _extract_product_specifications(p_name, p_type, r.subject, r.body, r.subject)
+            all_extracted_products.append({
+                'product_name': p_name,
+                'product_type': p_type,
+                'quantity': p_qty,
+                'unit': p_unit,
+                'rate': '',
+                'remarks': p_remarks,
+                'product_specifications': p_specs,
+            })
+
+    # Group / de-duplicate products if identical
+    all_extracted_products = _group_duplicate_products(all_extracted_products)
+    products_json = json.dumps(all_extracted_products) if all_extracted_products else ''
+
+    # First product fallback for single-product fields
+    first_prod = all_extracted_products[0] if all_extracted_products else {}
+    clean_product_name = first_prod.get('product_name') or _extract_product_name(combined_subject, combined_body)
+    product_type = first_prod.get('product_type') or _extract_product_type(clean_product_name, combined_body)
+    qty = first_prod.get('quantity') or 1
+    unit = first_prod.get('unit') or 'Nos'
+    product_remarks = first_prod.get('remarks') or ''
+    single_specs = first_prod.get('product_specifications') or {}
+    single_specs_json = json.dumps(single_specs) if single_specs else ''
+
+    mail_date_str = primary_record.received_at.strftime('%Y-%m-%d') if primary_record.received_at else timezone.localdate().strftime('%Y-%m-%d')
+    from_email_id_str = ','.join(str(r.id) for r in records)
+
+    if customer:
+        if ext_region and not customer.region:
+            customer.region = ext_region
+            customer.save(update_fields=['region'])
+
+        url = reverse('rfq_details')
+        params_dict = {
+            'add_rfq': '1',
+            'from_email_id': from_email_id_str,
+            'customer_id': customer.id,
+            'mail_date': mail_date_str,
+            'enquiry_details': combined_subject,
+            'region': customer.region or ext_region or '',
+            'product_name': clean_product_name,
+            'product_type': product_type,
+            'quantity': qty,
+            'unit': unit,
+            'product_remarks': product_remarks,
+            'product_specifications': single_specs_json,
+        }
+        if products_json:
+            request.session['email_prefill_products_json'] = products_json
+            request.session[f'email_products_{from_email_id_str}'] = products_json
+            for r in records:
+                request.session[f'email_products_{r.id}'] = products_json
+            if len(products_json) < 1800:
+                params_dict['products_json'] = products_json
+        else:
+            request.session.pop('email_prefill_products_json', None)
+            request.session.pop(f'email_products_{from_email_id_str}', None)
+
+        rfq_url = f"{url}?{urlencode(params_dict)}"
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({'status': 'found', 'redirect_url': rfq_url})
+
+        return redirect(rfq_url)
+    else:
+        cust_name_final = ext_company_name or target_cust_name or clean_sname or 'New Customer'
+        cust_name_final = re.sub(r'[\-\s]*\b\d{7,12}\b', '', cust_name_final).strip(' -_')
+        cust_name_final = re.sub(r'^\d+[\s\-_]+', '', cust_name_final).strip(' -_')
+        cust_name_final = re.sub(r'[\s\-_]+\d+$', '', cust_name_final).strip(' -_')
+
+        if products_json:
+            request.session['email_prefill_products_json'] = products_json
+            request.session[f'email_products_{from_email_id_str}'] = products_json
+            for r in records:
+                request.session[f'email_products_{r.id}'] = products_json
+        else:
+            request.session.pop('email_prefill_products_json', None)
+            request.session.pop(f'email_products_{from_email_id_str}', None)
+
+        # Build Add Customer URL
+        add_cust_url = reverse('customer_details')
+        cust_params = {
+            'customer_name': cust_name_final or 'New Customer',
+            'email': sender_email if not any(sender_email.endswith('@' + d) for d in INTERNAL_DOMAINS) else '',
+            'phone_number': extracted_phone or '',
+            'region': ext_region or '',
+            'state_code': '33' if ext_region in ('Chennai', 'Hosur') else '',
+            'from_email_id': from_email_id_str,
+            'mail_date_param': mail_date_str,
+            'enquiry_details_param': combined_subject,
+            'product_name_param': clean_product_name,
+            'product_type_param': product_type,
+            'quantity_param': qty,
+            'unit_param': unit,
+            'product_remarks_param': product_remarks,
+            'product_specifications_param': single_specs_json,
+        }
+        add_cust_redirect = f"{add_cust_url}?{urlencode(cust_params)}"
+
+        # Build Skip-to-Add-RFQ URL
+        rfq_url = reverse('rfq_details')
+        rfq_params = {
+            'add_rfq': '1',
+            'from_email_id': from_email_id_str,
+            'mail_date': mail_date_str,
+            'enquiry_details': combined_subject,
+            'region': ext_region or '',
+            'product_name': clean_product_name,
+            'product_type': product_type,
+            'quantity': qty,
+            'unit': unit,
+            'product_remarks': product_remarks,
+            'product_specifications': single_specs_json,
+        }
+        if products_json and len(products_json) < 1800:
+            rfq_params['products_json'] = products_json
+        skip_rfq_redirect = f"{rfq_url}?{urlencode(rfq_params)}"
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from django.http import JsonResponse
+            return JsonResponse({
+                'status': 'new_customer',
+                'customer_name': cust_name_final or 'New Customer',
+                'add_customer_url': add_cust_redirect,
+                'skip_rfq_url': skip_rfq_redirect,
+            })
+
+        messages.info(request, f'New customer "{cust_name_final}" detected. Please complete customer master details to proceed to Add RFQ.')
+        return redirect(add_cust_redirect)
+
+
 
 @login_required
 def add_po_from_email(request, record_id):

@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from .models import RFQ, RFQProduct, RFQEmailMessage
+from .models import RFQ, RFQProduct, RFQEmailMessage, RFQAttachment
+
+
+class RFQAttachmentInline(admin.TabularInline):
+    model = RFQAttachment
+    extra = 0
 
 
 class RFQProductInline(admin.TabularInline):
@@ -14,7 +19,6 @@ class RFQEmailMessageAdmin(admin.ModelAdmin):
     list_filter = ('direction', 'has_attachments', 'sent_at')
     search_fields = ('rfq__rfq_no', 'sender', 'recipients', 'subject', 'body', 'message_id')
     readonly_fields = ('created_at',)
-
 
 
 @admin.register(RFQ)
@@ -59,4 +63,4 @@ class RFQAdmin(admin.ModelAdmin):
         }),
     )
     
-    inlines = [RFQProductInline]
+    inlines = [RFQProductInline, RFQAttachmentInline]

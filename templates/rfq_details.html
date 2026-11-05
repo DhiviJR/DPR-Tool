@@ -227,9 +227,11 @@
                         </div>
                         <div class="col-lg-4">
                             <label class="form-label">Attachment</label>
-                            <input type="file" name="attachment" id="rfqAttachment" class="form-control">
+                            <input type="file" name="attachment" id="rfqAttachment" class="form-control" multiple>
                             <div id="rfqCurrentAttachment" class="form-text mt-1 d-none">
-                                Current Attachment: <a id="rfqAttachmentLink" href="" target="_blank" class="fw-bold text-decoration-underline text-primary"></a>
+                                <span class="fw-semibold">Current Attachment(s):</span>
+                                <div id="rfqCurrentAttachmentList" class="d-flex flex-wrap gap-1 mt-1"></div>
+                                <a id="rfqAttachmentLink" href="" target="_blank" class="fw-bold text-decoration-underline text-primary d-none"></a>
                             </div>
                         </div>
                         <div class="col-12">
@@ -389,7 +391,8 @@
                             <input type="file"
                                    name="supplier_email_attachment"
                                    id="supplierEmailAttachment"
-                                   class="form-control">
+                                   class="form-control"
+                                   multiple>
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-semibold">Email Body</label>
@@ -680,7 +683,19 @@
                                     </a>
                                 {% endif %}
 
-                                {% if rfq.attachment %}
+                                {% if rfq.all_attachments %}
+                                    <div class="d-flex flex-column gap-1 mt-1">
+                                        {% for att in rfq.all_attachments %}
+                                        <a href="{{ att.url }}"
+                                           class="text-decoration-none text-secondary small d-inline-flex align-items-center gap-1"
+                                           target="_blank"
+                                           title="View Uploaded Enquiry Document ({{ att.file_name }})">
+                                            <i class="bi bi-paperclip"></i>
+                                            <span>{{ att.file_name|default:"Enquiry Document" }}</span>
+                                        </a>
+                                        {% endfor %}
+                                    </div>
+                                {% elif rfq.attachment %}
                                     <a href="{{ rfq.attachment.url }}"
                                        class="text-decoration-none text-secondary small d-inline-flex align-items-center gap-1 mt-1"
                                        target="_blank"
@@ -690,7 +705,7 @@
                                     </a>
                                 {% endif %}
 
-                                {% if not rfq.quotation_records_display and not rfq.quotation_prepared and not rfq.attachment %}
+                                {% if not rfq.quotation_records_display and not rfq.quotation_prepared and not rfq.attachment and not rfq.all_attachments %}
                                     <span class="text-muted small">No attachment</span>
                                 {% endif %}
                             </div>
@@ -1031,7 +1046,7 @@
                         </div>
                         <div class="col-12">
                             <label class="form-label">Attachment</label>
-                            <input type="file" name="quotation_email_attachment" id="quotationEmailAttachment" class="form-control">
+                            <input type="file" name="quotation_email_attachment" id="quotationEmailAttachment" class="form-control" multiple>
                             <div class="form-text">Use this if you want to attach a downloaded quotation or any supporting file manually.</div>
                         </div>
                     </div>
@@ -1235,7 +1250,7 @@
                                                 </div>
                                             </div>
                                             <label class="form-label" style="font-size:0.8rem;">Additional Attachment (Optional)</label>
-                                            <input type="file" name="reply_attachment" id="replyAttachment" class="form-control form-control-sm">
+                                            <input type="file" name="reply_attachment" id="replyAttachment" class="form-control form-control-sm" multiple>
                                         </div>
                                     </div>
                                     <div class="mt-3 text-end">
@@ -1462,16 +1477,19 @@ function updateTableAttachment(rfqId, quoteId, quoteNo, snapshotPayload = null) 
         `).join('');
 
         let existingDocHtml = '';
-        if (rfq.attachment_url) {
-            existingDocHtml = `
-                <a href="${rfq.attachment_url}"
+        const atts = (rfq.attachments && rfq.attachments.length > 0)
+            ? rfq.attachments
+            : (rfq.attachment_url ? [{ url: rfq.attachment_url, name: rfq.attachment_name || "Enquiry Document" }] : []);
+        if (atts.length > 0) {
+            existingDocHtml = atts.map(a => `
+                <a href="${a.url}"
                    class="text-decoration-none text-secondary small d-inline-flex align-items-center gap-1 mt-1"
                    target="_blank"
-                   title="View Original Uploaded Enquiry Document">
+                   title="View Uploaded Enquiry Document">
                     <i class="bi bi-paperclip"></i>
-                    <span>${escapeHtml(rfq.attachment_name || "Enquiry Document")}</span>
+                    <span>${escapeHtml(a.name || "Enquiry Document")}</span>
                 </a>
-            `;
+            `).join('');
         }
 
         attachCell.innerHTML = `<div class="d-flex flex-column gap-1">${quotesHtml}${existingDocHtml}</div>`;
@@ -2251,7 +2269,7 @@ function getDynamicQuotationNumber(rfq, isRevision = false) {
 
     // Brand new RFQ - Calculate next sequential base quotation number dynamically across all RFQs in system
     const yearSuffix = '25-26';
-    let maxSeq = 517;
+    let maxSeq = 631;
 
     if (typeof rfqData !== 'undefined' && Array.isArray(rfqData)) {
         rfqData.forEach(r => {
@@ -3490,6 +3508,8 @@ function resetRfqForm() {
     const currentAttachmentContainer = document.getElementById('rfqCurrentAttachment');
     if (currentAttachmentContainer) {
         currentAttachmentContainer.classList.add('d-none');
+        const list = document.getElementById('rfqCurrentAttachmentList');
+        if (list) list.innerHTML = '';
     }
     const draftSupplierSelect = document.getElementById('draftModalSupplierSelect');
     if (draftSupplierSelect) {
@@ -3713,13 +3733,33 @@ function populateRfqForm(rfq) {
     }
     setRfqProductRows(rfq.products || []);
     const currentAttachmentContainer = document.getElementById('rfqCurrentAttachment');
-    const attachmentLink = document.getElementById('rfqAttachmentLink');
-    if (rfq.attachment_url && currentAttachmentContainer && attachmentLink) {
-        attachmentLink.href = rfq.attachment_url;
-        attachmentLink.textContent = rfq.attachment_name || 'View Attachment';
-        currentAttachmentContainer.classList.remove('d-none');
-    } else if (currentAttachmentContainer) {
-        currentAttachmentContainer.classList.add('d-none');
+    const currentAttachmentList = document.getElementById('rfqCurrentAttachmentList');
+    const editAtts = (rfq.attachments && rfq.attachments.length > 0)
+        ? rfq.attachments
+        : (rfq.attachment_url ? [{ url: rfq.attachment_url, name: rfq.attachment_name || 'View Attachment' }] : []);
+
+    if (currentAttachmentContainer) {
+        if (editAtts.length > 0 && currentAttachmentList) {
+            currentAttachmentList.innerHTML = editAtts.map(a => `
+                <span class="d-inline-flex align-items-center gap-1 p-1 px-2 border rounded bg-white small">
+                    <a href="${a.url}" target="_blank" class="fw-bold text-decoration-underline text-primary">
+                        <i class="bi bi-paperclip"></i> ${escapeHtml(a.name || 'View Attachment')}
+                    </a>
+                </span>
+            `).join('');
+            currentAttachmentContainer.classList.remove('d-none');
+        } else if (rfq.attachment_url) {
+            const attachmentLink = document.getElementById('rfqAttachmentLink');
+            if (attachmentLink) {
+                attachmentLink.href = rfq.attachment_url;
+                attachmentLink.textContent = rfq.attachment_name || 'View Attachment';
+                attachmentLink.classList.remove('d-none');
+            }
+            currentAttachmentContainer.classList.remove('d-none');
+        } else {
+            if (currentAttachmentList) currentAttachmentList.innerHTML = '';
+            currentAttachmentContainer.classList.add('d-none');
+        }
     }
 }
 

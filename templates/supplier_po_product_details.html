@@ -184,7 +184,7 @@
                 </div>
                 <div class="mb-3">
                     <label for="supplierInwardBillAttachment" class="form-label">Bill Attachment <span class="text-danger">*</span></label>
-                    <input type="file" id="supplierInwardBillAttachment" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" tabindex="7">
+                    <input type="file" id="supplierInwardBillAttachment" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" tabindex="7" multiple>
                     <div class="form-text" id="supplierInwardBillAttachmentExisting"></div>
                 </div>
                 <div class="text-danger small mb-2" id="supplierInwardValidationError" style="display:none;"></div>
@@ -498,7 +498,7 @@ function refreshSupplierInwardRow(row, status, receivedQty, notOkQty, notOkReaso
 
     inwardButton.textContent = getSupplierInwardLabel(status, notOkQty);
     inwardButton.dataset.receivedQty = receivedQty;
-    inwardButton.dataset.okQty = okQty === null ? Math.max(receivedQty - notOkQty, 0) : okQty;
+    inwardButton.dataset.okQty = okQty === null ? receivedQty : okQty;
     inwardButton.dataset.notOkQty = notOkQty;
     inwardButton.dataset.notOkReason = notOkReason;
 
@@ -526,11 +526,13 @@ function postSupplierInwardUpdate(row, buttonElement, receivedQuantity, okQuanti
     if (fromModal === 'inward') {
         const invoiceNumber = document.getElementById('supplierInwardInvoiceNumber').value.trim();
         const billAmount = document.getElementById('supplierInwardBillAmount').value.trim();
-        const billFile = document.getElementById('supplierInwardBillAttachment').files[0];
+        const billFiles = document.getElementById('supplierInwardBillAttachment').files;
         formData.append('supplier_invoice_number', invoiceNumber);
         formData.append('supplier_bill_amount', billAmount);
-        if (billFile) {
-            formData.append('bill_attachment', billFile);
+        if (billFiles && billFiles.length > 0) {
+            for (let i = 0; i < billFiles.length; i++) {
+                formData.append('bill_attachment', billFiles[i]);
+            }
         }
     }
 
@@ -932,10 +934,10 @@ document.getElementById('saveReworkBtn')?.addEventListener('click', function() {
 
     const okQty = parseInt(document.getElementById('reworkOkQty').value || '0', 10);
 
-    const newReceivedTotal = pendingSupplierInward.receivedQty; 
+    const newReceivedTotal = pendingSupplierInward.receivedQty + okQty;
     const newNotOkTotal = pendingSupplierInward.notOkQty - okQty;
     const newOkTotal = pendingSupplierInward.okQty + okQty;
-    const newNotOkReason = pendingSupplierInward.notOkReason;
+    const newNotOkReason = newNotOkTotal > 0 ? pendingSupplierInward.notOkReason : '';
 
     postSupplierInwardUpdate(
         pendingSupplierInward.row,
@@ -943,7 +945,8 @@ document.getElementById('saveReworkBtn')?.addEventListener('click', function() {
         newReceivedTotal,
         newOkTotal,
         newNotOkTotal,
-        newNotOkReason
+        newNotOkReason,
+        'rework'
     );
 });
 
@@ -1227,7 +1230,7 @@ document.getElementById('saveSupplierInwardBtn').addEventListener('click', funct
     }
     const values = getSupplierInwardValues();
 
-    let newReceivedTotal = values.receivedQuantity;
+    let newReceivedTotal = values.okQuantity;
     let newOkTotal = values.okQuantity;
     let newNotOkTotal = values.notOkQuantity;
     let newNotOkReason = values.reason;
@@ -1235,13 +1238,13 @@ document.getElementById('saveSupplierInwardBtn').addEventListener('click', funct
     if (pendingSupplierInward.isRemaining) {
         const pendingQty = pendingSupplierInward.orderedQty - pendingSupplierInward.receivedQty;
         if (values.receivedQuantity <= pendingQty) {
-            newReceivedTotal = pendingSupplierInward.receivedQty + values.receivedQuantity;
+            newReceivedTotal = pendingSupplierInward.receivedQty + values.okQuantity;
             newOkTotal = pendingSupplierInward.okQty + values.okQuantity;
             newNotOkTotal = pendingSupplierInward.notOkQty + values.notOkQuantity;
             newNotOkReason = values.reason || pendingSupplierInward.notOkReason;
         } else {
             // Cumulative entered
-            newReceivedTotal = values.receivedQuantity;
+            newReceivedTotal = values.okQuantity;
             newOkTotal = values.okQuantity;
             newNotOkTotal = values.notOkQuantity;
             newNotOkReason = values.reason;

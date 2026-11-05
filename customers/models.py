@@ -82,6 +82,10 @@ class Customer(models.Model):
             return ''
         return re.sub(r'[\r\n]+', ', ', self.address.strip()).strip()
 
+    @address_single_line.setter
+    def address_single_line(self, value):
+        pass
+
     @property
     def clean_customer_name(self):
         if not self.customer_name:

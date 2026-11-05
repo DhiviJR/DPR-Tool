@@ -41,5 +41,13 @@ class EmailRecord(models.Model):
             return [name.strip() for name in self.attachment_names.split('|||') if name.strip()]
         return [name.strip() for name in self.attachment_names.split(',') if name.strip()]
 
+    @property
+    def sender_email(self):
+        from email.utils import parseaddr
+        if not self.sender:
+            return ''
+        _, addr = parseaddr(self.sender)
+        return addr.strip().lower() if addr else self.sender.strip().lower()
+
     def __str__(self):
         return self.subject
