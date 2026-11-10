@@ -43,7 +43,7 @@ def _get_rfq_row_alert_class(rfq):
 
     Returns a CSS class string for row highlighting:
     - 'table-danger': Red background when any product is waiting for price details or quotation not sent after 3 days.
-    - 'table-success': Green background when all products are quotation sent.
+    - 'table-success': Green background when all products are quotation sent or quotation has been emailed.
     - Empty string: No highlighting (normal row)
     """
 
@@ -51,6 +51,13 @@ def _get_rfq_row_alert_class(rfq):
         return ''
 
     products = list(rfq.products.all())
+    quotes = list(rfq.quotations.all()) if hasattr(rfq, 'quotations') else []
+    has_sent_quote = any(getattr(q, 'email_sent', False) for q in quotes)
+
+    # Check if quotation has already been sent to customer for this RFQ
+    if rfq.quotation_email_sent or has_sent_quote:
+        return 'table-success'
+
     if not products:
         return ''
 
@@ -1656,6 +1663,7 @@ def dashboard(request):
         )
 
         if is_quote_submitted:
+            rfq.row_class = 'table-success'
             confirmed_rfqs.append(rfq)
         elif rfq.row_class == 'table-danger':
             overdue_rfqs.append(rfq)
@@ -5190,14 +5198,16 @@ def rfq_details(request):
                     messages.error(request, 'Select valid RFQ products or supplier prices for quotation attachment.')
                     return redirect('rfq_details')
 
-            if not quotation_products and not quotation_attachments and not quotation_attachment:
+            selected_quotation_id = request.POST.get('selected_quotation_id', '').strip()
+
+            if not quotation_products and not quotation_attachments and not quotation_attachment and not (selected_quotation_id and selected_quotation_id.isdigit()):
                 messages.error(request, 'Select products to auto-attach quotation or upload an attachment.')
                 return redirect('rfq_details')
 
             # Quotation Email Validation: Check if all selected products have finalized prices
             # A product has a known price if: price_known=True AND value > 0
             # This validation is applied before generating PDF or sending email
-            if quotation_products:
+            if quotation_products and not selected_quotation_id:
                 invalid_products = [
                     p for p in quotation_products
                     if not p.price_known or not p.value or p.value == 0
@@ -5212,7 +5222,7 @@ def rfq_details(request):
 
             try:
                 attachments_to_send = []
-                selected_quotation_id = request.POST.get('selected_quotation_id', '').strip()
+                quotation_record = None
                 if selected_quotation_id and selected_quotation_id.isdigit():
                     existing_q = RFQQuotation.objects.filter(rfq=rfq, id=int(selected_quotation_id)).first()
                     if existing_q:
@@ -5222,6 +5232,12 @@ def rfq_details(request):
                         pdf_buffer = _build_rfq_quotation_pdf(rfq, prods, quote_no=quote_no)
                         filename = f"{quote_no.replace('/', '_')}.pdf"
                         attachments_to_send.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
+                        if not quotation_products:
+                            quotation_products = prods
+                        if not quotation_product_ids_to_mark:
+                            quotation_product_ids_to_mark = [str(getattr(p, 'id', '')) for p in prods if getattr(p, 'id', None)]
+                            if not quotation_product_ids_to_mark:
+                                quotation_product_ids_to_mark = [str(p.id) for p in rfq.products.all() if p.price_known and p.value > 0]
                 elif quotation_products:
                     # Check if there is an unsent quotation record prepared for this exact selection
                     quotation_record = _find_latest_matching_quotation(
@@ -5290,15 +5306,19 @@ def rfq_details(request):
                                 quotation_email_sent=True,
                                 quotation_prepared=True
                             )
-                    RFQProduct.objects.filter(
-                        rfq=rfq,
-                        id__in=quotation_product_ids_to_mark
-                    ).update(quotation_email_sent=True, quotation_prepared=True)
+                    if quotation_product_ids_to_mark:
+                        RFQProduct.objects.filter(
+                            rfq=rfq,
+                            id__in=quotation_product_ids_to_mark
+                        ).update(quotation_email_sent=True, quotation_prepared=True)
 
-                    if quotation_record:
-                        quotation_record.email_sent = True
+                if quotation_record:
+                    quotation_record.email_sent = True
+                    if not selected_quotation_id and quotation_products:
                         quotation_record.products_snapshot = _serialize_quotation_products(quotation_products)
                         quotation_record.save(update_fields=['email_sent', 'products_snapshot', 'updated_at'])
+                    else:
+                        quotation_record.save(update_fields=['email_sent', 'updated_at'])
 
                 rfq.email_sent_date = timezone.now()
                 rfq.quotation_due_date = timezone.localdate() + timedelta(days=3)
@@ -5306,7 +5326,7 @@ def rfq_details(request):
                 rfq.quotation_email_sent = not RFQProduct.objects.filter(
                     rfq=rfq,
                     quotation_email_sent=False
-                ).exists()
+                ).exists() or bool(quotation_record and quotation_record.email_sent)
                 rfq.save(update_fields=['email_sent_date', 'quotation_due_date', 'quotation_prepared', 'quotation_email_sent'])
 
                 messages.success(request, f"Quotation email sent to {', '.join(customer_emails)}.")
@@ -5349,8 +5369,6 @@ def rfq_details(request):
     overdue_rfqs = []
 
     for rfq in all_rfqs:
-        rfq.row_class = _get_rfq_row_alert_class(rfq)
-        rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
         quotes = list(rfq.quotations.all())
         quotes_asc = sorted(quotes, key=lambda q: (q.created_at or timezone.now(), q.id))
         quotes_desc = sorted(quotes, key=lambda q: (q.created_at or timezone.now(), q.id), reverse=True)
@@ -5363,6 +5381,37 @@ def rfq_details(request):
         is_po_confirmed = any(q_no in confirmed_quote_set for q_no in rfq_quote_nos)
         has_email_sent_quote = any(q.email_sent for q in quotes)
         products = list(rfq.products.all())
+
+        out_messages = [m for m in rfq.email_messages.all() if getattr(m, 'direction', '') == 'OUT']
+        if not has_email_sent_quote and out_messages and quotes:
+            if latest_quotation and not latest_quotation.email_sent:
+                latest_quotation.email_sent = True
+                RFQQuotation.objects.filter(id=latest_quotation.id).update(email_sent=True)
+            has_email_sent_quote = True
+
+        if has_email_sent_quote or rfq.quotation_email_sent or (out_messages and quotes):
+            for q in quotes:
+                if q.email_sent and q.products_snapshot:
+                    snap_ids = [str(item.get('product_id')) for item in q.products_snapshot if item.get('product_id')]
+                    if snap_ids:
+                        for p in products:
+                            if str(p.id) in snap_ids and not p.quotation_email_sent:
+                                p.quotation_email_sent = True
+                                RFQProduct.objects.filter(id=p.id).update(quotation_email_sent=True, quotation_prepared=True)
+                    else:
+                        for p in products:
+                            if p.price_known and p.value > 0 and not p.quotation_email_sent:
+                                p.quotation_email_sent = True
+                                RFQProduct.objects.filter(id=p.id).update(quotation_email_sent=True, quotation_prepared=True)
+            if not rfq.quotation_email_sent:
+                rfq.quotation_email_sent = True
+                RFQ.objects.filter(id=rfq.id).update(quotation_email_sent=True)
+            if not rfq.email_sent_date and out_messages:
+                rfq.email_sent_date = out_messages[0].sent_at
+                RFQ.objects.filter(id=rfq.id).update(email_sent_date=rfq.email_sent_date)
+
+        rfq.row_class = _get_rfq_row_alert_class(rfq)
+        rfq.is_overdue = (today - rfq.mail_date).days >= 3 if rfq.mail_date else False
 
         rfq.quotation_prepared = rfq.quotation_prepared or bool(quotes) or any(p.quotation_prepared or p.quotation_email_sent for p in products)
 
@@ -5383,6 +5432,7 @@ def rfq_details(request):
         rfq.email_count = len(list(rfq.email_messages.all()))
 
         if is_quote_submitted:
+            rfq.row_class = 'table-success'
             rfq.order_status = 'confirmed'
             confirmed_rfqs.append(rfq)
         elif rfq.row_class == 'table-danger':
@@ -8789,6 +8839,9 @@ def send_rfq_email_reply(request, rfq_id):
 
         quotation_record = None
         quotation_product_ids_to_mark = []
+        products = []
+        is_existing_quote = False
+
         if selected_quotation_id and selected_quotation_id.isdigit():
             existing_q = RFQQuotation.objects.filter(rfq=rfq, id=int(selected_quotation_id)).first()
             if existing_q:
@@ -8798,7 +8851,10 @@ def send_rfq_email_reply(request, rfq_id):
                 pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
                 filename = f"{quote_no.replace('/', '_')}.pdf"
                 attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
-                products = []  # handled
+                quotation_product_ids_to_mark = [str(getattr(p, 'id', '')) for p in products if getattr(p, 'id', None)]
+                if not quotation_product_ids_to_mark:
+                    quotation_product_ids_to_mark = [str(p.id) for p in rfq.products.all() if p.price_known and p.value > 0]
+                is_existing_quote = True
         elif product_ids:
             products, quotation_product_ids_to_mark = _build_selected_quotation_products(
                 rfq, product_ids, supplier_price_ids,
@@ -8809,8 +8865,16 @@ def send_rfq_email_reply(request, rfq_id):
         else:
             latest_quotation = RFQQuotation.objects.filter(rfq=rfq).order_by('-created_at').first()
             if latest_quotation and latest_quotation.products_snapshot:
-                products = _deserialize_quotation_products(latest_quotation.products_snapshot)
+                quotation_record = latest_quotation
+                quote_no = quotation_record.quotation_number
+                products = _deserialize_quotation_products(latest_quotation.products_snapshot) or list(rfq.products.all())
                 quotation_product_ids_to_mark = [str(getattr(p, 'id', '')) for p in products if getattr(p, 'id', None)]
+                if not quotation_product_ids_to_mark:
+                    quotation_product_ids_to_mark = [str(p.id) for p in rfq.products.all() if p.price_known and p.value > 0]
+                is_existing_quote = True
+                pdf_buffer = _build_rfq_quotation_pdf(rfq, products, quote_no=quote_no)
+                filename = f"{quote_no.replace('/', '_')}.pdf"
+                attachments.append((filename, pdf_buffer.getvalue(), 'application/pdf'))
             else:
                 products, quotation_product_ids_to_mark = _build_selected_quotation_products(rfq, [], [])
                 if not products:
@@ -8828,7 +8892,7 @@ def send_rfq_email_reply(request, rfq_id):
             if single_terms:
                 quotation_terms = [t.strip() for t in single_terms.splitlines() if t.strip()]
 
-        if products:
+        if products and not is_existing_quote:
             quotation_record = _find_latest_matching_quotation(
                 rfq,
                 quotation_product_ids_to_mark,
@@ -8897,19 +8961,22 @@ def send_rfq_email_reply(request, rfq_id):
                     id__in=quotation_product_ids_to_mark
                 ).update(quotation_email_sent=True, quotation_prepared=True)
 
-            if quotation_record:
-                quotation_record.email_sent = True
+        if quotation_record:
+            quotation_record.email_sent = True
+            if not is_existing_quote and products:
                 quotation_record.products_snapshot = _serialize_quotation_products(products, custom_terms=quotation_terms)
                 quotation_record.save(update_fields=['email_sent', 'products_snapshot', 'updated_at'])
+            else:
+                quotation_record.save(update_fields=['email_sent', 'updated_at'])
 
-            rfq.email_sent_date = timezone.now()
-            rfq.quotation_due_date = timezone.localdate() + timedelta(days=3)
-            rfq.quotation_prepared = True
-            rfq.quotation_email_sent = not RFQProduct.objects.filter(
-                rfq=rfq,
-                quotation_email_sent=False
-            ).exists()
-            rfq.save(update_fields=['email_sent_date', 'quotation_due_date', 'quotation_prepared', 'quotation_email_sent'])
+        rfq.email_sent_date = timezone.now()
+        rfq.quotation_due_date = timezone.localdate() + timedelta(days=3)
+        rfq.quotation_prepared = True
+        rfq.quotation_email_sent = not RFQProduct.objects.filter(
+            rfq=rfq,
+            quotation_email_sent=False
+        ).exists() or bool(quotation_record and quotation_record.email_sent)
+        rfq.save(update_fields=['email_sent_date', 'quotation_due_date', 'quotation_prepared', 'quotation_email_sent'])
 
         return JsonResponse({
             'status': 'success',

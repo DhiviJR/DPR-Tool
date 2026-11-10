@@ -149,20 +149,32 @@ tr:hover .email-subject-title {
     </div>
 
     <!-- Main Table Card -->
-    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-        <!-- Floating Batch Action Bar for Multiple Email Selection -->
-        <div id="batchActionCard" class="bg-primary text-white py-2.5 px-4 d-none align-items-center justify-content-between border-bottom shadow-sm">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden position-relative">
+        <!-- Modern Floating Batch Action Toolbar -->
+        <div id="batchActionCard" class="py-2.5 px-4 d-none align-items-center justify-content-between border-bottom"
+             style="background: linear-gradient(90deg, #1e3a8a 0%, #2563eb 100%); color: #ffffff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">
             <div class="d-flex align-items-center gap-3">
-                <span class="badge bg-white text-primary fw-bold px-2.5 py-1 rounded-pill fs-6" id="selectedCountBadge">0</span>
-                <span class="fw-semibold small" id="selectedSenderText">Emails selected from sender</span>
-                <span class="badge bg-primary-subtle text-primary border border-white-50 px-2 py-0.5 rounded-pill" style="font-size: 0.75rem;" id="selectedSenderEmailBadge"></span>
+                <span class="badge bg-white text-primary fw-bolder px-2.5 py-1.5 rounded-pill shadow-xs" style="font-size: 0.85rem;" id="selectedCountBadge">0</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-semibold text-white" style="font-size: 0.9rem;">
+                        <i class="bi bi-check2-circle me-1 text-info"></i><span id="selectedSenderText">Emails selected from:</span>
+                    </span>
+                    <span class="badge bg-white text-dark bg-opacity-25 px-2.5 py-1 rounded-pill border border-white border-opacity-25" style="font-size: 0.8rem; font-weight: 500;" id="selectedSenderEmailBadge"></span>
+                </div>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <button type="button" class="btn btn-sm btn-outline-light px-3" onclick="clearSelectedEmails()">
-                    <i class="bi bi-x-circle me-1"></i>Clear Selection
+                <button type="button" class="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-medium d-inline-flex align-items-center gap-1.5 shadow-xs" 
+                        onclick="clearSelectedEmails()"
+                        style="transition: all 0.2s ease;">
+                    <i class="bi bi-x-circle"></i>
+                    <span>Clear Selection</span>
                 </button>
-                <button type="button" class="btn btn-sm btn-success fw-semibold px-3 shadow-sm" id="batchAddRfqBtn" onclick="addRfqFromSelectedEmails(this)">
-                    <i class="bi bi-plus-circle me-1"></i>Add RFQ for Selected (<span id="batchBtnCount">0</span>) Emails
+                <button type="button" class="btn btn-sm btn-success rounded-pill px-3.5 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 shadow-sm" 
+                        id="batchAddRfqBtn" 
+                        onclick="addRfqFromSelectedEmails(this)"
+                        style="background-color: #10b981; border-color: #10b981; transition: all 0.2s ease;">
+                    <i class="bi bi-plus-circle-fill"></i>
+                    <span>Add RFQ for Selected (<span id="batchBtnCount">0</span>) Emails</span>
                 </button>
             </div>
         </div>
@@ -565,8 +577,15 @@ function updateBatchBarAndCheckboxes() {
     }
     if (selectedCountBadge) selectedCountBadge.textContent = checked.length;
     if (batchBtnCount) batchBtnCount.textContent = checked.length;
-    if (selectedSenderText) selectedSenderText.textContent = `Emails selected from: ${senderDisplay}`;
-    if (selectedSenderEmailBadge) selectedSenderEmailBadge.textContent = currentActiveSender || 'sender';
+    if (selectedSenderText) selectedSenderText.textContent = senderDisplay;
+    if (selectedSenderEmailBadge) {
+        if (currentActiveSender && currentActiveSender !== senderDisplay) {
+            selectedSenderEmailBadge.textContent = currentActiveSender;
+            selectedSenderEmailBadge.classList.remove('d-none');
+        } else {
+            selectedSenderEmailBadge.classList.add('d-none');
+        }
+    }
 
     // Disable all checkboxes with different sender and style them
     let matchingCheckboxes = 0;
@@ -820,6 +839,33 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 .modal-fullscreen .modal-content {
     border-radius: 0 !important;
+}
+/* Batch Action Bar Styling & Table Selection */
+#batchActionCard {
+    animation: slideDownBatch 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes slideDownBatch {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+tr.table-active {
+    background-color: #f0f7ff !important;
+}
+.email-select-checkbox {
+    cursor: pointer;
+    width: 17px;
+    height: 17px;
+    border-color: #cbd5e1;
+}
+.email-select-checkbox:checked {
+    background-color: #2563eb;
+    border-color: #2563eb;
 }
 </style>
 

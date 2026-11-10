@@ -1214,6 +1214,7 @@
                                 <form id="emailReplyForm" enctype="multipart/form-data" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
                                     {% csrf_token %}
                                     <input type="hidden" id="replyParentMessageId" name="parent_message_id" value="">
+                                    <input type="hidden" id="replySelectedQuotationId" name="selected_quotation_id" value="">
                                     <div class="row g-2" style="flex: 1; display: flex; flex-direction: column;">
                                         <div class="col-12">
                                             <div class="row g-2">
@@ -1577,6 +1578,20 @@ document.getElementById('attachQuotationYesBtn')?.addEventListener('click', func
         const hiddenSelId = document.getElementById('quotationEmailSelectedQuotationId');
         if (hiddenSelId && quote && quote.id) {
             hiddenSelId.value = String(quote.id);
+        }
+
+        const productInputs = document.getElementById('quotationEmailProductInputs');
+        if (productInputs) {
+            productInputs.innerHTML = '';
+            (rfq.products || []).forEach(p => {
+                if (p.price_known && p.value > 0) {
+                    const pInput = document.createElement('input');
+                    pInput.type = 'hidden';
+                    pInput.name = 'quotation_product_ids';
+                    pInput.value = p.id;
+                    productInputs.appendChild(pInput);
+                }
+            });
         }
 
         const note = document.getElementById('quotationAutoAttachmentNote');
@@ -4911,6 +4926,9 @@ document.getElementById('emailReplyForm')?.addEventListener('submit', function(e
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
 
     const formData = new FormData(this);
+    if (window.activeReplySelectedQuotation && window.activeReplySelectedQuotation.id) {
+        formData.set('selected_quotation_id', window.activeReplySelectedQuotation.id);
+    }
     if (window.activeReplyQuotationParams) {
         const qP = window.activeReplyQuotationParams;
         (qP.productIds || []).forEach(id => formData.append('quotation_product_ids', id));
@@ -4940,6 +4958,9 @@ document.getElementById('emailReplyForm')?.addEventListener('submit', function(e
             closeReplyComposer();
             document.getElementById('emailReplyForm').reset();
             loadEmailThread(rfqId);
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
         } else {
             alertDiv.innerHTML = `<div class="alert alert-danger alert-dismissible py-2 mb-0 rounded-0" style="font-size:0.82rem;">${escapeHtml(data.message || 'Failed to send.')}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
         }
