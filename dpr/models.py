@@ -98,8 +98,8 @@ class DPR(models.Model):
         if not self.serial_number:
             import re
             year = datetime.now().year
-            # Starting sequence for DPR is configured to start from DPR-2026-3948 and follow the order
-            max_dpr_seq = 3947
+            # Starting sequence for DPR is configured to start from DPR-2026-3946 and follow the order
+            max_dpr_seq = 3945
             for sn in DPR.objects.values_list('serial_number', flat=True):
                 m = re.match(r'^DPR-\d+-(\d+)$', sn or '')
                 if m:
