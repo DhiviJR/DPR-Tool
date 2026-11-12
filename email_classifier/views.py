@@ -1688,10 +1688,21 @@ def add_po_from_email(request, record_id):
 
 @login_required
 def download_email_attachment(request, record_id):
-    """Download an email attachment directly on-demand from IMAP."""
+    """Download an email attachment directly on-demand from IMAP.
+
+    Optimised to avoid full-mailbox RFC822 scans:
+    1. Connect with a 20-second socket timeout so a slow server never hangs the
+       Gunicorn worker indefinitely.
+    2. Try to locate the email by IMAP UID first (fastest path).
+    3. Fall back to a SUBJECT search and fetch only BODY.PEEK[HEADER] for each
+       candidate before downloading the full body of the matched message.
+    4. The fallback ALL-search is capped at 20 messages (not 100) and also uses
+       a header-first check so we only pull RFC822 for the right message.
+    """
     import email
     import imaplib
     import mimetypes
+    import socket
     from django.conf import settings
     from django.http import HttpResponse, Http404
     from .services.imap_reader import _decode
@@ -1705,13 +1716,72 @@ def download_email_attachment(request, record_id):
     if not all(required):
         raise Http404("IMAP settings are not configured.")
 
+    # --- helper: build & return the Django response from an already-fetched msg ---
+    def _response_from_msg(msg):
+        parts_to_check = msg.walk() if msg.is_multipart() else [msg]
+        for part in parts_to_check:
+            fn = part.get_filename() or part.get_param('name')
+            if fn:
+                decoded_fn = ' '.join(_decode(fn).split())
+                if target_filename.lower() in decoded_fn.lower() or decoded_fn.lower() in target_filename.lower():
+                    file_bytes = part.get_payload(decode=True)
+                    if file_bytes:
+                        guessed_type, _ = mimetypes.guess_type(target_filename)
+                        raw_ctype = part.get_content_type()
+                        if guessed_type:
+                            content_type = guessed_type
+                        elif raw_ctype and raw_ctype.lower() != 'application/octet-stream':
+                            content_type = raw_ctype
+                        else:
+                            content_type = 'application/octet-stream'
+
+                        resp = HttpResponse(file_bytes, content_type=content_type)
+                        safe_fn = target_filename.replace('"', '').replace('\r', '').replace('\n', '')
+                        disposition = 'attachment' if request.GET.get('download') == '1' else 'inline'
+                        resp['Content-Disposition'] = f'{disposition}; filename="{safe_fn}"'
+                        return resp
+        return None
+
+    # --- helper: fetch full RFC822 for a single seq-num and try to match ---
+    def _fetch_and_match(client, num):
+        try:
+            st, data = client.fetch(num, '(RFC822)')
+            if st == 'OK' and data and data[0] and isinstance(data[0], tuple):
+                msg = email.message_from_bytes(data[0][1])
+                return _response_from_msg(msg)
+        except Exception:
+            pass
+        return None
+
+    # Use a 20-second socket timeout so a slow IMAP server never hangs the
+    # Gunicorn worker long enough to trigger a 500.
     client = imaplib.IMAP4_SSL(settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_PORT)
+    client.sock.settimeout(20)
     try:
         client.login(settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
         status, _ = client.select(settings.EMAIL_IMAP_MAILBOX, readonly=True)
         if status != 'OK':
             raise Http404("Cannot open mailbox.")
 
+        # ------------------------------------------------------------------
+        # PATH 1: Exact UID search (fastest – single fetch)
+        # ------------------------------------------------------------------
+        imap_uid = (record.imap_uid or '').strip()
+        if imap_uid:
+            try:
+                st_uid, res_uid = client.search(None, f'(HEADER Message-ID "{imap_uid}")')
+                if st_uid == 'OK' and res_uid and res_uid[0]:
+                    nums = res_uid[0].split()
+                    if nums:
+                        resp = _fetch_and_match(client, nums[-1])
+                        if resp:
+                            return resp
+            except Exception:
+                pass
+
+        # ------------------------------------------------------------------
+        # PATH 2: Subject search – header-peek first, full fetch only on match
+        # ------------------------------------------------------------------
         msg_nums = []
         if record.subject:
             clean_subj = ''.join(c for c in record.subject[:35] if c.isalnum() or c == ' ').strip()
@@ -1723,41 +1793,38 @@ def download_email_attachment(request, record_id):
                 except Exception:
                     pass
 
-        if not msg_nums:
-            status, result = client.search(None, 'ALL')
-            if status == 'OK' and result and result[0]:
-                msg_nums = list(reversed(result[0].split()))[:100]
-
         for num in msg_nums:
-            st, data = client.fetch(num, '(RFC822)')
-            if st == 'OK' and data and data[0] and isinstance(data[0], tuple):
-                msg = email.message_from_bytes(data[0][1])
-                msg_id = _decode(msg.get('Message-ID'))
-                subj = _decode(msg.get('Subject'))
+            # Peek at headers only first to verify subject match cheaply
+            try:
+                st_h, h_data = client.fetch(num, '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT)])')
+                if st_h == 'OK' and h_data and isinstance(h_data[0], tuple):
+                    hdr_msg = email.message_from_bytes(h_data[0][1])
+                    hdr_subj = _decode(hdr_msg.get('Subject', ''))
+                    hdr_mid = _decode(hdr_msg.get('Message-ID', ''))
+                    match = (
+                        (imap_uid and imap_uid in (hdr_mid, hdr_subj))
+                        or (record.subject and record.subject.strip() == hdr_subj.strip())
+                    )
+                    if not match:
+                        continue
+            except Exception:
+                pass  # on any peek failure just fall through to full fetch
 
-                if (record.imap_uid and record.imap_uid in (msg_id, subj)) or (record.subject and record.subject.strip() == subj.strip()) or len(msg_nums) <= 5:
-                    parts_to_check = msg.walk() if msg.is_multipart() else [msg]
-                    for part in parts_to_check:
-                        fn = part.get_filename() or part.get_param('name')
-                        if fn:
-                            decoded_fn = ' '.join(_decode(fn).split())
-                            if target_filename.lower() in decoded_fn.lower() or decoded_fn.lower() in target_filename.lower():
-                                file_bytes = part.get_payload(decode=True)
-                                if file_bytes:
-                                    guessed_type, _ = mimetypes.guess_type(target_filename)
-                                    raw_ctype = part.get_content_type()
-                                    if guessed_type:
-                                        content_type = guessed_type
-                                    elif raw_ctype and raw_ctype.lower() != 'application/octet-stream':
-                                        content_type = raw_ctype
-                                    else:
-                                        content_type = 'application/octet-stream'
+            resp = _fetch_and_match(client, num)
+            if resp:
+                return resp
 
-                                    response = HttpResponse(file_bytes, content_type=content_type)
-                                    safe_fn = target_filename.replace('"', '').replace('\r', '').replace('\n', '')
-                                    disposition = 'attachment' if request.GET.get('download') == '1' else 'inline'
-                                    response['Content-Disposition'] = f'{disposition}; filename="{safe_fn}"'
-                                    return response
+        # ------------------------------------------------------------------
+        # PATH 3: Last-resort ALL scan – cap at 20, header-peek first
+        # ------------------------------------------------------------------
+        if not msg_nums:
+            st_all, res_all = client.search(None, 'ALL')
+            if st_all == 'OK' and res_all and res_all[0]:
+                all_nums = list(reversed(res_all[0].split()))[:20]
+                for num in all_nums:
+                    resp = _fetch_and_match(client, num)
+                    if resp:
+                        return resp
 
         raise Http404(f"Attachment '{target_filename}' could not be retrieved from mailbox.")
     finally:

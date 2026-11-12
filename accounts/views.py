@@ -143,9 +143,10 @@ def _quote_number_sequence(quotation_number):
 
 
 def _get_next_mes_quote_base_no(rfq=None):
-    # Quotation sequence configured to start from MES_Q00638_25-26 and follow in order
+    # Quotation sequence configured to never go below MES_Q00644_25-26
+    # (last generated on hosted version was MES_Q00643_25-26)
     year_suffix = '25-26'
-    max_seq = 637
+    max_seq = 643
 
     for quote_no in RFQQuotation.objects.values_list('quotation_number', flat=True):
         seq, suffix = _quote_number_sequence(quote_no)
