@@ -1044,7 +1044,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
         rightMargin=14 * mm,
         leftMargin=14 * mm,
         topMargin=46 * mm,
-        bottomMargin=15 * mm,
+        bottomMargin=12 * mm,
     )
     styles = getSampleStyleSheet()
     normal = ParagraphStyle(
@@ -1157,8 +1157,9 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
                 
                 # Draw Quote No and Date under line
                 self.setFillColor(colors.black)
-                self.setFont(font_regular, 9)
+                self.setFont(font_bold, 9)
                 self.drawString(14 * mm, self._pagesize[1] - 39 * mm, f"Quote No : {quote_no}")
+                self.setFont(font_regular, 9)
                 self.drawRightString(self._pagesize[0] - 14 * mm, self._pagesize[1] - 39 * mm, f"Date : {quote_date}")
                 
                 # Draw a thin separator line under Quote No and Date
@@ -1186,11 +1187,11 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
 
     story.append(Paragraph('<b><u>Quotation (Confidential)</u></b>', title_style))
     story.append(Spacer(1, 4))
-    story.append(Paragraph(f'Quote No : {quote_no}', normal))
-    story.append(Paragraph(f'Enquiry No : {enquiry_no}', normal))
+    story.append(Paragraph(f'<b>Quote No : {quote_no}</b>', normal))
+    story.append(Paragraph(f'<b>Enquiry No : {enquiry_no}</b>', normal))
     story.append(Spacer(1, 4))
     story.append(Paragraph('<b>To:</b>', normal))
-    story.append(Paragraph(f'M/s. {pdf_text(customer.customer_name)}', normal))
+    story.append(Paragraph(f'<b>M/s. {pdf_text(customer.customer_name)}</b>', normal))
     if customer_address:
         story.append(Paragraph(pdf_text(customer_address).replace('\n', '<br/>'), normal))
     if customer.region:
@@ -1313,18 +1314,18 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#a7d3ef')),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 3.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
             ('LEFTPADDING', (0, 0), (-1, -1), 3),
             ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ])
     )
     story.append(product_table)
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 6))
 
     # 7. Terms & Conditions
     story.append(Paragraph('<b><u>Our Terms & Conditions</u></b>', terms_title_style))
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 3))
     
     if not custom_terms and products:
         for p in products:
@@ -1340,9 +1341,24 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
     else:
         terms = _get_default_rfq_quotation_terms(rfq, products)
 
+    term_style = ParagraphStyle(
+        'MESTermItem',
+        parent=normal,
+        fontSize=8,
+        leading=11,
+        spaceAfter=2,
+    )
+
     for index, term in enumerate(terms, start=1):
         clean_term = re.sub(r'^\d+[\.\)]\s*', '', term).strip()
-        story.append(Paragraph(pdf_text(f'{index}. {clean_term}'), small))
+        if ':' in clean_term:
+            parts = clean_term.split(':', 1)
+            term_label = parts[0].strip()
+            term_val = parts[1].strip()
+            term_html = f"{index}. <b>{pdf_text(term_label)} :</b> {pdf_text(term_val)}"
+        else:
+            term_html = f"{index}. {pdf_text(clean_term)}"
+        story.append(Paragraph(term_html, term_style))
 
     doc.build(story, canvasmaker=NumberedCanvas)
     buffer.seek(0)
