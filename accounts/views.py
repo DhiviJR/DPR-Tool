@@ -1236,9 +1236,9 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
             kind_attention = c_person
 
     if kind_attention:
-        story.append(Paragraph(f'Kind Attension : {pdf_text(kind_attention)}', normal))
+        story.append(Paragraph(f'<b>Kind Attension : {pdf_text(kind_attention)}</b>', normal))
     else:
-        story.append(Paragraph('Kind Attension : -', normal))
+        story.append(Paragraph('<b>Kind Attension : -</b>', normal))
     story.append(Paragraph(f'Phone :{pdf_text(customer_phone)}', normal))
     if customer.email:
         story.append(Paragraph(f'Email-ID :{pdf_text(customer.email)}', normal))
@@ -1287,6 +1287,14 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
                 escaped_desc.append(f"<b>{pdf_text(clean_pname)}</b>")
             elif line.startswith('<b>') and line.endswith('</b>'):
                 escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
+            elif ':' in line:
+                parts = line.split(':', 1)
+                label_part = parts[0].strip()
+                val_part = parts[1].strip()
+                if val_part:
+                    escaped_desc.append(f"<b>{pdf_text(label_part)} :</b> {pdf_text(val_part)}")
+                else:
+                    escaped_desc.append(f"<b>{pdf_text(label_part)} :</b>")
             else:
                 escaped_desc.append(pdf_text(line))
         description_text = '<br/>'.join(escaped_desc)
