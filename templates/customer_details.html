@@ -350,12 +350,12 @@
                 <label class="form-label small fw-semibold text-nowrap mb-1">Payment Terms</label>
                 <div class="input-group input-group-sm">
                     <input type="number" name="payment_terms" class="form-control form-control-sm" min="0" value="{{ prefill_data.payment_terms|default:'' }}">
-                    <span class="input-group-text">Weeks</span>
+                    <span class="input-group-text">Days</span>
                 </div>
             </div>
-            <div class="col" style="min-width: 140px;">
+            <div class="col" style="min-width: 220px; flex-grow: 1.5;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">Address</label>
-                <input type="text" name="address" class="form-control form-control-sm" value="{{ prefill_data.address|default:'' }}">
+                <textarea name="address" rows="1" class="form-control form-control-sm js-auto-expand-address" placeholder="Enter complete address..." style="min-height: 31px; resize: vertical; overflow-y: hidden;">{{ prefill_data.address|default:'' }}</textarea>
             </div>
             <div class="col-auto">
                 <button type="submit" class="btn btn-success btn-sm text-nowrap px-3">
@@ -397,7 +397,7 @@
                         <th style="min-width: 85px;">State Code</th>
                         <th style="min-width: 75px;">SEZ</th>
                         <th style="min-width: 110px;">Payment Terms</th>
-                        <th style="min-width: 160px;">Address</th>
+                        <th style="min-width: 220px;">Address</th>
                         <th style="min-width: 125px;">Created At</th>
                         <th style="min-width: 145px;" class="text-center">Action</th>
                     </tr>
@@ -491,11 +491,11 @@
                         <td>
                             <div class="input-group input-group-sm">
                                 <input type="number" name="payment_terms" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.payment_terms|default:'' }}" min="0" disabled>
-                                <span class="input-group-text">Weeks</span>
+                                <span class="input-group-text">Days</span>
                             </div>
                         </td>
-                        <td>
-                            <input type="text" name="address" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.address|default:'' }}" disabled>
+                        <td style="min-width: 220px; max-width: 320px;">
+                            <textarea name="address" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field js-auto-expand-address" rows="1" style="min-height: 31px; resize: vertical; background-color: transparent;" disabled title="{{ customer.address|default:'' }}">{{ customer.address|default:'' }}</textarea>
                         </td>
                         <td class="small text-muted text-nowrap">
                             {{ customer.created_at|date:'Y-m-d H:i' }}
@@ -1146,6 +1146,31 @@ document.addEventListener('DOMContentLoaded', function() {
             form.scrollIntoView({ behavior: 'smooth' });
         }
     }
+
+    // Auto-expand address fields dynamically so long addresses are completely visible
+    function autoExpandAddressField(el) {
+        if (!el) return;
+        el.style.height = 'auto';
+        const newHeight = Math.max(31, el.scrollHeight);
+        el.style.height = newHeight + 'px';
+    }
+
+    document.addEventListener('input', function(e) {
+        if (e.target && e.target.classList.contains('js-auto-expand-address')) {
+            autoExpandAddressField(e.target);
+        }
+    });
+
+    document.addEventListener('focusin', function(e) {
+        if (e.target && e.target.classList.contains('js-auto-expand-address')) {
+            autoExpandAddressField(e.target);
+        }
+    });
+
+    // Expand on initial page load
+    setTimeout(function() {
+        document.querySelectorAll('.js-auto-expand-address').forEach(autoExpandAddressField);
+    }, 100);
 });
 </script>
 {% endblock %}
