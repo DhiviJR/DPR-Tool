@@ -343,11 +343,23 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const syncBtn = document.getElementById('globalSyncMailBtn');
+    let isSyncActive = false;
+
     if (syncBtn) {
         syncBtn.addEventListener('click', function() {
+            if (isSyncActive) {
+                showSyncToast(
+                    '<div class="d-flex align-items-center"><i class="bi bi-info-circle-fill me-2 fs-5"></i><span>Sync is already in progress. Please wait a moment...</span></div>',
+                    'bg-info text-dark',
+                    3000
+                );
+                return;
+            }
+
             const btn = this;
             const spinner = document.getElementById('globalSyncSpinner');
 
+            isSyncActive = true;
             if (spinner) spinner.classList.add('dash-spinning');
             btn.disabled = true;
 
@@ -383,6 +395,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     return r.json();
                 })
                 .then(data => {
+                    if (data.status === 'info') {
+                        isSyncActive = false;
+                        if (spinner) spinner.classList.remove('dash-spinning');
+                        btn.disabled = false;
+                        showSyncToast(
+                            `<div class="d-flex align-items-center"><i class="bi bi-info-circle-fill me-2 fs-5"></i><span>${window.escapeHtml(data.message)}</span></div>`,
+                            'bg-info text-dark',
+                            4000
+                        );
+                        return;
+                    }
+
                     totalEmailsSaved += (data.email_saved || 0);
                     totalRfqSynced += (data.rfq_synced || 0);
 
@@ -395,6 +419,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         );
                         runSyncBatch(data.next_offset);
                     } else {
+                        isSyncActive = false;
                         if (spinner) spinner.classList.remove('dash-spinning');
                         btn.disabled = false;
 
@@ -424,6 +449,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 })
                 .catch(err => {
+                    isSyncActive = false;
                     if (spinner) spinner.classList.remove('dash-spinning');
                     btn.disabled = false;
 

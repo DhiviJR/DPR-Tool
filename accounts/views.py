@@ -9081,6 +9081,28 @@ def sync_all_mail(request):
     is_full = (mode == 'full')
     offset = int(request.POST.get('offset', 0) or request.GET.get('offset', 0) or 0)
 
+    import tempfile
+    lock_file = os.path.join(tempfile.gettempdir(), 'mes_email_sync.lock')
+    if offset == 0 and os.path.exists(lock_file):
+        try:
+            with open(lock_file, 'r') as f:
+                ts = float(f.read().strip())
+            if time.time() - ts < 45:
+                return JsonResponse({
+                    'status': 'info',
+                    'message': 'A sync is already in progress on the server. Please wait a moment...',
+                    'total_synced': 0,
+                    'has_more': False
+                })
+        except Exception:
+            pass
+
+    try:
+        with open(lock_file, 'w') as f:
+            f.write(str(time.time()))
+    except Exception:
+        pass
+
     rfq_synced = 0
     rfq_err = None
     email_saved = 0
@@ -9125,7 +9147,6 @@ def sync_all_mail(request):
             from email_classifier.services.imap_reader import fetch_all_messages
             from email_classifier.services.classifier_service import get_classifier
             from email_classifier.models import EmailRecord
-            import time
 
             classifier = get_classifier()
             BATCH_SIZE = 50
@@ -9186,22 +9207,27 @@ def sync_all_mail(request):
                         result = classifier.classify(
                             subject=message['subject'], body=message['body'], sender=message['sender'],
                         )
-                        EmailRecord.objects.create(
-                            sender=message['sender'],
-                            subject=message['subject'],
-                            body=message['body'],
-                            source='imap',
+                        record, created = EmailRecord.objects.get_or_create(
                             imap_uid=message['uid'],
-                            received_at=message.get('date') or timezone.now(),
-                            ai_category=result['category'],
-                            confidence=result['confidence'],
-                            reason=result['reason'],
-                            important_details=result.get('important_details', ''),
-                            has_attachments=message.get('has_attachments', False),
-                            attachment_names=message.get('attachment_names', ''),
+                            defaults={
+                                'sender': message['sender'],
+                                'subject': message['subject'],
+                                'body': message['body'],
+                                'source': 'imap',
+                                'received_at': message.get('date') or timezone.now(),
+                                'ai_category': result['category'],
+                                'confidence': result['confidence'],
+                                'reason': result['reason'],
+                                'important_details': result.get('important_details', ''),
+                                'has_attachments': message.get('has_attachments', False),
+                                'attachment_names': message.get('attachment_names', ''),
+                            }
                         )
-                        email_saved += 1
-                        batch_new += 1
+                        if created:
+                            email_saved += 1
+                            batch_new += 1
+                        else:
+                            email_skipped += 1
                     except Exception as e:
                         logger.exception('Failed to classify message uid %s: %s', message.get('uid'), e)
 
@@ -9221,6 +9247,12 @@ def sync_all_mail(request):
         if mail_client:
             try:
                 mail_client.logout()
+            except Exception:
+                pass
+        if not has_more:
+            try:
+                if os.path.exists(lock_file):
+                    os.remove(lock_file)
             except Exception:
                 pass
 
