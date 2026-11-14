@@ -36,17 +36,53 @@ SECRET_KEY = os.environ.get(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = [
+_env_allowed_hosts = [
     host.strip()
     for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
     if host.strip()
-] or ['*']
+]
+ALLOWED_HOSTS = _env_allowed_hosts or ['*']
+if ALLOWED_HOSTS and '*' not in ALLOWED_HOSTS:
+    _expanded_hosts = set(ALLOWED_HOSTS)
+    for _h in list(ALLOWED_HOSTS):
+        if not _h.startswith('.'):
+            if _h.endswith('.'):
+                _expanded_hosts.add(_h.rstrip('.'))
+            else:
+                _expanded_hosts.add(_h + '.')
+    _expanded_hosts.update([
+        'mbt-orbit.mesinstruments.co.in',
+        'mbt-orbit.mesinstruments.co.in.',
+        '.mesinstruments.co.in',
+    ])
+    ALLOWED_HOSTS = list(_expanded_hosts)
 
-CSRF_TRUSTED_ORIGINS = [
+_env_csrf_origins = [
     origin.strip()
     for origin in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
     if origin.strip()
-] or ['http://127.0.0.1:8000', 'http://localhost:8000']
+]
+_base_csrf_origins = _env_csrf_origins or [
+    'http://127.0.0.1:8000',
+    'http://localhost:8000',
+]
+_base_csrf_origins.extend([
+    'https://mbt-orbit.mesinstruments.co.in',
+    'http://mbt-orbit.mesinstruments.co.in',
+    'https://*.mesinstruments.co.in',
+    'http://*.mesinstruments.co.in',
+])
+
+_expanded_csrf_origins = set()
+for _orig in _base_csrf_origins:
+    _clean_orig = _orig.rstrip('/')
+    _expanded_csrf_origins.add(_clean_orig)
+    if not _clean_orig.endswith('.'):
+        _expanded_csrf_origins.add(_clean_orig + '.')
+    else:
+        _expanded_csrf_origins.add(_clean_orig.rstrip('.'))
+
+CSRF_TRUSTED_ORIGINS = sorted(list(_expanded_csrf_origins))
 
 
 # Application definition

@@ -111,11 +111,12 @@ def _extract_attachments(message):
     return has_att, att_names
 
 
-def fetch_all_messages(offset=0, limit=25, mail_client=None):
+def fetch_all_messages(offset=0, limit=25, mail_client=None, since_days=90):
     """Return one small, read-only batch of Inbox messages.
 
     Uses a fast header-first check to skip downloading full bodies for
     emails that already exist in the database.
+    By default filters by the last 3 months (since_days=90).
     """
     required = (settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
     if not all(required):
@@ -133,23 +134,34 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None):
         if status != 'OK':
             raise RuntimeError(f'Cannot open mailbox {settings.EMAIL_IMAP_MAILBOX}.')
 
-        total_messages = 0
-        if select_data and select_data[0] and select_data[0].isdigit():
-            total_messages = int(select_data[0])
+        message_numbers = []
+        if since_days and isinstance(since_days, int) and since_days > 0:
+            since_date = (timezone.now() - datetime.timedelta(days=since_days)).strftime('%d-%b-%Y')
+            status, result = client.search(None, f'(SINCE "{since_date}")')
+            if status == 'OK' and result and result[0]:
+                message_numbers = list(reversed(result[0].split()))
 
-        if total_messages > 0:
-            start_idx = total_messages - offset
-            if start_idx <= 0:
-                return [], total_messages
-            end_idx = max(0, start_idx - limit)
-            batch = [str(i).encode() for i in range(start_idx, end_idx, -1)]
-        else:
-            status, result = client.search(None, 'ALL')
-            if status != 'OK':
-                raise RuntimeError('Unable to search Inbox emails.')
-            message_numbers = list(reversed(result[0].split()))
+        if message_numbers:
             total_messages = len(message_numbers)
             batch = message_numbers[offset:offset + limit]
+        else:
+            total_messages = 0
+            if select_data and select_data[0] and select_data[0].isdigit():
+                total_messages = int(select_data[0])
+
+            if total_messages > 0:
+                start_idx = total_messages - offset
+                if start_idx <= 0:
+                    return [], total_messages
+                end_idx = max(0, start_idx - limit)
+                batch = [str(i).encode() for i in range(start_idx, end_idx, -1)]
+            else:
+                status, result = client.search(None, 'ALL')
+                if status != 'OK':
+                    raise RuntimeError('Unable to search Inbox emails.')
+                message_numbers = list(reversed(result[0].split()))
+                total_messages = len(message_numbers)
+                batch = message_numbers[offset:offset + limit]
 
         if not batch:
             return [], total_messages

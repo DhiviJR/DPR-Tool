@@ -351,70 +351,91 @@ document.addEventListener('DOMContentLoaded', function() {
             if (spinner) spinner.classList.add('dash-spinning');
             btn.disabled = true;
 
-            showSyncToast(
-                '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div><span>Syncing all inboxes (RFQ & Emails)...</span></div>',
-                'bg-primary',
-                0
-            );
+            let totalEmailsSaved = 0;
+            let totalRfqSynced = 0;
 
-            fetch('{% url "sync_all_mail" %}', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'X-Skip-Loader': '1'
-                }
-            })
-            .then(async r => {
-                const ct = r.headers.get('content-type') || '';
-                if (!ct.includes('application/json')) {
-                    if (r.status === 401 || r.status === 403 || r.redirected || r.url.includes('/login')) {
-                        throw new Error('Session expired or unauthorized. Please refresh the page and log in again.');
-                    }
-                    throw new Error(`Server error (${r.status} ${r.statusText || ''}). Check cloud server logs for details.`);
-                }
-                return r.json();
-            })
-            .then(data => {
-                if (spinner) spinner.classList.remove('dash-spinning');
-                btn.disabled = false;
-
-                const isSuccess = data.status === 'success';
-                const isWarning = data.status === 'warning';
-                const bgClass = isSuccess ? 'bg-success' : (isWarning ? 'bg-warning text-dark' : 'bg-danger');
-                const icon = isSuccess ? 'check-circle-fill' : 'exclamation-triangle-fill';
-                const messageText = data.message || (isSuccess ? 'Sync complete. Inboxes are up to date.' : 'Sync completed with warnings.');
-
-                const totalNew = (data.total_synced || 0);
-                if (totalNew > 0) {
-                    showSyncToast(
-                        `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>${window.escapeHtml(messageText)} Updating list...</span></div>`,
-                        'bg-success',
-                        4000
-                    );
-                    const path = window.location.pathname;
-                    if (path.includes('/email-classifier') || path.includes('/rfq')) {
-                        setTimeout(function() {
-                            window.location.reload();
-                        }, 1200);
-                    }
-                } else {
-                    showSyncToast(
-                        `<div class="d-flex align-items-center"><i class="bi bi-${icon} me-2 fs-5"></i><span>${window.escapeHtml(messageText)}</span></div>`,
-                        bgClass,
-                        7000
-                    );
-                }
-            })
-            .catch(err => {
-                if (spinner) spinner.classList.remove('dash-spinning');
-                btn.disabled = false;
-
+            function runSyncBatch(offset) {
                 showSyncToast(
-                    `<div class="d-flex align-items-center"><i class="bi bi-x-circle-fill me-2 fs-5"></i><span>Sync error: ${window.escapeHtml(err.message)}</span></div>`,
-                    'bg-danger',
-                    8000
+                    `<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div><span>Syncing emails (last 3 months)${totalEmailsSaved > 0 ? ` — ${totalEmailsSaved} imported so far...` : '...'}</span></div>`,
+                    'bg-primary',
+                    0
                 );
-            });
+
+                const formData = new FormData();
+                formData.append('offset', offset || 0);
+
+                fetch('{% url "sync_all_mail" %}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'X-Skip-Loader': '1'
+                    },
+                    body: formData
+                })
+                .then(async r => {
+                    const ct = r.headers.get('content-type') || '';
+                    if (!ct.includes('application/json')) {
+                        if (r.status === 401 || r.status === 403 || r.redirected || r.url.includes('/login')) {
+                            throw new Error('Session expired or unauthorized. Please refresh the page and log in again.');
+                        }
+                        throw new Error(`Server error (${r.status} ${r.statusText || ''}). Check cloud server logs for details.`);
+                    }
+                    return r.json();
+                })
+                .then(data => {
+                    totalEmailsSaved += (data.email_saved || 0);
+                    totalRfqSynced += (data.rfq_synced || 0);
+
+                    if (data.has_more && data.next_offset) {
+                        const remainingText = data.remaining ? ` (${data.remaining} remaining)` : '';
+                        showSyncToast(
+                            `<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div><span>Imported ${totalEmailsSaved} emails${remainingText}... continuing sync...</span></div>`,
+                            'bg-primary',
+                            0
+                        );
+                        runSyncBatch(data.next_offset);
+                    } else {
+                        if (spinner) spinner.classList.remove('dash-spinning');
+                        btn.disabled = false;
+
+                        const isSuccess = data.status === 'success' || totalEmailsSaved > 0 || totalRfqSynced > 0;
+                        const bgClass = isSuccess ? 'bg-success' : 'bg-warning text-dark';
+                        const totalNew = totalEmailsSaved + totalRfqSynced;
+
+                        if (totalNew > 0) {
+                            showSyncToast(
+                                `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>Successfully synchronized ${totalEmailsSaved} email(s) from the last 3 months! Refreshing...</span></div>`,
+                                'bg-success',
+                                4000
+                            );
+                            const path = window.location.pathname;
+                            if (path.includes('/email-classifier') || path.includes('/rfq')) {
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1200);
+                            }
+                        } else {
+                            showSyncToast(
+                                `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>Sync complete. All emails from the last 3 months are up to date.</span></div>`,
+                                bgClass,
+                                5000
+                            );
+                        }
+                    }
+                })
+                .catch(err => {
+                    if (spinner) spinner.classList.remove('dash-spinning');
+                    btn.disabled = false;
+
+                    showSyncToast(
+                        `<div class="d-flex align-items-center"><i class="bi bi-x-circle-fill me-2 fs-5"></i><span>Sync error: ${window.escapeHtml(err.message)}</span></div>`,
+                        'bg-danger',
+                        8000
+                    );
+                });
+            }
+
+            runSyncBatch(0);
         });
     }
 });

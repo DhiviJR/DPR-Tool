@@ -501,10 +501,11 @@ def _match_email_to_rfq(subject, body, from_str, to_str, in_reply_to=None, refer
     return None
 
 
-def sync_rfq_inbox(rfq=None, mail=None, scan_limit=300):
+def sync_rfq_inbox(rfq=None, mail=None, scan_limit=300, since_days=90):
     """
     Connects to IMAP server, fetches inbox headers in a single fast batch,
     matches them in memory against RFQs, and downloads full messages ONLY for new matching RFQ emails.
+    By default filters by the last 3 months (since_days=90).
     Returns (synced_count, error_message).
     """
     imap_host = getattr(settings, 'EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
@@ -533,15 +534,27 @@ def sync_rfq_inbox(rfq=None, mail=None, scan_limit=300):
         if select_data and select_data[0] and select_data[0].isdigit():
             total_msgs = int(select_data[0])
 
-        if total_msgs > 0:
-            start_num = max(1, total_msgs - limit_val + 1)
-            recent_nums = [str(i).encode() for i in range(start_num, total_msgs + 1)]
-        else:
-            status, data = mail.search(None, 'ALL')
-            if status != 'OK' or not data[0]:
-                return 0, None
-            msg_nums = data[0].split()
-            recent_nums = msg_nums[-limit_val:]
+        recent_nums = []
+        if since_days and isinstance(since_days, int) and since_days > 0:
+            try:
+                import datetime
+                since_date = (timezone.now() - datetime.timedelta(days=since_days)).strftime('%d-%b-%Y')
+                search_st, search_data = mail.search(None, f'(SINCE "{since_date}")')
+                if search_st == 'OK' and search_data and search_data[0]:
+                    recent_nums = search_data[0].split()
+            except Exception:
+                recent_nums = []
+
+        if not recent_nums:
+            if total_msgs > 0:
+                start_num = max(1, total_msgs - limit_val + 1)
+                recent_nums = [str(i).encode() for i in range(start_num, total_msgs + 1)]
+            else:
+                status, data = mail.search(None, 'ALL')
+                if status != 'OK' or not data[0]:
+                    return 0, None
+                msg_nums = data[0].split()
+                recent_nums = msg_nums[-limit_val:]
 
         if not recent_nums:
             return 0, None

@@ -976,7 +976,13 @@ def _get_default_rfq_quotation_terms(rfq, products):
     return terms
 
 def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
+    import os
+    import re
+    from decimal import Decimal
+    from io import BytesIO
     from xml.sax.saxutils import escape as xml_escape
+    from django.conf import settings
+    from django.utils import timezone
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     from reportlab.lib.pagesizes import A4
@@ -990,6 +996,46 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
         TableStyle,
     )
     from reportlab.pdfgen import canvas
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfbase.pdfmetrics import registerFontFamily
+
+    # Font setup: Calibri (Standard Office Corporate font from reference PDF) with Roboto/Helvetica fallback
+    font_regular = 'Helvetica'
+    font_bold = 'Helvetica-Bold'
+
+    fonts_dir = os.path.join(settings.BASE_DIR, 'static', 'fonts')
+    calibri_reg = os.path.join(fonts_dir, 'Calibri-Regular.ttf')
+    calibri_bld = os.path.join(fonts_dir, 'Calibri-Bold.ttf')
+    roboto_reg = os.path.join(fonts_dir, 'Roboto-Regular.ttf')
+    roboto_bld = os.path.join(fonts_dir, 'Roboto-Bold.ttf')
+
+    if os.path.exists(calibri_reg) and os.path.exists(calibri_bld):
+        try:
+            reg_names = pdfmetrics.getRegisteredFontNames()
+            if 'Calibri' not in reg_names:
+                pdfmetrics.registerFont(TTFont('Calibri', calibri_reg))
+            if 'Calibri-Bold' not in reg_names:
+                pdfmetrics.registerFont(TTFont('Calibri-Bold', calibri_bld))
+            registerFontFamily('Calibri', normal='Calibri', bold='Calibri-Bold')
+            font_regular = 'Calibri'
+            font_bold = 'Calibri-Bold'
+        except Exception:
+            font_regular = 'Helvetica'
+            font_bold = 'Helvetica-Bold'
+    elif os.path.exists(roboto_reg) and os.path.exists(roboto_bld):
+        try:
+            reg_names = pdfmetrics.getRegisteredFontNames()
+            if 'Roboto' not in reg_names:
+                pdfmetrics.registerFont(TTFont('Roboto', roboto_reg))
+            if 'Roboto-Bold' not in reg_names:
+                pdfmetrics.registerFont(TTFont('Roboto-Bold', roboto_bld))
+            registerFontFamily('Roboto', normal='Roboto', bold='Roboto-Bold')
+            font_regular = 'Roboto'
+            font_bold = 'Roboto-Bold'
+        except Exception:
+            font_regular = 'Helvetica'
+            font_bold = 'Helvetica-Bold'
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -997,51 +1043,57 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
         pagesize=A4,
         rightMargin=14 * mm,
         leftMargin=14 * mm,
-        topMargin=46 * mm,  # Increased top margin to clear canvas headers
+        topMargin=46 * mm,
         bottomMargin=15 * mm,
     )
     styles = getSampleStyleSheet()
     normal = ParagraphStyle(
         'MESNormal',
         parent=styles['Normal'],
-        fontName='Helvetica',
-        fontSize=8.5,
-        leading=11,
+        fontName=font_regular,
+        fontSize=9,
+        leading=12,
         alignment=TA_LEFT,
     )
     small = ParagraphStyle(
         'MESSmall',
         parent=normal,
-        fontSize=7.5,
-        leading=9,
+        fontSize=8,
+        leading=10.5,
     )
     title_style = ParagraphStyle(
         'MESTitle',
         parent=normal,
-        fontName='Helvetica-Bold',
+        fontName=font_bold,
         fontSize=12,
-        leading=14,
+        leading=15,
         alignment=TA_CENTER,
     )
     investment_title_style = ParagraphStyle(
         'MESInvestmentTitle',
         parent=normal,
-        fontName='Helvetica-Bold',
+        fontName=font_bold,
         fontSize=11,
-        leading=13,
+        leading=14,
         alignment=TA_CENTER,
     )
     terms_title_style = ParagraphStyle(
         'MESTermsTitle',
         parent=normal,
-        fontName='Helvetica-Bold',
+        fontName=font_bold,
         fontSize=11,
-        leading=13,
+        leading=14,
         alignment=TA_LEFT,
     )
     centered = ParagraphStyle(
         'MESCentered',
         parent=normal,
+        alignment=TA_CENTER,
+    )
+    centered_bold = ParagraphStyle(
+        'MESCenteredBold',
+        parent=normal,
+        fontName=font_bold,
         alignment=TA_CENTER,
     )
     right = ParagraphStyle(
@@ -1077,26 +1129,22 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
 
                 # Draw Header
                 self.saveState()
-                # Draw Logo Box / Image
-                import os
                 logo_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'mes_logo.jpg')
                 if os.path.exists(logo_path):
                     self.drawImage(logo_path, 14 * mm, self._pagesize[1] - 32 * mm, width=29 * mm, height=20 * mm)
                 else:
                     self.setFillColor(colors.black)
                     self.rect(14 * mm, self._pagesize[1] - 32 * mm, 20 * mm, 20 * mm, fill=True, stroke=False)
-                    
-                    # Draw Logo Text "MES"
                     self.setFillColor(colors.white)
-                    self.setFont("Helvetica-Bold", 24)
+                    self.setFont(font_bold, 24)
                     self.drawCentredString(14 * mm + 10 * mm, self._pagesize[1] - 32 * mm + 6 * mm, "MES")
                 
                 # Draw Company Info
                 self.setFillColor(colors.black)
-                self.setFont("Helvetica-Bold", 13)
+                self.setFont(font_bold, 13)
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 15 * mm, "METROLOGY ENGINEERING SOLUTIONS")
                 
-                self.setFont("Helvetica", 8)
+                self.setFont(font_regular, 8.5)
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 19 * mm, "NO.684/9, Sri Sai Jayalakshmi Complex, Maruthi Nagar,")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 22 * mm, "2nd Cross, Dharga, Opposite to Sathya mess, Hosur, Krishnagiri, Tamil Nadu - 635109")
                 self.drawCentredString(self._pagesize[0] / 2.0 + 10 * mm, self._pagesize[1] - 25 * mm, "Phone : +91-965-577-8807 / +91-965-577-8871")
@@ -1109,7 +1157,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
                 
                 # Draw Quote No and Date under line
                 self.setFillColor(colors.black)
-                self.setFont("Helvetica", 9)
+                self.setFont(font_regular, 9)
                 self.drawString(14 * mm, self._pagesize[1] - 39 * mm, f"Quote No : {quote_no}")
                 self.drawRightString(self._pagesize[0] - 14 * mm, self._pagesize[1] - 39 * mm, f"Date : {quote_date}")
                 
@@ -1120,7 +1168,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
 
                 # Draw footer page number (Page X of Y)
                 self.saveState()
-                self.setFont("Helvetica-Bold", 9)
+                self.setFont(font_bold, 9)
                 text = f"Page {self._pageNumber} of {page_count}"
                 self.drawRightString(self._pagesize[0] - 10 * mm, 3 * mm, text)
                 self.restoreState()
@@ -1195,25 +1243,25 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
     if customer.email:
         story.append(Paragraph(f'Email-ID :{pdf_text(customer.email)}', normal))
 
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
     story.append(Paragraph('Dear Sir,', normal))
     story.append(Paragraph(
         '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;As per your enquiry, we are glad to submit our best offer. Assuring of our best and prompt services at all times.',
         normal
     ))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
     story.append(Paragraph('<b><u>Your Investment</u></b>', investment_title_style))
     story.append(Spacer(1, 6))
 
     table_data = [[
-        Paragraph('<b>S.No</b>', centered),
-        Paragraph('<b>Product</b>', centered),
-        Paragraph('<b>Description</b>', centered),
-        Paragraph('<b>HSN/SAC</b>', centered),
-        Paragraph('<b>Quantity</b>', centered),
-        Paragraph('<b>Unit</b>', centered),
-        Paragraph('<b>Rate</b>', centered),
-        Paragraph('<b>Total(Rs.)</b>', centered),
+        Paragraph('<b>S.No</b>', centered_bold),
+        Paragraph('<b>Product</b>', centered_bold),
+        Paragraph('<b>Description</b>', centered_bold),
+        Paragraph('<b>HSN/SAC</b>', centered_bold),
+        Paragraph('<b>Quantity</b>', centered_bold),
+        Paragraph('<b>Unit</b>', centered_bold),
+        Paragraph('<b>Rate</b>', centered_bold),
+        Paragraph('<b>Total(Rs.)</b>', centered_bold),
     ]]
 
     subtotal = Decimal('0.00')
@@ -1233,8 +1281,11 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
             product.remarks
         )
         escaped_desc = []
-        for line in desc_lines:
-            if line.startswith('<b>') and line.endswith('</b>'):
+        for i_line, line in enumerate(desc_lines):
+            if i_line == 0:
+                clean_pname = line[3:-4] if (line.startswith('<b>') and line.endswith('</b>')) else line
+                escaped_desc.append(f"<b>{pdf_text(clean_pname)}</b>")
+            elif line.startswith('<b>') and line.endswith('</b>'):
                 escaped_desc.append(f"<b>{pdf_text(line[3:-4])}</b>")
             else:
                 escaped_desc.append(pdf_text(line))
@@ -1244,7 +1295,7 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
         
         table_data.append([
             Paragraph(str(index), centered),
-            Paragraph(pdf_text(product.product_type or 'P0011'), centered),
+            Paragraph(f"<b>{pdf_text(product.product_type or 'P0011')}</b>", centered),
             Paragraph(description_text, small),
             Paragraph(hsn_code, centered),
             Paragraph(str(product.quantity), centered),
@@ -1262,9 +1313,8 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#a7d3ef')),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
             ('LEFTPADDING', (0, 0), (-1, -1), 3),
             ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ])
@@ -1293,7 +1343,6 @@ def _build_rfq_quotation_pdf(rfq, products, quote_no=None, custom_terms=None):
     for index, term in enumerate(terms, start=1):
         clean_term = re.sub(r'^\d+[\.\)]\s*', '', term).strip()
         story.append(Paragraph(pdf_text(f'{index}. {clean_term}'), small))
-
 
     doc.build(story, canvasmaker=NumberedCanvas)
     buffer.seek(0)
@@ -9030,12 +9079,15 @@ def sync_all_mail(request):
 
     mode = request.POST.get('mode') or request.GET.get('mode') or 'latest'
     is_full = (mode == 'full')
+    offset = int(request.POST.get('offset', 0) or request.GET.get('offset', 0) or 0)
 
     rfq_synced = 0
     rfq_err = None
     email_saved = 0
     email_skipped = 0
     email_err = None
+    has_more = False
+    inbox_total = 0
 
     imap_host = getattr(settings, 'EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
     imap_port = int(getattr(settings, 'EMAIL_IMAP_PORT', 993))
@@ -9052,37 +9104,41 @@ def sync_all_mail(request):
         mail_client = None
 
     try:
-        # 1. Sync RFQ & Reply Mail
-        try:
-            from .email_services import sync_rfq_inbox
-            scan_limit = 2000 if is_full else 300
-            rfq_synced, rfq_err = sync_rfq_inbox(rfq=None, mail=mail_client, scan_limit=scan_limit)
-        except Exception as e:
-            logger.exception("RFQ sync failed during unified sync: %s", e)
-            rfq_err = str(e)
-            if mail_client:
-                try:
-                    mail_client.logout()
-                except Exception:
-                    pass
-                mail_client = None
+        # 1. Sync RFQ & Reply Mail (only executed on initial batch offset == 0 to save bandwidth)
+        if offset == 0:
+            try:
+                from .email_services import sync_rfq_inbox
+                scan_limit = 2000 if is_full else 1500
+                rfq_synced, rfq_err = sync_rfq_inbox(rfq=None, mail=mail_client, scan_limit=scan_limit, since_days=90)
+            except Exception as e:
+                logger.exception("RFQ sync failed during unified sync: %s", e)
+                rfq_err = str(e)
+                if mail_client:
+                    try:
+                        mail_client.logout()
+                    except Exception:
+                        pass
+                    mail_client = None
 
-        # 2. Sync EMAILS classifier inbox
+        # 2. Sync EMAILS classifier inbox (Last 3 Months / 90 days)
         try:
             from email_classifier.services.imap_reader import fetch_all_messages
             from email_classifier.services.classifier_service import get_classifier
             from email_classifier.models import EmailRecord
+            import time
 
             classifier = get_classifier()
             BATCH_SIZE = 50
-            MAX_NEW_PER_SYNC = 150 if is_full else 50
-            offset = 0
-            empty_batches = 0
+            # Time-budget per request: 16 seconds to guarantee zero web-server timeouts
+            MAX_TIME_SECONDS = 16
+            MAX_NEW_PER_SYNC = 80
+            sync_start_time = time.time()
+            consecutive_already_saved = 0
 
-            while email_saved < MAX_NEW_PER_SYNC:
+            while (time.time() - sync_start_time) < MAX_TIME_SECONDS and email_saved < MAX_NEW_PER_SYNC:
                 try:
                     messages_list, inbox_total = fetch_all_messages(
-                        offset=offset, limit=BATCH_SIZE, mail_client=mail_client
+                        offset=offset, limit=BATCH_SIZE, mail_client=mail_client, since_days=90
                     )
                 except Exception as fetch_err:
                     logger.warning("fetch_all_messages failed at offset %d with shared client: %s", offset, fetch_err)
@@ -9090,7 +9146,7 @@ def sync_all_mail(request):
                         mail_client = None
                         try:
                             messages_list, inbox_total = fetch_all_messages(
-                                offset=offset, limit=BATCH_SIZE, mail_client=None
+                                offset=offset, limit=BATCH_SIZE, mail_client=None, since_days=90
                             )
                         except Exception as retry_err:
                             logger.exception("fetch_all_messages retry failed: %s", retry_err)
@@ -9101,14 +9157,17 @@ def sync_all_mail(request):
                         break
 
                 if not messages_list:
-                    if not is_full:
-                        break
-                    empty_batches += 1
-                    if empty_batches >= 3 or offset >= inbox_total:
-                        break
                     offset += BATCH_SIZE
+                    if offset >= inbox_total:
+                        break
+                    # If records already exist and consecutive batches yield no new items, we are caught up
+                    if EmailRecord.objects.exists():
+                        consecutive_already_saved += 1
+                        if consecutive_already_saved >= 3:
+                            break
                     continue
 
+                consecutive_already_saved = 0
                 messages_list.sort(key=lambda x: x.get('date') or timezone.now(), reverse=True)
 
                 uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
@@ -9150,8 +9209,8 @@ def sync_all_mail(request):
                 if offset >= inbox_total:
                     break
 
-                if not is_full and batch_new == 0:
-                    break
+            if offset < inbox_total and (time.time() - sync_start_time) >= MAX_TIME_SECONDS:
+                has_more = True
 
         except Exception as e:
             logger.exception("Email classifier sync failed during unified sync: %s", e)
@@ -9186,7 +9245,11 @@ def sync_all_mail(request):
         'message': ' '.join(msg_parts),
         'rfq_synced': rfq_synced,
         'email_saved': email_saved,
-        'total_synced': total_synced
+        'total_synced': total_synced,
+        'has_more': has_more,
+        'next_offset': offset if has_more else 0,
+        'inbox_total': inbox_total,
+        'remaining': max(0, inbox_total - offset) if has_more else 0
     })
 
 
