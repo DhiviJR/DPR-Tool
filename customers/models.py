@@ -6,6 +6,7 @@ class Customer(models.Model):
     REGION_CHOICES = (
         ('Chennai', 'Chennai'),
         ('Hosur', 'Hosur'),
+        ('Coimbatore', 'Coimbatore'),
     )
     SEZ_CHOICES = (
         ('No', 'No'),

@@ -295,6 +295,7 @@
                     <option value="">Select</option>
                     <option value="Chennai" {% if prefill_data.region == 'Chennai' %}selected{% endif %}>Chennai</option>
                     <option value="Hosur" {% if prefill_data.region == 'Hosur' %}selected{% endif %}>Hosur</option>
+                    <option value="Coimbatore" {% if prefill_data.region == 'Coimbatore' %}selected{% endif %}>Coimbatore</option>
                 </select>
             </div>
             <div class="col" style="min-width: 160px;">
@@ -418,6 +419,7 @@
                                 <option value="">Select</option>
                                 <option value="Chennai" {% if customer.region == 'Chennai' %}selected{% endif %}>Chennai</option>
                                 <option value="Hosur" {% if customer.region == 'Hosur' %}selected{% endif %}>Hosur</option>
+                                <option value="Coimbatore" {% if customer.region == 'Coimbatore' %}selected{% endif %}>Coimbatore</option>
                             </select>
                         </td>
                         <td>
@@ -582,12 +584,12 @@ document.addEventListener('input', function (e) {
     }
 });
 
-// Auto-fill state code 33 for Chennai/Hosur in top form
+// Auto-fill state code 33 for Chennai/Hosur/Coimbatore in top form
 const addRegionSelect = document.getElementById('addCustomerRegion');
 const addStateCode = document.getElementById('addCustomerStateCode');
 if (addRegionSelect && addStateCode) {
     addRegionSelect.addEventListener('change', function() {
-        if ((this.value === 'Chennai' || this.value === 'Hosur') && !addStateCode.value.trim()) {
+        if ((this.value === 'Chennai' || this.value === 'Hosur' || this.value === 'Coimbatore') && !addStateCode.value.trim()) {
             addStateCode.value = '33';
         }
     });
@@ -967,7 +969,7 @@ document.addEventListener('click', function (e) {
         const rowStateCode = row.querySelector('.js-row-state-code');
         if (rowRegion && rowStateCode) {
             rowRegion.onchange = function() {
-                if ((this.value === 'Chennai' || this.value === 'Hosur') && !rowStateCode.value.trim()) {
+                if ((this.value === 'Chennai' || this.value === 'Hosur' || this.value === 'Coimbatore') && !rowStateCode.value.trim()) {
                     rowStateCode.value = '33';
                 }
             };

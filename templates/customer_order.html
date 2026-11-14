@@ -76,6 +76,10 @@
                             Hosur
                         </option>
 
+                        <option value="Coimbatore" {% if dpr and dpr.customer.region == 'Coimbatore' %}selected{% endif %}>
+                            Coimbatore
+                        </option>
+
                     </select>
 
                 </div>
@@ -1736,6 +1740,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <option value="">Select Region</option>
                             <option value="Chennai">Chennai</option>
                             <option value="Hosur">Hosur</option>
+                            <option value="Coimbatore">Coimbatore</option>
                         </select>
                         <div id="customerRegionError" class="text-danger small mt-1" style="display:none;">Region is required.</div>
                     </div>

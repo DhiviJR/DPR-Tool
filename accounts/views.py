@@ -3960,7 +3960,7 @@ def customer_order_edit(request, dpr_id):
         customer_id = request.POST.get('customer')
         customer = Customer.objects.get(id=customer_id)
         region = request.POST.get('region')
-        if region in ('Chennai', 'Hosur') and customer.region != region:
+        if region in ('Chennai', 'Hosur', 'Coimbatore') and customer.region != region:
             customer.region = region
             customer.save(update_fields=['region'])
 
@@ -4547,7 +4547,7 @@ def _validate_master_phone(phone_number):
 
 
 def _validate_customer_region(region):
-    if region not in ('Chennai', 'Hosur'):
+    if region not in ('Chennai', 'Hosur', 'Coimbatore'):
         return 'Region is required.'
     return None
 
@@ -4617,7 +4617,7 @@ def customer_details(request):
         address = request.POST.get('address', '').strip()
         gstin = request.POST.get('gstin', '').strip().upper()
         state_code = request.POST.get('state_code', '').strip().upper()
-        if not state_code and region in ('Chennai', 'Hosur'):
+        if not state_code and region in ('Chennai', 'Hosur', 'Coimbatore'):
             state_code = '33'
         is_sez = 'Yes' if request.POST.get('is_sez', '').strip().lower() == 'yes' else 'No'
         payment_terms = request.POST.get('payment_terms', '').strip()
@@ -6155,7 +6155,7 @@ def customer_order(request):
         customer = Customer.objects.get(id=customer_id)
 
         region = request.POST.get('region')
-        if region not in ('Chennai', 'Hosur'):
+        if region not in ('Chennai', 'Hosur', 'Coimbatore'):
             messages.error(request, 'Region is required.')
             return render(request, 'customer_order.html', {
                 'customers': customers,
@@ -6448,7 +6448,7 @@ def add_customer(request):
                 'message': 'Customer Name is required'
             }, status=400)
 
-        if region not in ('Chennai', 'Hosur'):
+        if region not in ('Chennai', 'Hosur', 'Coimbatore'):
             return JsonResponse({
                 'status': 'error',
                 'message': 'Region is required',
