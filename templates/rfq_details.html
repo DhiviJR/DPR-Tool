@@ -2284,7 +2284,7 @@ function getDynamicQuotationNumber(rfq, isRevision = false) {
 
     // Brand new RFQ - Calculate next sequential base quotation number dynamically across all RFQs in system
     const yearSuffix = '25-26';
-    let maxSeq = 637;
+    let maxSeq = 0;
 
     if (typeof rfqData !== 'undefined' && Array.isArray(rfqData)) {
         rfqData.forEach(r => {

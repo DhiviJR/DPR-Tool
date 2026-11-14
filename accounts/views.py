@@ -143,10 +143,9 @@ def _quote_number_sequence(quotation_number):
 
 
 def _get_next_mes_quote_base_no(rfq=None):
-    # Quotation sequence configured to never go below MES_Q00644_25-26
-    # (last generated on hosted version was MES_Q00643_25-26)
+    # Starting sequence for Quotation starts from MES_Q00001_25-26 and follows the order
     year_suffix = '25-26'
-    max_seq = 643
+    max_seq = 0
 
     for quote_no in RFQQuotation.objects.values_list('quotation_number', flat=True):
         seq, suffix = _quote_number_sequence(quote_no)
@@ -292,9 +291,9 @@ def _format_mes_quote_no(rfq, revision_number=0, base_quote_no=None):
 
 def _get_next_dpr_no():
     import re
-    # Starting base for DPR number order is configured to start from DPR-2026-3946 and follow the order
+    # Starting sequence for DPR number starts from DPR-2026-0001 and follows the order
     year = timezone.now().year
-    max_dpr_seq = 3945
+    max_dpr_seq = 0
     for sn in DPR.objects.values_list('serial_number', flat=True):
         m = re.match(r'^DPR-\d+-(\d+)$', sn or '')
         if m:
@@ -791,7 +790,7 @@ def _create_rfq_quotation_record(rfq, products, product_ids, email_sent=False, c
         while RFQQuotation.objects.filter(quotation_number=quotation_number).exists():
             seq, suffix = _quote_number_sequence(quotation_number)
             year_suffix = suffix or '25-26'
-            quotation_number = f"MES_Q{(seq or 637) + 1:05d}_{year_suffix}"
+            quotation_number = f"MES_Q{(seq or 0) + 1:05d}_{year_suffix}"
 
     quotation = RFQQuotation.objects.create(
         rfq=rfq,
