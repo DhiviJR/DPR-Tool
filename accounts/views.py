@@ -2887,15 +2887,21 @@ def customer_product_status_update(request, product_id):
         customer_product.status = 'delivered' if delivery_detail_type == 'invoice' else 'invoice_pending'
         customer_product.invoice_dc_number = invoice_dc_number
         if invoice_dc_attachment:
-            customer_product.invoice_dc_attachment = invoice_dc_attachment
             if invoice_dc_attachments and customer_product.dpr:
                 from dpr.models import DPRBunchDocument
+                first_doc = None
                 for idc in invoice_dc_attachments:
-                    DPRBunchDocument.objects.create(
+                    doc = DPRBunchDocument.objects.create(
                         dpr=customer_product.dpr,
                         doc_type='customer_po',
                         file=idc
                     )
+                    if not first_doc:
+                        first_doc = doc
+                if first_doc and first_doc.file:
+                    customer_product.invoice_dc_attachment.name = first_doc.file.name
+            else:
+                customer_product.invoice_dc_attachment = invoice_dc_attachment
     elif status == 'cancelled':
         customer_product.quantity_delivered = 0
         customer_product.delivery_detail_type = None
@@ -2930,15 +2936,21 @@ def customer_product_status_update(request, product_id):
         customer_product.delivery_detail_type = delivery_detail_type
         customer_product.invoice_dc_number = invoice_dc_number
         if invoice_dc_attachment:
-            customer_product.invoice_dc_attachment = invoice_dc_attachment
             if invoice_dc_attachments and customer_product.dpr:
                 from dpr.models import DPRBunchDocument
+                first_doc = None
                 for idc in invoice_dc_attachments:
-                    DPRBunchDocument.objects.create(
+                    doc = DPRBunchDocument.objects.create(
                         dpr=customer_product.dpr,
                         doc_type='customer_po',
                         file=idc
                     )
+                    if not first_doc:
+                        first_doc = doc
+                if first_doc and first_doc.file:
+                    customer_product.invoice_dc_attachment.name = first_doc.file.name
+            else:
+                customer_product.invoice_dc_attachment = invoice_dc_attachment
     else:
         customer_product.quantity_delivered = 0
         customer_product.delivery_detail_type = None
@@ -3817,16 +3829,22 @@ def supplier_product_status_update(request, supplier_product_id):
             update_fields.append('supplier_bill_amount')
 
         if bill_attachment:
-            supplier_product.bill_attachment = bill_attachment
-            update_fields.append('bill_attachment')
             if bill_attachments and supplier_product.customer_product and supplier_product.customer_product.dpr:
                 from dpr.models import DPRBunchDocument
+                first_doc = None
                 for bf in bill_attachments:
-                    DPRBunchDocument.objects.create(
+                    doc = DPRBunchDocument.objects.create(
                         dpr=supplier_product.customer_product.dpr,
                         doc_type='vendor_price',
                         file=bf
                     )
+                    if not first_doc:
+                        first_doc = doc
+                if first_doc and first_doc.file:
+                    supplier_product.bill_attachment.name = first_doc.file.name
+            else:
+                supplier_product.bill_attachment = bill_attachment
+            update_fields.append('bill_attachment')
 
         if received_quantity > 0 and not supplier_product.invoice_date:
             supplier_product.invoice_date = timezone.localdate()
@@ -4024,10 +4042,14 @@ def customer_order_edit(request, dpr_id):
         dpr.po_date = request.POST.get('po_date') or None
         po_attachments = request.FILES.getlist('po_attachment')
         if po_attachments:
-            dpr.po_attachment = po_attachments[0]
             from dpr.models import DPRBunchDocument
+            first_doc = None
             for pa in po_attachments:
-                DPRBunchDocument.objects.create(dpr=dpr, doc_type='customer_po', file=pa)
+                doc = DPRBunchDocument.objects.create(dpr=dpr, doc_type='customer_po', file=pa)
+                if not first_doc:
+                    first_doc = doc
+            if first_doc and first_doc.file:
+                dpr.po_attachment.name = first_doc.file.name
         elif request.FILES.get('po_attachment'):
             dpr.po_attachment = request.FILES.get('po_attachment')
 
@@ -4085,7 +4107,15 @@ def customer_order_edit(request, dpr_id):
             spec_raw = specs_list[i] if i < len(specs_list) else ''
             spec_dict = _normalize_product_specifications(spec_raw)
 
-            CustomerProduct.objects.create(
+            first_doc = None
+            if prod_attachments:
+                from dpr.models import DPRBunchDocument
+                for pa in prod_attachments:
+                    doc = DPRBunchDocument.objects.create(dpr=dpr, doc_type='drawing', file=pa)
+                    if not first_doc:
+                        first_doc = doc
+
+            cust_prod = CustomerProduct.objects.create(
                 dpr=dpr,
                 product_name=product_name,
                 product_type=product_types[i] if i < len(product_types) else None,
@@ -4096,12 +4126,11 @@ def customer_order_edit(request, dpr_id):
                 value=value,
                 mes_value=mes_value,
                 remarks=remarks,
-                attachment=attachment
+                attachment=None if (first_doc and first_doc.file) else attachment
             )
-            if prod_attachments:
-                from dpr.models import DPRBunchDocument
-                for pa in prod_attachments:
-                    DPRBunchDocument.objects.create(dpr=dpr, doc_type='drawing', file=pa)
+            if first_doc and first_doc.file:
+                cust_prod.attachment.name = first_doc.file.name
+                cust_prod.save(update_fields=['attachment'])
 
         total_value = CustomerProduct.objects.filter(dpr=dpr).aggregate(
             total=Coalesce(Sum('value'), Decimal('0.00'))
@@ -5263,12 +5292,22 @@ def rfq_details(request):
                     customer=customer,
                     enquiry_details=enquiry_details,
                     remarks=remarks or None,
-                    attachment=attachment,
+                    attachment=None,
                     source_email=source_email_obj
                 )
                 from rfq.models import RFQAttachment
-                for att_file in attachments:
-                    RFQAttachment.objects.create(rfq=rfq, file=att_file)
+                first_saved_att = None
+                if attachments:
+                    for att_file in attachments:
+                        r_att = RFQAttachment.objects.create(rfq=rfq, file=att_file)
+                        if not first_saved_att:
+                            first_saved_att = r_att
+                elif attachment:
+                    first_saved_att = RFQAttachment.objects.create(rfq=rfq, file=attachment)
+
+                if first_saved_att and first_saved_att.file:
+                    rfq.attachment.name = first_saved_att.file.name
+                    rfq.save(update_fields=['attachment'])
                 if source_email_objs:
                     for s_obj in source_email_objs:
                         s_obj.is_added_to_rfq = True
@@ -5347,15 +5386,19 @@ def rfq_details(request):
                 'remarks',
             ]
             from rfq.models import RFQAttachment
+            first_saved_att = None
             if attachments:
                 for att_file in attachments:
-                    RFQAttachment.objects.create(rfq=rfq, file=att_file)
-                if not rfq.attachment:
-                    rfq.attachment = attachments[0]
+                    r_att = RFQAttachment.objects.create(rfq=rfq, file=att_file)
+                    if not first_saved_att:
+                        first_saved_att = r_att
+            elif attachment:
+                first_saved_att = RFQAttachment.objects.create(rfq=rfq, file=attachment)
+
+            if first_saved_att and first_saved_att.file and not rfq.attachment:
+                rfq.attachment.name = first_saved_att.file.name
+                if 'attachment' not in update_fields:
                     update_fields.append('attachment')
-            elif attachment and not rfq.attachment:
-                rfq.attachment = attachment
-                update_fields.append('attachment')
             with transaction.atomic():
                 rfq.save(update_fields=update_fields)
 
@@ -6720,13 +6763,19 @@ def customer_order(request):
 
             po_date=po_date,
 
-            po_attachment=po_attachment
+            po_attachment=None if po_attachments else po_attachment
         )
 
         if po_attachments:
             from dpr.models import DPRBunchDocument
+            first_doc = None
             for pa in po_attachments:
-                DPRBunchDocument.objects.create(dpr=dpr, doc_type='customer_po', file=pa)
+                doc = DPRBunchDocument.objects.create(dpr=dpr, doc_type='customer_po', file=pa)
+                if not first_doc:
+                    first_doc = doc
+            if first_doc and first_doc.file:
+                dpr.po_attachment.name = first_doc.file.name
+                dpr.save(update_fields=['po_attachment'])
 
         # PRODUCT DETAILS
 
@@ -6787,7 +6836,15 @@ def customer_order(request):
             prod_attachments = request.FILES.getlist(f'product_attachment_{i}')
             attachment = prod_attachments[0] if prod_attachments else request.FILES.get(f'product_attachment_{i}')
 
-            CustomerProduct.objects.create(
+            first_doc = None
+            if prod_attachments:
+                from dpr.models import DPRBunchDocument
+                for pa in prod_attachments:
+                    doc = DPRBunchDocument.objects.create(dpr=dpr, doc_type='drawing', file=pa)
+                    if not first_doc:
+                        first_doc = doc
+
+            cust_prod = CustomerProduct.objects.create(
                 dpr=dpr,
                 product_name=product_name,
                 product_type=product_types[i] if i < len(product_types) else None,
@@ -6798,12 +6855,11 @@ def customer_order(request):
                 value=value,
                 mes_value=mes_value,
                 remarks=remarks,
-                attachment=attachment
+                attachment=None if (first_doc and first_doc.file) else attachment
             )
-            if prod_attachments:
-                from dpr.models import DPRBunchDocument
-                for pa in prod_attachments:
-                    DPRBunchDocument.objects.create(dpr=dpr, doc_type='drawing', file=pa)
+            if first_doc and first_doc.file:
+                cust_prod.attachment.name = first_doc.file.name
+                cust_prod.save(update_fields=['attachment'])
 
         total_value = CustomerProduct.objects.filter(dpr=dpr).aggregate(
             total=Coalesce(Sum('value'), Decimal('0.00'))
@@ -7060,25 +7116,43 @@ def add_quotation_ajax(request):
         if rfq.customer_id != customer.id:
             rfq.customer = customer
             rfq.save(update_fields=['customer'])
-        if quotation_attachment:
-            rfq.attachment = quotation_attachment
-            rfq.save(update_fields=['attachment'])
         from rfq.models import RFQAttachment
-        for qa in quotation_attachments:
-            RFQAttachment.objects.create(rfq=rfq, file=qa)
+        first_saved_att = None
+        if quotation_attachments:
+            for qa in quotation_attachments:
+                r_att = RFQAttachment.objects.create(rfq=rfq, file=qa)
+                if not first_saved_att:
+                    first_saved_att = r_att
+        elif quotation_attachment:
+            first_saved_att = RFQAttachment.objects.create(rfq=rfq, file=quotation_attachment)
+
+        if first_saved_att and first_saved_att.file and not rfq.attachment:
+            rfq.attachment.name = first_saved_att.file.name
+            rfq.save(update_fields=['attachment'])
         quote_obj = existing_quote
     else:
         rfq = RFQ.objects.create(
             customer=customer,
             mail_date=timezone.localdate(),
             enquiry_details=f"Quotation {quotation_number} added for {customer.clean_customer_name}",
-            attachment=quotation_attachment,
+            attachment=None,
             quotation_prepared=True,
             quotation_email_sent=True,
         )
         from rfq.models import RFQAttachment
-        for qa in quotation_attachments:
-            RFQAttachment.objects.create(rfq=rfq, file=qa)
+        first_saved_att = None
+        if quotation_attachments:
+            for qa in quotation_attachments:
+                r_att = RFQAttachment.objects.create(rfq=rfq, file=qa)
+                if not first_saved_att:
+                    first_saved_att = r_att
+        elif quotation_attachment:
+            first_saved_att = RFQAttachment.objects.create(rfq=rfq, file=quotation_attachment)
+
+        if first_saved_att and first_saved_att.file:
+            rfq.attachment.name = first_saved_att.file.name
+            rfq.save(update_fields=['attachment'])
+
         quote_obj = RFQQuotation.objects.create(
             rfq=rfq,
             quotation_number=quotation_number,
