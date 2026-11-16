@@ -352,8 +352,25 @@
                     </div>
                 </form>
             </div>
-            <div class="col-lg-7 text-lg-end">
+            <div class="col-lg-7 text-lg-end d-flex align-items-center justify-content-lg-end gap-2 flex-wrap">
                 <span id="supplierRowCount" class="text-muted small">Showing {{ suppliers|length }} records</span>
+                <div class="dropdown">
+                    <button class="btn btn-outline-primary btn-sm dropdown-toggle d-flex align-items-center shadow-sm" type="button" id="exportSupplierDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-download me-1"></i> Export
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="exportSupplierDropdown">
+                        <li>
+                            <a class="dropdown-item py-2" href="{% url 'export_supplier_master' %}?format=csv" id="exportSupplierCsvBtn">
+                                <i class="bi bi-file-earmark-spreadsheet text-success me-2"></i>Export as CSV / Excel
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item py-2" href="{% url 'export_supplier_master' %}?format=pdf" id="exportSupplierPdfBtn">
+                                <i class="bi bi-file-earmark-pdf text-danger me-2"></i>Export as PDF
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -624,6 +641,25 @@ if (supplierSearchForm) {
         filterSupplierTable();
     });
 }
+
+// Update export links dynamically with search query
+const exportSupplierCsvBtn = document.getElementById('exportSupplierCsvBtn');
+const exportSupplierPdfBtn = document.getElementById('exportSupplierPdfBtn');
+function updateSupplierExportUrls() {
+    const q = supplierSearchInput ? supplierSearchInput.value.trim() : '';
+    const baseCsv = "{% url 'export_supplier_master' %}?format=csv";
+    const basePdf = "{% url 'export_supplier_master' %}?format=pdf";
+    if (exportSupplierCsvBtn) {
+        exportSupplierCsvBtn.href = q ? `${baseCsv}&search=${encodeURIComponent(q)}` : baseCsv;
+    }
+    if (exportSupplierPdfBtn) {
+        exportSupplierPdfBtn.href = q ? `${basePdf}&search=${encodeURIComponent(q)}` : basePdf;
+    }
+}
+if (supplierSearchInput) {
+    supplierSearchInput.addEventListener('input', updateSupplierExportUrls);
+}
+updateSupplierExportUrls();
 if (supplierSearchInput) {
     supplierSearchInput.addEventListener('input', filterSupplierTable);
     supplierSearchInput.addEventListener('keyup', filterSupplierTable);

@@ -54,7 +54,9 @@ urlpatterns = [
 
     path('customer-order/', views.customer_order, name='customer_order'),
     path('customer-details/', views.customer_details, name='customer_details'),
+    path('customer-details/export/', views.export_customer_master, name='export_customer_master'),
     path('supplier-details/', views.supplier_details, name='supplier_details'),
+    path('supplier-details/export/', views.export_supplier_master, name='export_supplier_master'),
     path('user-details/', views.user_details, name='user_details'),
     path('add-customer/',views.add_customer,name='add_customer'
 ),

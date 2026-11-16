@@ -4822,6 +4822,233 @@ def customer_details(request):
     })
 
 
+def _build_customer_master_pdf(customers):
+    import os
+    from io import BytesIO
+    from xml.sax.saxutils import escape as xml_escape
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.pdfgen import canvas
+
+    buffer = BytesIO()
+
+    class NumberedLandscapeCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.pages = []
+
+        def showPage(self):
+            self.pages.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            page_count = len(self.pages)
+            for page in self.pages:
+                self.__dict__.update(page)
+                self.saveState()
+                self.setFont('Helvetica-Bold', 8)
+                self.setFillColor(colors.HexColor('#1f3a60'))
+                self.drawString(10 * mm, self._pagesize[1] - 8 * mm, "METROLOGY ENGINEERING SOLUTIONS — CUSTOMER MASTER DETAILS")
+                self.setFont('Helvetica', 7.5)
+                self.setFillColor(colors.HexColor('#555555'))
+                self.drawRightString(self._pagesize[0] - 10 * mm, self._pagesize[1] - 8 * mm, f"Export Date: {timezone.now().strftime('%d-%b-%Y %I:%M %p')}")
+                self.setLineWidth(0.5)
+                self.setStrokeColor(colors.HexColor('#cccccc'))
+                self.line(10 * mm, self._pagesize[1] - 9.5 * mm, self._pagesize[0] - 10 * mm, self._pagesize[1] - 9.5 * mm)
+
+                # Footer
+                self.line(10 * mm, 9.5 * mm, self._pagesize[0] - 10 * mm, 9.5 * mm)
+                self.setFont('Helvetica', 7.5)
+                self.setFillColor(colors.HexColor('#555555'))
+                self.drawString(10 * mm, 6 * mm, "Confidential — MES Internal Master Records")
+                self.drawRightString(self._pagesize[0] - 10 * mm, 6 * mm, f"Page {self._pageNumber} of {page_count}")
+                self.restoreState()
+                super().showPage()
+            super().save()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=10 * mm,
+        rightMargin=10 * mm,
+        topMargin=13 * mm,
+        bottomMargin=13 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'DocTitle', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=13, leading=16, textColor=colors.HexColor('#0f2d59')
+    )
+    subtitle_style = ParagraphStyle(
+        'DocSubtitle', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=8, leading=10, textColor=colors.HexColor('#555555')
+    )
+    th_style = ParagraphStyle(
+        'TableHeader', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=7.5, leading=9.5, textColor=colors.white, alignment=1
+    )
+    cell_style = ParagraphStyle(
+        'TableCell', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=6.8, leading=8.5, textColor=colors.HexColor('#222222')
+    )
+    cell_center = ParagraphStyle(
+        'TableCellCenter', parent=cell_style, alignment=1
+    )
+
+    def safe(val):
+        return xml_escape(str(val or '-').strip())
+
+    story = [
+        Paragraph("Customer Master Details Export", title_style),
+        Paragraph(f"Total Records: {len(customers)} &nbsp;&bull;&nbsp; Generated on: {timezone.now().strftime('%d-%b-%Y %I:%M %p')}", subtitle_style),
+        Spacer(1, 3 * mm),
+    ]
+
+    col_widths = [8 * mm, 38 * mm, 15 * mm, 36 * mm, 45 * mm, 30 * mm, 10 * mm, 17 * mm, 56 * mm, 22 * mm]
+    table_data = [[
+        Paragraph("S.No", th_style),
+        Paragraph("Customer Name", th_style),
+        Paragraph("Region", th_style),
+        Paragraph("User / Contact", th_style),
+        Paragraph("Email &amp; Phone", th_style),
+        Paragraph("GSTIN / State", th_style),
+        Paragraph("SEZ", th_style),
+        Paragraph("Payment Terms", th_style),
+        Paragraph("Registered Address", th_style),
+        Paragraph("Created At", th_style),
+    ]]
+
+    for idx, c in enumerate(customers, 1):
+        u_list = [f"{u.user_name} ({u.user_designation})" if u.user_designation else u.user_name for u in c.users_list]
+        users_str = ', '.join(u_list) if u_list else (c.contact_person or '-')
+
+        contact_parts = []
+        if c.email:
+            contact_parts.append(f"<b>E:</b> {safe(c.email)}")
+        if c.phone_number:
+            contact_parts.append(f"<b>P:</b> {safe(c.phone_number)}")
+        email_phone = '<br/>'.join(contact_parts) if contact_parts else '-'
+
+        tax_parts = []
+        if c.gstin:
+            tax_parts.append(f"<b>GSTIN:</b> {safe(c.gstin)}")
+        if c.state_code:
+            tax_parts.append(f"<b>State:</b> {safe(c.state_code)}")
+        tax_info = '<br/>'.join(tax_parts) if tax_parts else '-'
+
+        pay_str = f"{c.payment_terms} Days" if (c.payment_terms and str(c.payment_terms).strip()) else '-'
+        created_str = c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '-'
+
+        table_data.append([
+            Paragraph(str(idx), cell_center),
+            Paragraph(f"<b>{safe(c.customer_name)}</b>", cell_style),
+            Paragraph(safe(c.region), cell_center),
+            Paragraph(safe(users_str), cell_style),
+            Paragraph(email_phone, cell_style),
+            Paragraph(tax_info, cell_style),
+            Paragraph(safe(c.is_sez), cell_center),
+            Paragraph(safe(pay_str), cell_center),
+            Paragraph(safe(c.address), cell_style),
+            Paragraph(safe(created_str), cell_center),
+        ])
+
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f3a60')),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#d0d7de')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafd')]),
+    ]))
+    story.append(table)
+
+    doc.build(story, canvasmaker=NumberedLandscapeCanvas)
+    buffer.seek(0)
+
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="Customer_Master_Details_{timestamp}.pdf"'
+    return response
+
+
+@role_required('ADMIN', 'SALES')
+def export_customer_master(request):
+    import csv
+    format_type = request.GET.get('format', 'csv').lower()
+    search_query = request.GET.get('search', '').strip()
+
+    customers = Customer.objects.select_related('user_detail').prefetch_related('user_details').order_by('customer_name')
+    if search_query:
+        q_filter = (
+            Q(customer_name__icontains=search_query) |
+            Q(contact_person__icontains=search_query) |
+            Q(user_detail__user_name__icontains=search_query) |
+            Q(user_details__user_name__icontains=search_query) |
+            Q(region__icontains=search_query)
+        )
+        if '@' in search_query or search_query.endswith('.com') or search_query.endswith('.in'):
+            q_filter |= Q(email__icontains=search_query)
+        clean_digits = search_query.replace('+', '').replace('-', '').replace(' ', '')
+        if clean_digits.isdigit() and len(clean_digits) >= 3:
+            q_filter |= Q(phone_number__icontains=clean_digits)
+        customers = customers.filter(q_filter).distinct()
+
+    if format_type == 'pdf':
+        return _build_customer_master_pdf(customers)
+
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = f'attachment; filename="Customer_Master_Details_{timestamp}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'S.No',
+        'Customer Name',
+        'Region',
+        'Email',
+        'Phone Number',
+        'User Details (Contact Persons)',
+        'GSTIN',
+        'State Code',
+        'SEZ',
+        'Payment Terms (Days)',
+        'Address',
+        'Created At'
+    ])
+
+    for idx, c in enumerate(customers, 1):
+        u_list = [f"{u.user_name} ({u.user_designation})" if u.user_designation else u.user_name for u in c.users_list]
+        users_str = ', '.join(u_list) if u_list else (c.contact_person or '-')
+
+        payment_terms_val = (c.payment_terms or '').strip()
+        payment_terms_str = f"{payment_terms_val} Days" if payment_terms_val else '-'
+        created_at_str = c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '-'
+
+        writer.writerow([
+            idx,
+            c.customer_name or '-',
+            c.region or '-',
+            c.email or '-',
+            c.phone_number or '-',
+            users_str,
+            c.gstin or '-',
+            c.state_code or '-',
+            c.is_sez or 'No',
+            payment_terms_str,
+            (c.address or '-').replace('\r\n', ' ').replace('\n', ' '),
+            created_at_str
+        ])
+
+    return response
+
+
 @role_required('ADMIN', 'SALES')
 def rfq_details(request):
     if request.method == 'POST':
@@ -6054,6 +6281,228 @@ def supplier_details(request):
         'selected_user_id': request.GET.get('selected_user_id', '').strip(),
         'prefill_user_ids': prefill_user_ids,
     })
+
+
+def _build_supplier_master_pdf(suppliers):
+    import os
+    from io import BytesIO
+    from xml.sax.saxutils import escape as xml_escape
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.pdfgen import canvas
+
+    buffer = BytesIO()
+
+    class NumberedLandscapeCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.pages = []
+
+        def showPage(self):
+            self.pages.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            page_count = len(self.pages)
+            for page in self.pages:
+                self.__dict__.update(page)
+                self.saveState()
+                self.setFont('Helvetica-Bold', 8)
+                self.setFillColor(colors.HexColor('#0d5c46'))
+                self.drawString(10 * mm, self._pagesize[1] - 8 * mm, "METROLOGY ENGINEERING SOLUTIONS — SUPPLIER MASTER DETAILS")
+                self.setFont('Helvetica', 7.5)
+                self.setFillColor(colors.HexColor('#555555'))
+                self.drawRightString(self._pagesize[0] - 10 * mm, self._pagesize[1] - 8 * mm, f"Export Date: {timezone.now().strftime('%d-%b-%Y %I:%M %p')}")
+                self.setLineWidth(0.5)
+                self.setStrokeColor(colors.HexColor('#cccccc'))
+                self.line(10 * mm, self._pagesize[1] - 9.5 * mm, self._pagesize[0] - 10 * mm, self._pagesize[1] - 9.5 * mm)
+
+                # Footer
+                self.line(10 * mm, 9.5 * mm, self._pagesize[0] - 10 * mm, 9.5 * mm)
+                self.setFont('Helvetica', 7.5)
+                self.setFillColor(colors.HexColor('#555555'))
+                self.drawString(10 * mm, 6 * mm, "Confidential — MES Internal Master Records")
+                self.drawRightString(self._pagesize[0] - 10 * mm, 6 * mm, f"Page {self._pageNumber} of {page_count}")
+                self.restoreState()
+                super().showPage()
+            super().save()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=10 * mm,
+        rightMargin=10 * mm,
+        topMargin=13 * mm,
+        bottomMargin=13 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'DocTitle', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=13, leading=16, textColor=colors.HexColor('#0d5c46')
+    )
+    subtitle_style = ParagraphStyle(
+        'DocSubtitle', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=8, leading=10, textColor=colors.HexColor('#555555')
+    )
+    th_style = ParagraphStyle(
+        'TableHeader', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=7.5, leading=9.5, textColor=colors.white, alignment=1
+    )
+    cell_style = ParagraphStyle(
+        'TableCell', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=6.8, leading=8.5, textColor=colors.HexColor('#222222')
+    )
+    cell_center = ParagraphStyle(
+        'TableCellCenter', parent=cell_style, alignment=1
+    )
+
+    def safe(val):
+        return xml_escape(str(val or '-').strip())
+
+    story = [
+        Paragraph("Supplier Master Details Export", title_style),
+        Paragraph(f"Total Records: {len(suppliers)} &nbsp;&bull;&nbsp; Generated on: {timezone.now().strftime('%d-%b-%Y %I:%M %p')}", subtitle_style),
+        Spacer(1, 3 * mm),
+    ]
+
+    col_widths = [8 * mm, 45 * mm, 40 * mm, 45 * mm, 32 * mm, 10 * mm, 17 * mm, 58 * mm, 22 * mm]
+    table_data = [[
+        Paragraph("S.No", th_style),
+        Paragraph("Supplier Company Name", th_style),
+        Paragraph("User / Contact", th_style),
+        Paragraph("Email &amp; Phone", th_style),
+        Paragraph("GSTIN / State", th_style),
+        Paragraph("SEZ", th_style),
+        Paragraph("Payment Terms", th_style),
+        Paragraph("Registered Address", th_style),
+        Paragraph("Created At", th_style),
+    ]]
+
+    for idx, s in enumerate(suppliers, 1):
+        u_list = [f"{u.user_name} ({u.user_designation})" if u.user_designation else u.user_name for u in s.users_list]
+        users_str = ', '.join(u_list) if u_list else (s.contact_person or '-')
+
+        contact_parts = []
+        if s.email:
+            contact_parts.append(f"<b>E:</b> {safe(s.email)}")
+        if s.phone_number:
+            contact_parts.append(f"<b>P:</b> {safe(s.phone_number)}")
+        email_phone = '<br/>'.join(contact_parts) if contact_parts else '-'
+
+        tax_parts = []
+        if s.gstin:
+            tax_parts.append(f"<b>GSTIN:</b> {safe(s.gstin)}")
+        if s.state_code:
+            tax_parts.append(f"<b>State:</b> {safe(s.state_code)}")
+        tax_info = '<br/>'.join(tax_parts) if tax_parts else '-'
+
+        pay_str = f"{s.payment_terms} Days" if (s.payment_terms and str(s.payment_terms).strip()) else '-'
+        created_str = s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '-'
+
+        table_data.append([
+            Paragraph(str(idx), cell_center),
+            Paragraph(f"<b>{safe(s.supplier_name)}</b>", cell_style),
+            Paragraph(safe(users_str), cell_style),
+            Paragraph(email_phone, cell_style),
+            Paragraph(tax_info, cell_style),
+            Paragraph(safe(s.is_sez), cell_center),
+            Paragraph(safe(pay_str), cell_center),
+            Paragraph(safe(s.address), cell_style),
+            Paragraph(safe(created_str), cell_center),
+        ])
+
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d5c46')),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#d0d7de')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fdfa')]),
+    ]))
+    story.append(table)
+
+    doc.build(story, canvasmaker=NumberedLandscapeCanvas)
+    buffer.seek(0)
+
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="Supplier_Master_Details_{timestamp}.pdf"'
+    return response
+
+
+@role_required('ADMIN')
+def export_supplier_master(request):
+    import csv
+    format_type = request.GET.get('format', 'csv').lower()
+    search_query = request.GET.get('search', '').strip()
+
+    suppliers = Supplier.objects.select_related('user_detail').prefetch_related('user_details').order_by('supplier_name')
+    if search_query:
+        q_filter = (
+            Q(supplier_name__icontains=search_query) |
+            Q(contact_person__icontains=search_query) |
+            Q(user_detail__user_name__icontains=search_query) |
+            Q(user_details__user_name__icontains=search_query)
+        )
+        if '@' in search_query or search_query.endswith('.com') or search_query.endswith('.in'):
+            q_filter |= Q(email__icontains=search_query)
+        clean_digits = search_query.replace('+', '').replace('-', '').replace(' ', '')
+        if clean_digits.isdigit() and len(clean_digits) >= 3:
+            q_filter |= Q(phone_number__icontains=clean_digits)
+        suppliers = suppliers.filter(q_filter).distinct()
+
+    if format_type == 'pdf':
+        return _build_supplier_master_pdf(suppliers)
+
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = f'attachment; filename="Supplier_Master_Details_{timestamp}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'S.No',
+        'Supplier Company Name',
+        'Email',
+        'Phone Number',
+        'User Details (Contact Persons)',
+        'GSTIN',
+        'State Code',
+        'SEZ',
+        'Payment Terms (Days)',
+        'Address',
+        'Created At'
+    ])
+
+    for idx, s in enumerate(suppliers, 1):
+        u_list = [f"{u.user_name} ({u.user_designation})" if u.user_designation else u.user_name for u in s.users_list]
+        users_str = ', '.join(u_list) if u_list else (s.contact_person or '-')
+
+        payment_terms_val = (s.payment_terms or '').strip()
+        payment_terms_str = f"{payment_terms_val} Days" if payment_terms_val else '-'
+        created_at_str = s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '-'
+
+        writer.writerow([
+            idx,
+            s.supplier_name or '-',
+            s.email or '-',
+            s.phone_number or '-',
+            users_str,
+            s.gstin or '-',
+            s.state_code or '-',
+            s.is_sez or 'No',
+            payment_terms_str,
+            (s.address or '-').replace('\r\n', ' ').replace('\n', ' '),
+            created_at_str
+        ])
+
+    return response
 
 
 @role_required('ADMIN')
