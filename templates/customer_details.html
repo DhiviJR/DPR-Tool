@@ -240,9 +240,28 @@
         <h1 class="dpr-page-title mb-1">Customer Details</h1>
         <p class="dpr-page-subtitle mb-0">Maintain customer master data used in DPR records</p>
     </div>
-    <a href="javascript:history.back()" class="btn btn-outline-secondary dpr-back-btn btn-sm">
-        <i class="bi bi-arrow-left me-1"></i>Back
-    </a>
+    <div class="d-flex align-items-center gap-2">
+        <div class="dropdown">
+            <button class="btn btn-outline-primary btn-sm dropdown-toggle d-flex align-items-center shadow-sm" type="button" id="exportCustomerDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-download me-1"></i> Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="exportCustomerDropdown">
+                <li>
+                    <a class="dropdown-item py-2" href="{% url 'export_customer_master' %}?format=csv" id="exportCustomerCsvBtn">
+                        <i class="bi bi-file-earmark-spreadsheet text-success me-2"></i>Export as CSV / Excel
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item py-2" href="{% url 'export_customer_master' %}?format=pdf" id="exportCustomerPdfBtn">
+                        <i class="bi bi-file-earmark-pdf text-danger me-2"></i>Export as PDF
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <a href="javascript:history.back()" class="btn btn-outline-secondary dpr-back-btn btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+    </div>
 </div>
 
 {% if messages %}
@@ -378,25 +397,8 @@
                     </div>
                 </form>
             </div>
-            <div class="col-lg-7 text-lg-end d-flex align-items-center justify-content-lg-end gap-2 flex-wrap">
+            <div class="col-lg-7 text-lg-end">
                 <span id="customerRowCount" class="text-muted small">Showing {{ customers|length }} records</span>
-                <div class="dropdown">
-                    <button class="btn btn-outline-primary btn-sm dropdown-toggle d-flex align-items-center shadow-sm" type="button" id="exportCustomerDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-download me-1"></i> Export
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="exportCustomerDropdown">
-                        <li>
-                            <a class="dropdown-item py-2" href="{% url 'export_customer_master' %}?format=csv" id="exportCustomerCsvBtn">
-                                <i class="bi bi-file-earmark-spreadsheet text-success me-2"></i>Export as CSV / Excel
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item py-2" href="{% url 'export_customer_master' %}?format=pdf" id="exportCustomerPdfBtn">
-                                <i class="bi bi-file-earmark-pdf text-danger me-2"></i>Export as PDF
-                            </a>
-                        </li>
-                    </ul>
-                </div>
             </div>
         </div>
     </div>
