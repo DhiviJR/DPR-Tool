@@ -220,11 +220,11 @@
                         </div>
                         <div class="col-lg-4">
                             <label class="form-label">Enquiry Details *</label>
-                            <input type="text" name="enquiry_details" id="rfqEnquiryDetails" class="form-control" required>
+                            <textarea name="enquiry_details" id="rfqEnquiryDetails" class="form-control form-control-sm js-auto-expand" rows="1" placeholder="Enter enquiry details..." style="min-height: 38px; resize: vertical; overflow-y: hidden;" required></textarea>
                         </div>
                         <div class="col-lg-4">
                             <label class="form-label">Remarks</label>
-                            <input type="text" name="remarks" id="rfqRemarks" class="form-control">
+                            <textarea name="remarks" id="rfqRemarks" class="form-control form-control-sm js-auto-expand" rows="1" placeholder="Enter remarks..." style="min-height: 38px; resize: vertical; overflow-y: hidden;"></textarea>
                         </div>
                         <div class="col-lg-4">
                             <label class="form-label">Attachment</label>
@@ -264,7 +264,7 @@
                                             <td>
                                                  <input type="hidden" name="product_id[]" value="">
                                                  <input type="hidden" name="product_specifications[]" class="rfq-product-spec-input" value="">
-                                                 <input type="text" name="product_name[]" class="form-control" required>
+                                                 <textarea name="product_name[]" class="form-control form-control-sm js-auto-expand" rows="1" placeholder="Enter product name..." style="min-height: 31px; resize: vertical; overflow-y: hidden;" required></textarea>
                                                  <div class="d-flex align-items-center justify-content-between mt-1">
                                                      <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none rfq-edit-spec-btn" style="font-size: 0.78rem;">
                                                          <i class="bi bi-sliders me-1"></i>Params / Specs <span class="text-danger fw-bold">*</span>
@@ -306,7 +306,7 @@
                                                 </div>
                                             </td>
                                             <td><input type="number" step="0.01" name="value[]" class="form-control rfq-value" readonly disabled><div class="rfq-supplier-value-list small mt-1 d-none"></div></td>
-                                            <td><input type="text" name="product_remarks[]" class="form-control"></td>
+                                            <td><textarea name="product_remarks[]" class="form-control form-control-sm js-auto-expand" rows="1" placeholder="Remarks..." style="min-height: 31px; resize: vertical; overflow-y: hidden;"></textarea></td>
                                             <td>
                                                 <button type="button" class="btn btn-outline-danger btn-sm rfq-remove-product">
                                                     <i class="bi bi-trash"></i>
@@ -399,7 +399,7 @@
                             <label class="form-label fw-semibold">Email Body</label>
                             <textarea name="supplier_email_body"
                                       id="supplierEmailBody"
-                                      class="form-control"
+                                      class="form-control js-auto-expand"
                                       rows="9">{{ default_supplier_email_body }}</textarea>
                             <div class="form-text">
                                 Available placeholders: {supplier_name}, {rfq_no}, {customer_name}, {enquiry_details}, {products}
@@ -1040,7 +1040,7 @@
                         </div>
                         <div class="col-12">
                             <label class="form-label">Email Body *</label>
-                            <textarea name="quotation_email_body" id="quotationEmailBody" class="form-control" rows="8" required></textarea>
+                            <textarea name="quotation_email_body" id="quotationEmailBody" class="form-control js-auto-expand" rows="8" required></textarea>
                         </div>
                         <div class="col-12">
                             <div class="alert alert-info py-2 mb-0" id="quotationAutoAttachmentNote"></div>
@@ -3325,7 +3325,7 @@ function buildRfqProductRow(product = getBlankRfqProduct()) {
         <td>
             <input type="hidden" name="product_id[]" value="${product.id || ''}">
             <input type="hidden" name="product_specifications[]" class="rfq-product-spec-input" value="${escapeHtml(typeof product.product_specifications === 'object' ? JSON.stringify(product.product_specifications) : (product.product_specifications || ''))}">
-            <input type="text" name="product_name[]" class="form-control" value="${escapeHtml(product.product_name || '')}" required>
+            <textarea name="product_name[]" class="form-control form-control-sm js-auto-expand" rows="1" placeholder="Enter product name..." style="min-height: 31px; resize: vertical; overflow-y: hidden;" required>${escapeHtml(product.product_name || '')}</textarea>
             <div class="d-flex align-items-center justify-content-between mt-1">
                 <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none rfq-edit-spec-btn" style="font-size: 0.78rem;">
                     <i class="bi bi-sliders me-1"></i>Params / Specs <span class="text-danger fw-bold">*</span>
@@ -3364,7 +3364,7 @@ function buildRfqProductRow(product = getBlankRfqProduct()) {
             </div>
         </td>
         <td><input type="number" step="0.01" name="value[]" class="form-control rfq-value" value="${product.value || ''}" readonly disabled><div class="rfq-supplier-value-list small mt-1 d-none"></div></td>
-        <td><input type="text" name="product_remarks[]" class="form-control" value="${escapeHtml(product.remarks || '')}"></td>
+        <td><textarea name="product_remarks[]" class="form-control form-control-sm js-auto-expand" rows="1" placeholder="Remarks..." style="min-height: 31px; resize: vertical; overflow-y: hidden;">${escapeHtml(product.remarks || '')}</textarea></td>
         <td>
             <button type="button" class="btn btn-outline-danger btn-sm rfq-remove-product">
                 <i class="bi bi-trash"></i>
@@ -3406,14 +3406,14 @@ function clearRfqModalState() {
 function getRfqProductsFromForm() {
     const products = [];
     document.querySelectorAll('#rfqProductTable tbody tr').forEach(row => {
-        const nameInput = row.querySelector('input[name="product_name[]"]');
+        const nameInput = row.querySelector('[name="product_name[]"]');
         if (!nameInput) return;
         const typeSelect = row.querySelector('select[name="product_type[]"]');
         const priceKnownSelect = row.querySelector('select[name="price_known[]"]');
         const qtyInput = row.querySelector('input[name="quantity[]"]');
         const unitSelect = row.querySelector('select[name="unit[]"]');
         const rateInput = row.querySelector('input[name="rate_per_unit[]"]');
-        const remarksInput = row.querySelector('input[name="product_remarks[]"]');
+        const remarksInput = row.querySelector('[name="product_remarks[]"]');
         const specInput = row.querySelector('.rfq-product-spec-input');
 
         let specs = {};
@@ -4057,7 +4057,7 @@ function validateRfqFormPrices() {
     const rows = document.querySelectorAll('#rfqProductTable tbody tr');
     for (let index = 0; index < rows.length; index++) {
         const row = rows[index];
-        const nameInput = row.querySelector('input[name="product_name[]"]');
+        const nameInput = row.querySelector('[name="product_name[]"]');
         const productName = nameInput ? nameInput.value.trim() : `Product ${index + 1}`;
         const priceKnownSelect = row.querySelector('.rfq-price-known');
         const isPriceKnown = priceKnownSelect && priceKnownSelect.value !== 'no';
@@ -4293,11 +4293,11 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             const firstRow = document.querySelector('#rfqProductTable tbody tr:first-child');
             if (firstRow) {
-                const nameInput = firstRow.querySelector('input[name="product_name[]"]');
+                const nameInput = firstRow.querySelector('[name="product_name[]"]');
                 const typeSelect = firstRow.querySelector('select[name="product_type[]"]');
                 const qtyInput = firstRow.querySelector('input[name="quantity[]"]');
                 const unitSelect = firstRow.querySelector('select[name="unit[]"]');
-                const remarksInput = firstRow.querySelector('input[name="product_remarks[]"]');
+                const remarksInput = firstRow.querySelector('[name="product_remarks[]"]');
                 const specInput = firstRow.querySelector('.rfq-product-spec-input');
                 const productSpecs = urlParams.get('product_specifications') || '';
 
@@ -5163,7 +5163,7 @@ function renderDynamicParamsFields(ptData, row) {
             </div>
             <div class="col-md-6 param-field-group" data-key="Remarks" data-label="Specification Remarks" data-required="true">
                 <label class="form-label small fw-semibold">Specification Remarks <span class="text-danger">*</span></label>
-                <textarea class="form-control form-control-sm dynamic-param-control" rows="2" data-key="Remarks" data-label="Specification Remarks" placeholder="Additional specifications or remarks">${escapeHtml(existingSpecs['Remarks'] || existingSpecs['Specification'] || '')}</textarea>
+                <textarea class="form-control form-control-sm dynamic-param-control js-auto-expand" rows="1" style="min-height: 38px; resize: vertical; overflow-y: hidden;" data-key="Remarks" data-label="Specification Remarks" placeholder="Additional specifications or remarks">${escapeHtml(existingSpecs['Remarks'] || existingSpecs['Specification'] || '')}</textarea>
             </div>
         `;
         return;
@@ -5215,8 +5215,9 @@ function renderDynamicParamsFields(ptData, row) {
             `;
         } else if (f.type === 'textarea') {
             controlHtml = `
-                <textarea class="form-control form-control-sm dynamic-param-control"
-                          rows="2"
+                <textarea class="form-control form-control-sm dynamic-param-control js-auto-expand"
+                          rows="1"
+                          style="min-height: 38px; resize: vertical; overflow-y: hidden;"
                           data-key="${escapeHtml(f.key)}"
                           data-label="${escapeHtml(f.label)}"
                           placeholder="${escapeHtml(f.placeholder || '')}">${escapeHtml(val)}</textarea>

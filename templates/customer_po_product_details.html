@@ -1065,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <input type="hidden" name="product_type_${p.id}" value="${p.product_type || 'P0011'}">
                         </td>
                         <td class="align-top p-1" style="border: 1px solid #000;">
-                            <textarea name="description_${p.id}" class="invoice-textarea-clean" rows="6">${p.description || p.product_name}</textarea>
+                            <textarea name="description_${p.id}" class="invoice-textarea-clean js-auto-expand" rows="6" style="resize: vertical;">${p.description || p.product_name}</textarea>
                         </td>
                         <td class="text-center align-top p-1" style="border: 1px solid #000; width: 80px; font-size: 0.78rem;">
                             <input type="text" name="hsn_${p.id}" value="${p.hsn_code || '90173029'}" class="invoice-input-clean text-center" style="font-size: 0.76rem;">
@@ -1468,7 +1468,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 <tr>
                                                     <td style="font-weight: 600;">Shipping Address :</td>
                                                     <td colspan="3">
-                                                        <input type="text" name="shipping_address" id="sheetShippingAddress" class="invoice-input-clean" placeholder="Optional shipping address">
+                                                        <textarea name="shipping_address" id="sheetShippingAddress" class="invoice-input-clean js-auto-expand" rows="1" placeholder="Optional shipping address" style="min-height: 28px; resize: vertical; overflow-y: hidden;"></textarea>
                                                     </td>
                                                 </tr>
                                             </tbody>

@@ -367,10 +367,11 @@
                         <tr>
                             <td>{{ forloop.counter }}</td>
                             <td>
-                                <input type="text"
-                                       class="form-control"
+                                <textarea class="form-control form-control-sm js-auto-expand"
                                        name="product_name[]"
-                                       value="{{ p.product_name }}">
+                                       rows="1"
+                                       placeholder="Product name"
+                                       style="min-height: 31px; resize: vertical; overflow-y: hidden;">{{ p.product_name }}</textarea>
                                 <input type="hidden"
                                        name="product_specifications[]"
                                        value="{% if p.product_specifications %}{{ p.product_specifications|safe }}{% else %}{}{% endif %}">
@@ -422,10 +423,11 @@
                                        readonly>
                             </td>
                             <td>
-                                <input type="text"
-                                       class="form-control"
+                                <textarea class="form-control form-control-sm js-auto-expand"
                                        name="remarks[]"
-                                       value="{{ p.remarks|default:'' }}">
+                                       rows="1"
+                                       placeholder="Remarks"
+                                       style="min-height: 31px; resize: vertical; overflow-y: hidden;">{{ p.remarks|default:'' }}</textarea>
                             </td>
                             <td>
                                 <input type="file"
@@ -453,9 +455,11 @@
                         <tr>
                             <td>1</td>
                             <td>
-                                <input type="text"
-                                       class="form-control"
-                                       name="product_name[]">
+                                <textarea class="form-control form-control-sm js-auto-expand"
+                                       name="product_name[]"
+                                       rows="1"
+                                       placeholder="Product name"
+                                       style="min-height: 31px; resize: vertical; overflow-y: hidden;"></textarea>
                                 <input type="hidden"
                                        name="product_specifications[]"
                                        value="{}">
@@ -504,9 +508,11 @@
                                        readonly>
                             </td>
                             <td>
-                                <input type="text"
-                                       class="form-control"
-                                       name="remarks[]">
+                                <textarea class="form-control form-control-sm js-auto-expand"
+                                       name="remarks[]"
+                                       rows="1"
+                                       placeholder="Remarks"
+                                       style="min-height: 31px; resize: vertical; overflow-y: hidden;"></textarea>
                             </td>
                             <td>
                                 <input type="file"
@@ -654,7 +660,7 @@ function generateProductRow(index, p = {}) {
         <tr>
             <td>${index + 1}</td>
             <td>
-                <input type="text" class="form-control" name="product_name[]" value="${name}">
+                <textarea class="form-control form-control-sm js-auto-expand" name="product_name[]" rows="1" placeholder="Product name" style="min-height: 31px; resize: vertical; overflow-y: hidden;">${name}</textarea>
                 <input type="hidden" name="product_specifications[]" value='${specsVal.replace(/'/g, "&apos;")}'>
             </td>
             <td>
@@ -672,7 +678,7 @@ function generateProductRow(index, p = {}) {
                 <input type="number" step="0.01" class="form-control mes-value" name="mes_value[]" value="${mesVal}" readonly>
             </td>
             <td>
-                <input type="text" class="form-control" name="remarks[]" value="${remarks}">
+                <textarea class="form-control form-control-sm js-auto-expand" name="remarks[]" rows="1" placeholder="Remarks" style="min-height: 31px; resize: vertical; overflow-y: hidden;">${remarks}</textarea>
             </td>
             <td>
                 <input type="file" class="form-control" multiple name="product_attachment_${index}">
@@ -845,7 +851,7 @@ function loadCustomerQuotations() {
     const prodNames = [];
     const prodTypes = [];
     document.querySelectorAll('#productTable tbody tr').forEach(row => {
-        const nameEl = row.querySelector('input[name="product_name[]"]');
+        const nameEl = row.querySelector('[name="product_name[]"]');
         const typeEl = row.querySelector('select[name="product_type[]"], input[name="product_type[]"]');
         if (nameEl && nameEl.value.trim()) prodNames.push(nameEl.value.trim());
         if (typeEl && typeEl.value.trim()) prodTypes.push(typeEl.value.trim());
@@ -1574,11 +1580,11 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (tbody) {
             const firstRow = tbody.querySelector('tr:first-child');
             if (firstRow) {
-                const nameInput = firstRow.querySelector('input[name="product_name[]"]');
+                const nameInput = firstRow.querySelector('[name="product_name[]"]');
                 const typeSelect = firstRow.querySelector('select[name="product_type[]"]');
                 const qtyInput = firstRow.querySelector('input[name="quantity[]"]');
                 const rateInput = firstRow.querySelector('input[name="mes_rate_per_unit[]"]');
-                const remarksInput = firstRow.querySelector('input[name="remarks[]"]');
+                const remarksInput = firstRow.querySelector('[name="remarks[]"]');
 
                 if (nameInput && productName) nameInput.value = productName;
                 if (typeSelect && productType) typeSelect.value = productType;
@@ -1781,7 +1787,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <!-- Address -->
                     <div class="col-12">
                         <label class="form-label small fw-semibold">Address</label>
-                        <textarea id="customerAddress" class="form-control form-control-sm" rows="2" placeholder="Full address details..."></textarea>
+                        <textarea id="customerAddress" class="form-control form-control-sm js-auto-expand" rows="1" placeholder="Full address details..." style="min-height: 31px; resize: vertical; overflow-y: hidden;"></textarea>
                     </div>
                 </div>
             </div>

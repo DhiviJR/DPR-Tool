@@ -146,6 +146,12 @@
     animation: dashSpinAnim 1s linear infinite;
 }
 
+.js-auto-expand, .js-auto-expand-address {
+    resize: vertical;
+    overflow-y: hidden;
+    transition: height 0.08s ease;
+}
+
 .dpr-loader-overlay {
     position: fixed;
     top: 0;
@@ -465,6 +471,54 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+</script>
+
+<script>
+// Universal Auto-Expand for textareas across the entire project
+(function() {
+    function autoExpandField(el) {
+        if (!el || el.tagName !== 'TEXTAREA') return;
+        el.style.height = 'auto';
+        const computed = window.getComputedStyle(el);
+        const minH = parseInt(computed.minHeight) || 31;
+        const scrollH = el.scrollHeight;
+        el.style.height = Math.max(minH, scrollH) + 'px';
+    }
+
+    document.addEventListener('input', function(e) {
+        if (e.target && e.target.tagName === 'TEXTAREA' && (
+            e.target.classList.contains('js-auto-expand') ||
+            e.target.classList.contains('js-auto-expand-address') ||
+            e.target.getAttribute('rows') === '1' ||
+            e.target.getAttribute('rows') === '2'
+        )) {
+            autoExpandField(e.target);
+        }
+    });
+
+    document.addEventListener('focusin', function(e) {
+        if (e.target && e.target.tagName === 'TEXTAREA' && (
+            e.target.classList.contains('js-auto-expand') ||
+            e.target.classList.contains('js-auto-expand-address') ||
+            e.target.getAttribute('rows') === '1' ||
+            e.target.getAttribute('rows') === '2'
+        )) {
+            autoExpandField(e.target);
+        }
+    });
+
+    function expandAll() {
+        document.querySelectorAll('textarea.js-auto-expand, textarea.js-auto-expand-address, textarea[rows="1"], textarea[rows="2"]').forEach(autoExpandField);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(expandAll, 100);
+        setTimeout(expandAll, 500);
+    });
+    window.addEventListener('load', function() {
+        setTimeout(expandAll, 50);
+    });
+})();
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
