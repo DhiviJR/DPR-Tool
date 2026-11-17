@@ -287,13 +287,13 @@
         <form method="post" id="addSupplierForm" class="row g-2 align-items-end flex-nowrap overflow-x-auto pb-1">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
-            <div class="col" style="min-width: 140px;">
+            <div class="col" style="min-width: 150px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">Supplier Name *</label>
-                <input type="text" name="supplier_name" class="form-control form-control-sm" required>
+                <textarea name="supplier_name" rows="1" class="form-control form-control-sm js-auto-expand" placeholder="Supplier Company Name" style="height: 31px; min-height: 31px; resize: vertical; overflow-y: hidden;" required></textarea>
             </div>
-            <div class="col" style="min-width: 160px;">
+            <div class="col" style="min-width: 170px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">Email</label>
-                <input type="text" name="email" class="form-control form-control-sm" placeholder="e.g. supp1@example.com, supp2@example.com" title="Separate multiple emails with commas">
+                <textarea name="email" rows="1" class="form-control form-control-sm js-auto-expand" placeholder="supp1@example.com" title="Separate multiple emails with commas" style="height: 31px; min-height: 31px; resize: vertical; overflow-y: hidden;"></textarea>
             </div>
             <div class="col" style="min-width: 120px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">Phone Number</label>
@@ -382,8 +382,8 @@
                 <thead class="table-light">
                     <tr class="text-nowrap align-middle">
                         <th style="width: 45px; min-width: 45px;" class="text-center">S.No</th>
-                        <th style="min-width: 150px;">Supplier Company Name</th>
-                        <th style="min-width: 170px;">Email</th>
+                        <th style="min-width: 160px;">Supplier Company Name</th>
+                        <th style="min-width: 190px;">Email</th>
                         <th style="min-width: 115px;">Phone Number</th>
                         <th style="min-width: 160px;">User Details</th>
                         <th style="min-width: 130px;">GSTIN</th>
@@ -404,10 +404,10 @@
                                 {% csrf_token %}
                                 <input type="hidden" name="supplier_id" value="{{ supplier.id }}">
                             </form>
-                            <input type="text" name="supplier_name" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.supplier_name }}" required disabled>
+                            <textarea name="supplier_name" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field js-auto-expand" rows="1" style="height: 31px; min-height: 31px; resize: vertical; overflow-y: hidden; background-color: transparent;" required disabled>{{ supplier.supplier_name }}</textarea>
                         </td>
                         <td>
-                            <input type="text" name="email" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field" value="{{ supplier.email|default:'' }}" disabled>
+                            <textarea name="email" form="form-{{ supplier.id }}" class="form-control form-control-sm master-edit-field js-auto-expand" rows="1" style="height: 31px; min-height: 31px; resize: vertical; overflow-y: hidden; background-color: transparent;" disabled>{{ supplier.email|default:'' }}</textarea>
                         </td>
                         <td>
                             <input type="tel" name="phone_number" form="form-{{ supplier.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ supplier.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
@@ -592,7 +592,7 @@ function filterSupplierTable() {
             return;
         }
 
-        const nameInput = row.querySelector('input[name="supplier_name"]');
+        const nameInput = row.querySelector('[name="supplier_name"]');
         const suppName = nameInput ? nameInput.value.toLowerCase() : '';
 
         const userWrapper = row.querySelector('.user-display-wrapper');
@@ -601,7 +601,7 @@ function filterSupplierTable() {
         const phoneInput = row.querySelector('input[name="phone_number"]');
         const phoneText = phoneInput ? phoneInput.value.toLowerCase() : '';
 
-        const emailInput = row.querySelector('input[name="email"]');
+        const emailInput = row.querySelector('[name="email"]');
         const emailText = emailInput ? emailInput.value.toLowerCase() : '';
 
         let isMatch = suppName.includes(filter) || userText.includes(filter);
@@ -1085,29 +1085,38 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Auto-expand address fields dynamically so long addresses are completely visible
+    // Auto-expand fields dynamically so long entries are completely visible
     function autoExpandAddressField(el) {
         if (!el) return;
-        el.style.height = 'auto';
-        const newHeight = Math.max(31, el.scrollHeight);
-        el.style.height = newHeight + 'px';
+        const minH = parseInt(el.style.minHeight) || 31;
+        if (!el.value || !el.value.trim()) {
+            el.style.height = minH + 'px';
+            return;
+        }
+        el.style.height = minH + 'px';
+        const scrollH = el.scrollHeight;
+        if (scrollH > minH + 4) {
+            el.style.height = scrollH + 'px';
+        } else {
+            el.style.height = minH + 'px';
+        }
     }
 
     document.addEventListener('input', function(e) {
-        if (e.target && e.target.classList.contains('js-auto-expand-address')) {
+        if (e.target && (e.target.classList.contains('js-auto-expand-address') || e.target.classList.contains('js-auto-expand'))) {
             autoExpandAddressField(e.target);
         }
     });
 
     document.addEventListener('focusin', function(e) {
-        if (e.target && e.target.classList.contains('js-auto-expand-address')) {
+        if (e.target && (e.target.classList.contains('js-auto-expand-address') || e.target.classList.contains('js-auto-expand'))) {
             autoExpandAddressField(e.target);
         }
     });
 
     // Expand on initial page load
     setTimeout(function() {
-        document.querySelectorAll('.js-auto-expand-address').forEach(autoExpandAddressField);
+        document.querySelectorAll('.js-auto-expand-address, .js-auto-expand').forEach(autoExpandAddressField);
     }, 100);
 });
 </script>

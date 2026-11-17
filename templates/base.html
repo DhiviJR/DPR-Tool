@@ -478,19 +478,25 @@ document.addEventListener('DOMContentLoaded', function() {
 (function() {
     function autoExpandField(el) {
         if (!el || el.tagName !== 'TEXTAREA') return;
-        el.style.height = 'auto';
-        const computed = window.getComputedStyle(el);
-        const minH = parseInt(computed.minHeight) || 31;
+        const minH = parseInt(el.style.minHeight) || 31;
+        // If empty or only placeholder, strictly keep default single-line height
+        if (!el.value || !el.value.trim()) {
+            el.style.height = minH + 'px';
+            return;
+        }
+        el.style.height = minH + 'px';
         const scrollH = el.scrollHeight;
-        el.style.height = Math.max(minH, scrollH) + 'px';
+        if (scrollH > minH + 4) {
+            el.style.height = scrollH + 'px';
+        } else {
+            el.style.height = minH + 'px';
+        }
     }
 
     document.addEventListener('input', function(e) {
         if (e.target && e.target.tagName === 'TEXTAREA' && (
             e.target.classList.contains('js-auto-expand') ||
-            e.target.classList.contains('js-auto-expand-address') ||
-            e.target.getAttribute('rows') === '1' ||
-            e.target.getAttribute('rows') === '2'
+            e.target.classList.contains('js-auto-expand-address')
         )) {
             autoExpandField(e.target);
         }
@@ -499,21 +505,19 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('focusin', function(e) {
         if (e.target && e.target.tagName === 'TEXTAREA' && (
             e.target.classList.contains('js-auto-expand') ||
-            e.target.classList.contains('js-auto-expand-address') ||
-            e.target.getAttribute('rows') === '1' ||
-            e.target.getAttribute('rows') === '2'
+            e.target.classList.contains('js-auto-expand-address')
         )) {
             autoExpandField(e.target);
         }
     });
 
     function expandAll() {
-        document.querySelectorAll('textarea.js-auto-expand, textarea.js-auto-expand-address, textarea[rows="1"], textarea[rows="2"]').forEach(autoExpandField);
+        document.querySelectorAll('textarea.js-auto-expand, textarea.js-auto-expand-address').forEach(autoExpandField);
     }
 
     document.addEventListener('DOMContentLoaded', function() {
         setTimeout(expandAll, 100);
-        setTimeout(expandAll, 500);
+        setTimeout(expandAll, 400);
     });
     window.addEventListener('load', function() {
         setTimeout(expandAll, 50);

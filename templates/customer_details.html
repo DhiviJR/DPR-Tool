@@ -304,9 +304,9 @@
             </div>
             {% endif %}
 
-            <div class="col" style="min-width: 140px;">
+            <div class="col" style="min-width: 150px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">Customer Name *</label>
-                <input type="text" name="customer_name" class="form-control form-control-sm" value="{{ prefill_data.customer_name|default:'' }}" required>
+                <textarea name="customer_name" rows="1" class="form-control form-control-sm js-auto-expand" placeholder="Customer Name" style="height: 31px; min-height: 31px; resize: vertical; overflow-y: hidden;" required>{{ prefill_data.customer_name|default:'' }}</textarea>
             </div>
             <div class="col" style="min-width: 100px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">Region *</label>
@@ -317,9 +317,9 @@
                     <option value="Coimbatore" {% if prefill_data.region == 'Coimbatore' %}selected{% endif %}>Coimbatore</option>
                 </select>
             </div>
-            <div class="col" style="min-width: 160px;">
+            <div class="col" style="min-width: 170px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">Email</label>
-                <input type="text" name="email" class="form-control form-control-sm" placeholder="e.g. user1@example.com, user2@example.com" title="Separate multiple emails with commas" value="{{ prefill_data.email|default:'' }}">
+                <textarea name="email" rows="1" class="form-control form-control-sm js-auto-expand" placeholder="user@example.com" title="Separate multiple emails with commas" style="height: 31px; min-height: 31px; resize: vertical; overflow-y: hidden;">{{ prefill_data.email|default:'' }}</textarea>
             </div>
             <div class="col" style="min-width: 120px;">
                 <label class="form-label small fw-semibold text-nowrap mb-1">Phone Number</label>
@@ -408,9 +408,9 @@
                 <thead class="table-light">
                     <tr class="text-nowrap align-middle">
                         <th style="width: 45px; min-width: 45px;" class="text-center">S.No</th>
-                        <th style="min-width: 140px;">Customer Name</th>
+                        <th style="min-width: 160px;">Customer Name</th>
                         <th style="min-width: 95px;">Region</th>
-                        <th style="min-width: 170px;">Email</th>
+                        <th style="min-width: 190px;">Email</th>
                         <th style="min-width: 115px;">Phone Number</th>
                         <th style="min-width: 160px;">User Details</th>
                         <th style="min-width: 130px;">GSTIN</th>
@@ -431,7 +431,7 @@
                                 {% csrf_token %}
                                 <input type="hidden" name="customer_id" value="{{ customer.id }}">
                             </form>
-                            <input type="text" name="customer_name" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.customer_name }}" required disabled>
+                            <textarea name="customer_name" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field js-auto-expand" rows="1" style="height: 31px; min-height: 31px; resize: vertical; overflow-y: hidden; background-color: transparent;" required disabled>{{ customer.customer_name }}</textarea>
                         </td>
                         <td>
                             <select name="region" form="form-{{ customer.id }}" class="form-select form-select-sm master-edit-field js-row-region-select" required disabled>
@@ -442,7 +442,7 @@
                             </select>
                         </td>
                         <td>
-                            <input type="text" name="email" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field" value="{{ customer.email|default:'' }}" disabled>
+                            <textarea name="email" form="form-{{ customer.id }}" class="form-control form-control-sm master-edit-field js-auto-expand" rows="1" style="height: 31px; min-height: 31px; resize: vertical; overflow-y: hidden; background-color: transparent;" disabled>{{ customer.email|default:'' }}</textarea>
                         </td>
                         <td>
                             <input type="tel" name="phone_number" form="form-{{ customer.id }}" class="form-control form-control-sm js-phone-input master-edit-field" value="{{ customer.phone_number|default:'' }}" maxlength="10" inputmode="numeric" disabled>
@@ -1190,26 +1190,35 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-expand address fields dynamically so long addresses are completely visible
     function autoExpandAddressField(el) {
         if (!el) return;
-        el.style.height = 'auto';
-        const newHeight = Math.max(31, el.scrollHeight);
-        el.style.height = newHeight + 'px';
+        const minH = parseInt(el.style.minHeight) || 31;
+        if (!el.value || !el.value.trim()) {
+            el.style.height = minH + 'px';
+            return;
+        }
+        el.style.height = minH + 'px';
+        const scrollH = el.scrollHeight;
+        if (scrollH > minH + 4) {
+            el.style.height = scrollH + 'px';
+        } else {
+            el.style.height = minH + 'px';
+        }
     }
 
     document.addEventListener('input', function(e) {
-        if (e.target && e.target.classList.contains('js-auto-expand-address')) {
+        if (e.target && (e.target.classList.contains('js-auto-expand-address') || e.target.classList.contains('js-auto-expand'))) {
             autoExpandAddressField(e.target);
         }
     });
 
     document.addEventListener('focusin', function(e) {
-        if (e.target && e.target.classList.contains('js-auto-expand-address')) {
+        if (e.target && (e.target.classList.contains('js-auto-expand-address') || e.target.classList.contains('js-auto-expand'))) {
             autoExpandAddressField(e.target);
         }
     });
 
     // Expand on initial page load
     setTimeout(function() {
-        document.querySelectorAll('.js-auto-expand-address').forEach(autoExpandAddressField);
+        document.querySelectorAll('.js-auto-expand-address, .js-auto-expand').forEach(autoExpandAddressField);
     }, 100);
 });
 </script>
