@@ -27,6 +27,8 @@ from io import BytesIO
 from pathlib import PurePath
 from zipfile import ZIP_DEFLATED, ZipFile
 from types import SimpleNamespace
+import os
+import time
 import re
 import html
 import json
@@ -9613,8 +9615,11 @@ def sync_all_mail(request):
     2. Synchronizes RFQ inbox & reply chains across all RFQs via sync_rfq_inbox()
     3. Synchronizes & classifies incoming emails for the EMAILS module
     """
+    import os
+    import time
     import logging
     import imaplib
+    import tempfile
     logger = logging.getLogger(__name__)
 
     if request.method != 'POST':
@@ -9788,7 +9793,10 @@ def sync_all_mail(request):
             logger.exception("Email classifier sync failed during unified sync: %s", e)
             email_err = str(e)
 
-
+    except Exception as exc:
+        logger.exception("Unified mail sync general exception: %s", exc)
+        if not email_err:
+            email_err = str(exc)
     finally:
         if mail_client:
             try:
