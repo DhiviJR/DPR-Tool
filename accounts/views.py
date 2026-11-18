@@ -9677,12 +9677,35 @@ def sync_all_mail(request):
         mail_client = None
 
     try:
+        from email_classifier.models import EmailRecord
+        from rfq.models import RFQEmailMessage
+
+        # Determine if fresh database (first sync) or incremental sync for new emails only
+        latest_email = EmailRecord.objects.order_by('-received_at').first()
+        if latest_email and latest_email.received_at:
+            # Already synced before: only fetch new emails since last sync (+ 3 days safety buffer, min 7 days)
+            days_since = (timezone.now() - latest_email.received_at).days + 3
+            email_since_days = max(7, min(days_since, 120))
+        else:
+            # Fresh link / First time: sync 3 to 4 months (120 days)
+            email_since_days = 120
+
+        latest_rfq_msg = RFQEmailMessage.objects.order_by('-received_at').first()
+        if latest_rfq_msg and latest_rfq_msg.received_at:
+            rfq_days = (timezone.now() - latest_rfq_msg.received_at).days + 3
+            rfq_since_days = max(7, min(rfq_days, 120))
+            rfq_scan_limit = 500
+        else:
+            # Fresh link / First time: sync 3 to 4 months (120 days)
+            rfq_since_days = 120
+            rfq_scan_limit = 2000
+
         # 1. Sync RFQ & Reply Mail (only executed on initial batch offset == 0 to save bandwidth)
         if offset == 0:
             try:
                 from .email_services import sync_rfq_inbox
-                scan_limit = 2000 if is_full else 1500
-                rfq_synced, rfq_err = sync_rfq_inbox(rfq=None, mail=mail_client, scan_limit=scan_limit, since_days=90)
+                scan_limit = 2000 if is_full else rfq_scan_limit
+                rfq_synced, rfq_err = sync_rfq_inbox(rfq=None, mail=mail_client, scan_limit=scan_limit, since_days=rfq_since_days)
             except Exception as e:
                 logger.exception("RFQ sync failed during unified sync: %s", e)
                 rfq_err = str(e)
@@ -9693,11 +9716,10 @@ def sync_all_mail(request):
                         pass
                     mail_client = None
 
-        # 2. Sync EMAILS classifier inbox (Last 3 Months / 90 days)
+        # 2. Sync EMAILS classifier inbox
         try:
             from email_classifier.services.imap_reader import fetch_all_messages
             from email_classifier.services.classifier_service import get_classifier
-            from email_classifier.models import EmailRecord
 
             classifier = get_classifier()
             BATCH_SIZE = 50
@@ -9710,7 +9732,7 @@ def sync_all_mail(request):
             while (time.time() - sync_start_time) < MAX_TIME_SECONDS and email_saved < MAX_NEW_PER_SYNC:
                 try:
                     messages_list, inbox_total = fetch_all_messages(
-                        offset=offset, limit=BATCH_SIZE, mail_client=mail_client, since_days=90
+                        offset=offset, limit=BATCH_SIZE, mail_client=mail_client, since_days=email_since_days
                     )
                 except Exception as fetch_err:
                     logger.warning("fetch_all_messages failed at offset %d with shared client: %s", offset, fetch_err)
@@ -9718,7 +9740,7 @@ def sync_all_mail(request):
                         mail_client = None
                         try:
                             messages_list, inbox_total = fetch_all_messages(
-                                offset=offset, limit=BATCH_SIZE, mail_client=None, since_days=90
+                                offset=offset, limit=BATCH_SIZE, mail_client=None, since_days=email_since_days
                             )
                         except Exception as retry_err:
                             logger.exception("fetch_all_messages retry failed: %s", retry_err)

@@ -374,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             function runSyncBatch(offset) {
                 showSyncToast(
-                    `<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div><span>Syncing emails (last 3 months)${totalEmailsSaved > 0 ? ` — ${totalEmailsSaved} imported so far...` : '...'}</span></div>`,
+                    `<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div><span>Syncing emails${totalEmailsSaved > 0 ? ` — ${totalEmailsSaved} imported so far...` : '...'}</span></div>`,
                     'bg-primary',
                     0
                 );
@@ -435,7 +435,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                         if (totalNew > 0) {
                             showSyncToast(
-                                `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>Successfully synchronized ${totalEmailsSaved} email(s) from the last 3 months! Refreshing...</span></div>`,
+                                `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>Successfully synchronized ${totalNew} new email(s)! Refreshing...</span></div>`,
                                 'bg-success',
                                 4000
                             );
@@ -447,7 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                         } else {
                             showSyncToast(
-                                `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>Sync complete. All emails from the last 3 months are up to date.</span></div>`,
+                                `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>Sync complete. All inboxes are up to date.</span></div>`,
                                 bgClass,
                                 5000
                             );

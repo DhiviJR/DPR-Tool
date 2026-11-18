@@ -152,9 +152,16 @@ def sync_inbox(request):
             BATCH_SIZE = 50
             is_initial_import = (EmailRecord.objects.count() == 0)
 
+            latest_email = EmailRecord.objects.order_by('-received_at').first()
+            if latest_email and latest_email.received_at:
+                days_since = (timezone.now() - latest_email.received_at).days + 3
+                since_days = max(7, min(days_since, 120))
+            else:
+                since_days = 120
+
             while True:
                 try:
-                    messages_list, inbox_total = fetch_all_messages(offset=offset, limit=BATCH_SIZE)
+                    messages_list, inbox_total = fetch_all_messages(offset=offset, limit=BATCH_SIZE, since_days=since_days)
                 except Exception:
                     break
 
@@ -203,7 +210,7 @@ def sync_inbox(request):
             rfq_synced = 0
             try:
                 from accounts.email_services import sync_rfq_inbox
-                rfq_synced, rfq_err = sync_rfq_inbox(rfq=None)
+                rfq_synced, rfq_err = sync_rfq_inbox(rfq=None, since_days=since_days)
             except Exception:
                 pass
 
