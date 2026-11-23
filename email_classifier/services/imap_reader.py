@@ -211,7 +211,8 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None, since_days=90):
             new_headers = [h for h in headers_info if h['uid'] not in existing_uids]
 
             if not new_headers:
-                # All emails in batch already imported! Fast return!
+                # All emails in this batch are already imported - return empty list
+                # The caller (accounts/views.py) handles offset progression and stopping
                 return [], total_messages
 
             # 3. Fetch body & attachments ONLY for brand new emails in fast batch chunks

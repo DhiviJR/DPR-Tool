@@ -9683,17 +9683,24 @@ def sync_all_mail(request):
         # Determine if fresh database (first sync) or incremental sync for new emails only
         latest_email = EmailRecord.objects.order_by('-received_at').first()
         if latest_email and latest_email.received_at:
-            # Already synced before: only fetch new emails since last sync (+ 3 days safety buffer, min 7 days)
-            days_since = (timezone.now() - latest_email.received_at).days + 3
-            email_since_days = max(7, min(days_since, 120))
+            # Make both datetimes timezone-aware before subtracting
+            latest_dt = latest_email.received_at
+            if timezone.is_naive(latest_dt):
+                latest_dt = timezone.make_aware(latest_dt)
+            days_since = max(1, (timezone.now() - latest_dt).days)
+            # Add 7 days safety buffer so emails from recent days are always included
+            email_since_days = min(days_since + 7, 120)
         else:
             # Fresh link / First time: sync 3 to 4 months (120 days)
             email_since_days = 120
 
         latest_rfq_msg = RFQEmailMessage.objects.order_by('-received_at').first()
         if latest_rfq_msg and latest_rfq_msg.received_at:
-            rfq_days = (timezone.now() - latest_rfq_msg.received_at).days + 3
-            rfq_since_days = max(7, min(rfq_days, 120))
+            latest_rfq_dt = latest_rfq_msg.received_at
+            if timezone.is_naive(latest_rfq_dt):
+                latest_rfq_dt = timezone.make_aware(latest_rfq_dt)
+            rfq_days = max(1, (timezone.now() - latest_rfq_dt).days)
+            rfq_since_days = min(rfq_days + 7, 120)
             rfq_scan_limit = 500
         else:
             # Fresh link / First time: sync 3 to 4 months (120 days)
@@ -9717,6 +9724,8 @@ def sync_all_mail(request):
                     mail_client = None
 
         # 2. Sync EMAILS classifier inbox
+        # Always use a fresh independent IMAP connection for email classification
+        # to avoid stale state from the shared mail_client used by RFQ sync above
         try:
             from email_classifier.services.imap_reader import fetch_all_messages
             from email_classifier.services.classifier_service import get_classifier
@@ -9727,41 +9736,30 @@ def sync_all_mail(request):
             MAX_TIME_SECONDS = 16
             MAX_NEW_PER_SYNC = 80
             sync_start_time = time.time()
-            consecutive_already_saved = 0
+            # Always start from offset=0 (newest emails first) each sync call
+            email_offset = 0
 
             while (time.time() - sync_start_time) < MAX_TIME_SECONDS and email_saved < MAX_NEW_PER_SYNC:
                 try:
+                    # Use mail_client=None so fetch_all_messages opens its own fresh connection
                     messages_list, inbox_total = fetch_all_messages(
-                        offset=offset, limit=BATCH_SIZE, mail_client=mail_client, since_days=email_since_days
+                        offset=email_offset, limit=BATCH_SIZE, mail_client=None, since_days=email_since_days
                     )
                 except Exception as fetch_err:
-                    logger.warning("fetch_all_messages failed at offset %d with shared client: %s", offset, fetch_err)
-                    if mail_client is not None:
-                        mail_client = None
-                        try:
-                            messages_list, inbox_total = fetch_all_messages(
-                                offset=offset, limit=BATCH_SIZE, mail_client=None, since_days=email_since_days
-                            )
-                        except Exception as retry_err:
-                            logger.exception("fetch_all_messages retry failed: %s", retry_err)
-                            email_err = str(retry_err)
-                            break
-                    else:
-                        email_err = str(fetch_err)
-                        break
+                    logger.exception("fetch_all_messages failed at offset %d: %s", email_offset, fetch_err)
+                    email_err = str(fetch_err)
+                    break
 
                 if not messages_list:
-                    offset += BATCH_SIZE
-                    if offset >= inbox_total:
+                    # Batch had no NEW emails (all already in DB or truly no emails in range)
+                    email_offset += BATCH_SIZE
+                    if email_offset >= inbox_total:
                         break
-                    # If records already exist and consecutive batches yield no new items, we are caught up
+                    # Stop after first empty batch when we have existing data — we are up to date
                     if EmailRecord.objects.exists():
-                        consecutive_already_saved += 1
-                        if consecutive_already_saved >= 3:
-                            break
+                        break
                     continue
 
-                consecutive_already_saved = 0
                 messages_list.sort(key=lambda x: x.get('date') or timezone.now(), reverse=True)
 
                 uids_in_batch = [m['uid'] for m in messages_list if m.get('uid')]
@@ -9769,7 +9767,6 @@ def sync_all_mail(request):
                     EmailRecord.objects.filter(imap_uid__in=uids_in_batch).values_list('imap_uid', flat=True)
                 )
 
-                batch_new = 0
                 for message in messages_list:
                     if message['uid'] in existing_uids:
                         email_skipped += 1
@@ -9798,17 +9795,16 @@ def sync_all_mail(request):
                         )
                         if created:
                             email_saved += 1
-                            batch_new += 1
                         else:
                             email_skipped += 1
                     except Exception as e:
                         logger.exception('Failed to classify message uid %s: %s', message.get('uid'), e)
 
-                offset += BATCH_SIZE
-                if offset >= inbox_total:
+                email_offset += BATCH_SIZE
+                if email_offset >= inbox_total:
                     break
 
-            if offset < inbox_total and (time.time() - sync_start_time) >= MAX_TIME_SECONDS:
+            if email_offset < inbox_total and (time.time() - sync_start_time) >= MAX_TIME_SECONDS:
                 has_more = True
 
         except Exception as e:
