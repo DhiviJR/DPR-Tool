@@ -445,10 +445,22 @@ document.addEventListener('DOMContentLoaded', function() {
                                     window.location.reload();
                                 }, 1200);
                             }
+                        } else if (data.status === 'danger') {
+                            showSyncToast(
+                                `<div class="d-flex align-items-center"><i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i><span>${window.escapeHtml(data.message || 'Sync failed. Please check logs.')}</span></div>`,
+                                'bg-danger text-white',
+                                6000
+                            );
+                        } else if (data.status === 'warning') {
+                            showSyncToast(
+                                `<div class="d-flex align-items-center"><i class="bi bi-exclamation-circle-fill me-2 fs-5"></i><span>${window.escapeHtml(data.message || 'Sync completed with warnings.')}</span></div>`,
+                                'bg-warning text-dark',
+                                5000
+                            );
                         } else {
                             showSyncToast(
                                 `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2 fs-5"></i><span>Sync complete. All inboxes are up to date.</span></div>`,
-                                bgClass,
+                                'bg-success',
                                 5000
                             );
                         }

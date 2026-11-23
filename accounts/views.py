@@ -9694,9 +9694,9 @@ def sync_all_mail(request):
             # Fresh link / First time: sync 3 to 4 months (120 days)
             email_since_days = 120
 
-        latest_rfq_msg = RFQEmailMessage.objects.order_by('-received_at').first()
-        if latest_rfq_msg and latest_rfq_msg.received_at:
-            latest_rfq_dt = latest_rfq_msg.received_at
+        latest_rfq_msg = RFQEmailMessage.objects.order_by('-created_at').first()
+        if latest_rfq_msg and (latest_rfq_msg.sent_at or latest_rfq_msg.created_at):
+            latest_rfq_dt = latest_rfq_msg.sent_at or latest_rfq_msg.created_at
             if timezone.is_naive(latest_rfq_dt):
                 latest_rfq_dt = timezone.make_aware(latest_rfq_dt)
             rfq_days = max(1, (timezone.now() - latest_rfq_dt).days)
