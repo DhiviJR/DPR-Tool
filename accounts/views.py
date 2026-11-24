@@ -9667,6 +9667,17 @@ def sync_all_mail(request):
     imap_user = getattr(settings, 'EMAIL_HOST_USER', '')
     imap_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
 
+    if not imap_user or not imap_password:
+        try:
+            from .email_config_utils import load_email_settings_to_runtime
+            load_email_settings_to_runtime()
+            imap_host = getattr(settings, 'EMAIL_IMAP_HOST', 'mail.mesinstruments.co.in')
+            imap_port = int(getattr(settings, 'EMAIL_IMAP_PORT', 993))
+            imap_user = getattr(settings, 'EMAIL_HOST_USER', '')
+            imap_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+        except Exception:
+            pass
+
     mail_client = None
     try:
         if imap_user and imap_password:
@@ -11142,3 +11153,119 @@ def delete_dpr_bunch_document(request, doc_id):
         return JsonResponse({'status': 'ok', 'message': 'Document deleted successfully.'})
     except DPRBunchDocument.DoesNotExist:
         return JsonResponse({'status': 'error', 'message': 'Document not found.'}, status=404)
+
+
+def email_settings_view(request):
+    if not request.user.is_authenticated or not (request.user.is_superuser or getattr(request.user, 'role', '') == 'ADMIN'):
+        messages.error(request, "Access restricted to administrators only.")
+        return redirect('dashboard')
+
+    from .models import EmailConfiguration
+    from .email_config_utils import (
+        encrypt_secret, decrypt_secret,
+        test_smtp_connection, test_imap_connection,
+        load_email_settings_to_runtime
+    )
+
+    config = EmailConfiguration.objects.filter(is_active=True).first()
+    if not config:
+        config = EmailConfiguration.objects.first()
+        if not config:
+            config = EmailConfiguration.objects.create(
+                smtp_host='mail.mesinstruments.co.in',
+                smtp_port=465,
+                email_user='info@mesinstruments.co.in',
+                use_ssl=True,
+                use_tls=False,
+                default_from_email='info@mesinstruments.co.in',
+                imap_host='mail.mesinstruments.co.in',
+                imap_port=993,
+                is_active=True
+            )
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'save')
+
+        if action == 'test_smtp':
+            host = request.POST.get('smtp_host', config.smtp_host).strip()
+            port = request.POST.get('smtp_port', config.smtp_port)
+            user = request.POST.get('email_user', config.email_user).strip()
+            password = request.POST.get('email_password', '').strip() or config.get_password()
+            use_ssl = (request.POST.get('use_ssl') in ['on', 'true', True])
+            use_tls = (request.POST.get('use_tls') in ['on', 'true', True])
+
+            ok, msg = test_smtp_connection(host, port, user, password, use_ssl, use_tls)
+            return JsonResponse({'status': 'ok' if ok else 'error', 'message': msg})
+
+        elif action == 'test_imap':
+            host = request.POST.get('imap_host', config.imap_host).strip()
+            port = request.POST.get('imap_port', config.imap_port)
+            user = request.POST.get('email_user', config.email_user).strip()
+            password = request.POST.get('email_password', '').strip() or config.get_password()
+
+            ok, msg = test_imap_connection(host, port, user, password)
+            return JsonResponse({'status': 'ok' if ok else 'error', 'message': msg})
+
+        elif action == 'send_test_email':
+            test_recipient = request.POST.get('test_recipient', '').strip()
+            if not test_recipient:
+                return JsonResponse({'status': 'error', 'message': 'Please enter a test recipient email.'})
+
+            from django.core.mail import EmailMessage, get_connection
+            from django.utils import timezone
+
+            host = request.POST.get('smtp_host', config.smtp_host).strip()
+            port = int(request.POST.get('smtp_port', config.smtp_port))
+            user = request.POST.get('email_user', config.email_user).strip()
+            password = request.POST.get('email_password', '').strip() or config.get_password()
+            use_ssl = (request.POST.get('use_ssl') in ['on', 'true', True])
+            use_tls = (request.POST.get('use_tls') in ['on', 'true', True])
+            sender = request.POST.get('default_from_email', user).strip() or user
+
+            try:
+                conn = get_connection(
+                    host=host, port=port, username=user, password=password,
+                    use_ssl=use_ssl, use_tls=use_tls, timeout=15
+                )
+                msg = EmailMessage(
+                    subject="DPR System - SMTP Test Email",
+                    body=f"Hello!\n\nThis is a verification email from DPR System.\nYour SMTP settings for {user} are working properly.\n\nTimestamp: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                    from_email=sender,
+                    to=[test_recipient],
+                    connection=conn
+                )
+                msg.send()
+                return JsonResponse({'status': 'ok', 'message': f'Test email sent successfully to {test_recipient}!'})
+            except Exception as e:
+                return JsonResponse({'status': 'error', 'message': f'Failed to send test email: {str(e)}'})
+
+        elif action == 'save':
+            config.smtp_host = request.POST.get('smtp_host', 'mail.mesinstruments.co.in').strip()
+            config.smtp_port = int(request.POST.get('smtp_port', 465))
+            config.email_user = request.POST.get('email_user', '').strip()
+            new_password = request.POST.get('email_password', '').strip()
+            if new_password:
+                config.set_password(new_password)
+            config.use_ssl = (request.POST.get('use_ssl') in ['on', 'true', True])
+            config.use_tls = (request.POST.get('use_tls') in ['on', 'true', True])
+            config.default_from_email = request.POST.get('default_from_email', config.email_user).strip() or config.email_user
+            config.imap_host = request.POST.get('imap_host', 'mail.mesinstruments.co.in').strip()
+            config.imap_port = int(request.POST.get('imap_port', 993))
+            config.is_active = True
+            config.save()
+
+            load_email_settings_to_runtime()
+
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == 'true':
+                return JsonResponse({'status': 'ok', 'message': 'Email configuration saved and activated successfully.'})
+
+            messages.success(request, "Email configuration saved and activated successfully.")
+            return redirect('email_settings')
+
+    current_password = config.get_password() if config else ''
+    return render(request, 'email_settings.html', {
+        'config': config,
+        'has_password': bool(config and config.encrypted_password),
+        'current_password': current_password,
+    })
+

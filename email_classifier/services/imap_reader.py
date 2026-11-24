@@ -120,7 +120,14 @@ def fetch_all_messages(offset=0, limit=25, mail_client=None, since_days=90):
     """
     required = (settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
     if not all(required):
-        raise ValueError('Set EMAIL_IMAP_HOST, EMAIL_IMAP_USERNAME, and EMAIL_IMAP_PASSWORD in .env.')
+        try:
+            from accounts.email_config_utils import load_email_settings_to_runtime
+            load_email_settings_to_runtime()
+            required = (settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
+        except Exception:
+            pass
+    if not all(required):
+        raise ValueError('Email credentials not configured. Please configure in Email Settings UI or set environment variables.')
 
     close_at_end = False
     client = mail_client

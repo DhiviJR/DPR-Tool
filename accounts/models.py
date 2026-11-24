@@ -99,4 +99,38 @@ class UserDetail(models.Model):
 
     def __str__(self):
         return f"{self.user_name} ({self.user_designation or 'No Designation'})"
+
+
+class EmailConfiguration(models.Model):
+    smtp_host = models.CharField(max_length=255, default='mail.mesinstruments.co.in', verbose_name="SMTP Host")
+    smtp_port = models.IntegerField(default=465, verbose_name="SMTP Port")
+    email_user = models.CharField(max_length=255, default='info@mesinstruments.co.in', verbose_name="Email Address / Username")
+    encrypted_password = models.CharField(max_length=500, blank=True, verbose_name="Encrypted Password")
+    use_ssl = models.BooleanField(default=True, verbose_name="Use SSL")
+    use_tls = models.BooleanField(default=False, verbose_name="Use TLS")
+    default_from_email = models.CharField(max_length=255, default='info@mesinstruments.co.in', verbose_name="Default From Email")
+
+    imap_host = models.CharField(max_length=255, default='mail.mesinstruments.co.in', verbose_name="IMAP Host")
+    imap_port = models.IntegerField(default=993, verbose_name="IMAP Port")
+
+    is_active = models.BooleanField(default=True, verbose_name="Is Active")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Email Configuration"
+        verbose_name_plural = "Email Configurations"
+
+    def set_password(self, raw_password):
+        if raw_password:
+            from .email_config_utils import encrypt_secret
+            self.encrypted_password = encrypt_secret(raw_password)
+
+    def get_password(self):
+        from .email_config_utils import decrypt_secret
+        return decrypt_secret(self.encrypted_password)
+
+    def __str__(self):
+        return f"{self.email_user} ({self.smtp_host}:{self.smtp_port})"
+
 

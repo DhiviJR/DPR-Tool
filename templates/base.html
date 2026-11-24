@@ -93,6 +93,12 @@
                 {% endif %}
             </ul>
             <div class="d-flex align-items-center gap-2">
+                {% if is_admin %}
+                <a href="{% url 'email_settings' %}" class="btn btn-outline-light btn-sm shadow-sm d-inline-flex align-items-center gap-1 {% if request.resolver_match.url_name == 'email_settings' %}active{% endif %}" title="Configure Email & SMTP Settings">
+                    <i class="bi bi-envelope-gear"></i>
+                    <span>Email Settings</span>
+                </a>
+                {% endif %}
                 <button type="button" class="btn btn-outline-light btn-sm shadow-sm d-inline-flex align-items-center gap-1" id="globalSyncMailBtn" title="Sync All Emails (RFQ, Reply Mail & Classified Emails)">
                     <i class="bi bi-arrow-repeat" id="globalSyncSpinner"></i>
                     <span>Sync Email</span>

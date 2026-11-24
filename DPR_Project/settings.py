@@ -51,6 +51,8 @@ if ALLOWED_HOSTS and '*' not in ALLOWED_HOSTS:
             else:
                 _expanded_hosts.add(_h + '.')
     _expanded_hosts.update([
+        'demo-orbit.dpr.mesinstruments.co.in',
+        'demo-orbit.dpr.mesinstruments.co.in.',
         'mbt-orbit.mesinstruments.co.in',
         'mbt-orbit.mesinstruments.co.in.',
         '.mesinstruments.co.in',
@@ -67,6 +69,8 @@ _base_csrf_origins = _env_csrf_origins or [
     'http://localhost:8000',
 ]
 _base_csrf_origins.extend([
+    'https://demo-orbit.dpr.mesinstruments.co.in',
+    'http://demo-orbit.dpr.mesinstruments.co.in',
     'https://mbt-orbit.mesinstruments.co.in',
     'http://mbt-orbit.mesinstruments.co.in',
     'https://*.mesinstruments.co.in',
@@ -212,8 +216,8 @@ EMAIL_BACKEND = os.environ.get(
 # EMAIL_FILE_PATH = os.path.join(BASE_DIR, 'sent_emails')
 EMAIL_HOST = os.environ.get('DJANGO_EMAIL_HOST', 'mail.mesinstruments.co.in')
 EMAIL_PORT = int(os.environ.get('DJANGO_EMAIL_PORT', '465'))
-EMAIL_HOST_USER = os.environ.get('DJANGO_EMAIL_HOST_USER', 'info@mesinstruments.co.in')
-EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', 'Info@987654321')
+EMAIL_HOST_USER = os.environ.get('DJANGO_EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('DJANGO_EMAIL_USE_TLS', 'False').lower() == 'true'
 EMAIL_USE_SSL = os.environ.get('DJANGO_EMAIL_USE_SSL', 'True').lower() == 'true'
 EMAIL_TIMEOUT = int(os.environ.get('DJANGO_EMAIL_TIMEOUT', '30'))

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, UserProfile, UserDetail
+from .models import CustomUser, UserProfile, UserDetail, EmailConfiguration
 
 
 class UserProfileInline(admin.StackedInline):
@@ -31,7 +31,14 @@ class CustomUserAdmin(UserAdmin):
         formset.save_m2m()
 
 
+@admin.register(EmailConfiguration)
+class EmailConfigurationAdmin(admin.ModelAdmin):
+    list_display = ('email_user', 'smtp_host', 'smtp_port', 'use_ssl', 'use_tls', 'is_active', 'updated_at')
+    list_filter = ('is_active', 'use_ssl', 'use_tls')
+
+
 admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(UserProfile)
 admin.site.register(UserDetail)
+
 

@@ -1721,7 +1721,14 @@ def download_email_attachment(request, record_id):
 
     required = (settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
     if not all(required):
-        raise Http404("IMAP settings are not configured.")
+        try:
+            from accounts.email_config_utils import load_email_settings_to_runtime
+            load_email_settings_to_runtime()
+            required = (settings.EMAIL_IMAP_HOST, settings.EMAIL_IMAP_USERNAME, settings.EMAIL_IMAP_PASSWORD)
+        except Exception:
+            pass
+    if not all(required):
+        raise Http404("IMAP settings are not configured. Please configure in Email Settings.")
 
     # --- helper: build & return the Django response from an already-fetched msg ---
     def _response_from_msg(msg):

@@ -267,6 +267,15 @@ def _append_to_imap_sent_folder(email_obj):
     imap_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
 
     if not imap_user or not imap_password:
+        try:
+            from .email_config_utils import load_email_settings_to_runtime
+            load_email_settings_to_runtime()
+            imap_user = getattr(settings, 'EMAIL_HOST_USER', '')
+            imap_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+        except Exception:
+            pass
+
+    if not imap_user or not imap_password:
         logger.warning("IMAP Sent Append: Email credentials not configured.")
         return
 
@@ -514,7 +523,16 @@ def sync_rfq_inbox(rfq=None, mail=None, scan_limit=300, since_days=90):
     imap_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
 
     if not imap_user or not imap_password:
-        return 0, "Email credentials not configured in settings."
+        try:
+            from .email_config_utils import load_email_settings_to_runtime
+            load_email_settings_to_runtime()
+            imap_user = getattr(settings, 'EMAIL_HOST_USER', '')
+            imap_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+        except Exception:
+            pass
+
+    if not imap_user or not imap_password:
+        return 0, "Email credentials not configured in settings or Email Settings UI."
 
     synced_count = 0
     close_mail_at_end = False

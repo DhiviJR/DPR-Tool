@@ -66,5 +66,6 @@ urlpatterns = [
     path('check-customer-po-number/', views.check_customer_po_number, name='check_customer_po_number'),
     path('send-invoice-email/', views.send_invoice_email, name='send_invoice_email'),
     path('sync-all-mail/', views.sync_all_mail, name='sync_all_mail'),
+    path('email-settings/', views.email_settings_view, name='email_settings'),
 ]
 
